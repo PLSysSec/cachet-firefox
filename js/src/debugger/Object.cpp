@@ -1528,8 +1528,8 @@ NativeObject* DebuggerObject::initClass(JSContext* cx,
                                         Handle<GlobalObject*> global,
                                         HandleObject debugCtor) {
   RootedNativeObject objectProto(
-      cx, InitClass(cx, debugCtor, nullptr, &class_, construct, 0, properties_,
-                    methods_, nullptr, nullptr));
+      cx, InitClass(cx, debugCtor, &class_, nullptr, &class_, construct, 0,
+                    properties_, methods_, nullptr, nullptr));
 
   if (!objectProto) {
     return nullptr;

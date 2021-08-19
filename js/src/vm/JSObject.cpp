@@ -1604,13 +1604,13 @@ void JSObject::swap(JSContext* cx, HandleObject a, HandleObject b,
 
 static NativeObject* DefineConstructorAndPrototype(
     JSContext* cx, HandleObject obj, HandleAtom atom, HandleObject protoProto,
-    const JSClass* clasp, Native constructor, unsigned nargs,
+    const JSClass* protoClasp, Native constructor, unsigned nargs,
     const JSPropertySpec* ps, const JSFunctionSpec* fs,
     const JSPropertySpec* static_ps, const JSFunctionSpec* static_fs,
     NativeObject** ctorp) {
   // Create the prototype object.
-  RootedNativeObject proto(
-      cx, GlobalObject::createBlankPrototypeInheriting(cx, clasp, protoProto));
+  RootedNativeObject proto(cx, GlobalObject::createBlankPrototypeInheriting(
+                                   cx, protoClasp, protoProto));
   if (!proto) {
     return nullptr;
   }
@@ -1648,9 +1648,10 @@ static NativeObject* DefineConstructorAndPrototype(
 }
 
 NativeObject* js::InitClass(JSContext* cx, HandleObject obj,
-                            HandleObject protoProto_, const JSClass* clasp,
-                            Native constructor, unsigned nargs,
-                            const JSPropertySpec* ps, const JSFunctionSpec* fs,
+                            const JSClass* clasp, HandleObject protoProto_,
+                            const JSClass* protoClasp, Native constructor,
+                            unsigned nargs, const JSPropertySpec* ps,
+                            const JSFunctionSpec* fs,
                             const JSPropertySpec* static_ps,
                             const JSFunctionSpec* static_fs,
                             NativeObject** ctorp) {
@@ -1674,7 +1675,7 @@ NativeObject* js::InitClass(JSContext* cx, HandleObject obj,
     }
   }
 
-  return DefineConstructorAndPrototype(cx, obj, atom, protoProto, clasp,
+  return DefineConstructorAndPrototype(cx, obj, atom, protoProto, protoClasp,
                                        constructor, nargs, ps, fs, static_ps,
                                        static_fs, ctorp);
 }

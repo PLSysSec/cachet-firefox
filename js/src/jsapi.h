@@ -439,10 +439,11 @@ extern JS_PUBLIC_API bool GetFirstArgumentAsTypeHint(JSContext* cx,
 } /* namespace JS */
 
 extern JS_PUBLIC_API JSObject* JS_InitClass(
-    JSContext* cx, JS::HandleObject obj, JS::HandleObject parent_proto,
-    const JSClass* clasp, JSNative constructor, unsigned nargs,
-    const JSPropertySpec* ps, const JSFunctionSpec* fs,
-    const JSPropertySpec* static_ps, const JSFunctionSpec* static_fs);
+    JSContext* cx, JS::HandleObject obj, const JSClass* clasp,
+    JS::HandleObject protoProto, const JSClass* protoClasp,
+    JSNative constructor, unsigned nargs, const JSPropertySpec* ps,
+    const JSFunctionSpec* fs, const JSPropertySpec* static_ps,
+    const JSFunctionSpec* static_fs);
 
 /**
  * Set up ctor.prototype = proto and proto.constructor = ctor with the
