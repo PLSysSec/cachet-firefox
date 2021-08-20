@@ -357,7 +357,8 @@ static MOZ_ALWAYS_INLINE T MinNumberValue() {
 namespace detail {
 
 template <typename Float, typename SignedInteger>
-inline bool NumberEqualsSignedInteger(Float aValue, SignedInteger* aInteger) {
+inline bool NumberTruncatesToSignedInteger(Float aValue,
+                                           SignedInteger* aInteger) {
   static_assert(std::is_same_v<Float, float> || std::is_same_v<Float, double>,
                 "Float must be an IEEE-754 floating point type");
   static_assert(std::is_signed_v<SignedInteger>,
@@ -417,7 +418,19 @@ inline bool NumberEqualsSignedInteger(Float aValue, SignedInteger* aInteger) {
 
   if (static_cast<Float>(MinValue) <= aValue &&
       aValue <= static_cast<Float>(MaxValue)) {
-    auto possible = static_cast<SignedInteger>(aValue);
+    *aInteger = static_cast<SignedInteger>(aValue);
+    return true;
+  }
+
+  return false;
+}
+
+template <typename Float, typename SignedInteger>
+inline bool NumberEqualsSignedInteger(Float aValue, SignedInteger* aInteger) {
+  MOZ_MAKE_MEM_UNDEFINED(aInteger, sizeof(*aInteger));
+
+  SignedInteger possible;
+  if (NumberTruncatesToSignedInteger(aValue, &possible)) {
     if (static_cast<Float>(possible) == aValue) {
       *aInteger = possible;
       return true;
@@ -476,6 +489,73 @@ static MOZ_ALWAYS_INLINE bool NumberIsInt64(T aValue, int64_t* aInt64) {
 }
 
 /**
+ * If |aValue| is identfcal to some |intptr_t| value, set |*aIntPtr| to that
+ * value and return true.  Otherwise return false, leaving |*aIntPtr| in an
+ * indeterminate state.
+ *
+ * This method returns false for negative zero.  If you want to consider -0 to
+ * be 0, use NumberEqualsIntPtr below.
+ */
+template <typename T>
+static MOZ_ALWAYS_INLINE bool NumberIsIntPtr(T aValue, intptr_t* aIntPtr) {
+  return detail::NumberIsSignedInteger(aValue, aIntPtr);
+}
+
+/**
+ * If |aValue| can be truncated to some int32_t value (where -0 and +0 are
+ * considered equal), set |*aInt32| to that value and return true.  Otherwise
+ * return false, leaving |*aInt32| in an indeterminate state.
+ *
+ * |NumberTruncatesToInt32(-0.0, ...)| will return true.  To test whether a
+ * value can be losslessly converted to |int32_t| and back, use NumberIsInt32
+ * above.
+ *
+ * |NumberTruncatesToInt32(1.5, ...)| will return true.  To test whether a
+ * value is equal to some |int32_t| value, use NumberEqualsInt32 below.
+ */
+template <typename T>
+static MOZ_ALWAYS_INLINE bool NumberTruncatesToInt32(T aValue,
+                                                     int32_t* aInt32) {
+  return detail::NumberTruncatesToSignedInteger(aValue, aInt32);
+}
+
+/**
+ * If |aValue| can be truncated to some int64_t value (where -0 and +0 are
+ * considered equal), set |*aInt64| to that value and return true.  Otherwise
+ * return false, leaving |*aInt64| in an indeterminate state.
+ *
+ * |NumberTruncatesToInt64(-0.0, ...)| will return true.  To test whether a
+ * value can be losslessly converted to |int64_t| and back, use NumberIsInt64
+ * above.
+ *
+ * |NumberTruncatesToInt64(1.5, ...)| will return true.  To test whether a
+ * value is equal to some |int64_t| value, use NumberEqualsInt64 below.
+ */
+template <typename T>
+static MOZ_ALWAYS_INLINE bool NumberTruncatesToInt64(T aValue,
+                                                     int64_t* aInt64) {
+  return detail::NumberTruncatesToSignedInteger(aValue, aInt64);
+}
+
+/**
+ * If |aValue| can be truncated to some intptr_t value (where -0 and +0 are
+ * considered equal), set |*aIntPtr| to that value and return true.  Otherwise
+ * return false, leaving |*aIntPtr| in an indeterminate state.
+ *
+ * |NumberTruncatesToIntPtr(-0.0, ...)| will return true.  To test whether a
+ * value can be losslessly converted to |intptr_t| and back, use NumberIsIntPtr
+ * above.
+ *
+ * |NumberTruncatesToIntPtr(1.5, ...)| will return true.  To test whether a
+ * value is equal to some |intptr_t| value, use NumberEqualsIntPtr below.
+ */
+template <typename T>
+static MOZ_ALWAYS_INLINE bool NumberTruncatesToIntPtr(T aValue,
+                                                      intptr_t* aIntPtr) {
+  return detail::NumberTruncatesToSignedInteger(aValue, aIntPtr);
+}
+
+/**
  * If |aValue| is equal to some int32_t value (where -0 and +0 are considered
  * equal), set |*aInt32| to that value and return true.  Otherwise return false,
  * leaving |*aInt32| in an indeterminate state.
@@ -499,6 +579,19 @@ static MOZ_ALWAYS_INLINE bool NumberEqualsInt32(T aValue, int32_t* aInt32) {
 template <typename T>
 static MOZ_ALWAYS_INLINE bool NumberEqualsInt64(T aValue, int64_t* aInt64) {
   return detail::NumberEqualsSignedInteger(aValue, aInt64);
+}
+
+/**
+ * If |aValue| is equal to some intptr_t value (where -0 and +0 are considered
+ * equal), set |*aIntPtr| to that value and return true.  Otherwise return
+ * false, leaving |*aIntPtr| in an indeterminate state.
+ *
+ * |NumberEqualsIntPtr(-0.0, ...)| will return true.  To test whether a value
+ * can be losslessly converted to |intptr_t| and back, use NumberIsIntPtr above.
+ */
+template <typename T>
+static MOZ_ALWAYS_INLINE bool NumberEqualsIntPtr(T aValue, intptr_t* aIntPtr) {
+  return detail::NumberEqualsSignedInteger(aValue, aIntPtr);
 }
 
 /**

@@ -10,6 +10,7 @@
 #include <cmath>  // exp2
 #include <float.h>
 #include <math.h>
+#include <type_traits>
 
 using mozilla::ExponentComponent;
 using mozilla::FloatingPoint;
@@ -25,9 +26,14 @@ using mozilla::IsPositiveZero;
 using mozilla::NegativeInfinity;
 using mozilla::NumberEqualsInt32;
 using mozilla::NumberEqualsInt64;
+using mozilla::NumberEqualsIntPtr;
 using mozilla::NumberIsInt32;
 using mozilla::NumberIsInt64;
+using mozilla::NumberIsIntPtr;
 using mozilla::NumbersAreIdentical;
+using mozilla::NumberTruncatesToInt32;
+using mozilla::NumberTruncatesToInt64;
+using mozilla::NumberTruncatesToIntPtr;
 using mozilla::PositiveInfinity;
 using mozilla::SpecificNaN;
 using mozilla::UnspecifiedNaN;
@@ -250,65 +256,119 @@ static void TestExponentComponent() {
   TestFloatExponentComponent();
 }
 
-// Used to test Number{Is,Equals}{Int32,Int64} for -0.0, the only case where
-// NumberEquals* and NumberIs* aren't equivalent.
+// Used to test Number{Is,Equals,TruncatesTo}{Int32,Int64,IntPtr} for -0.0, the
+// only case where NumberEquals* and NumberIs* aren't equivalent.
 template <typename T>
-static void TestEqualsIsForNegativeZero() {
+static void TestEqualsIsTruncatesToForNegativeZero() {
   T negZero = T(-0.0);
 
   int32_t i32;
   A(!NumberIsInt32(negZero, &i32));
   A(NumberEqualsInt32(negZero, &i32));
+  A(NumberTruncatesToInt32(negZero, &i32));
   A(i32 == 0);
 
   int64_t i64;
   A(!NumberIsInt64(negZero, &i64));
   A(NumberEqualsInt64(negZero, &i64));
+  A(NumberTruncatesToInt64(negZero, &i64));
   A(i64 == 0);
+
+  intptr_t iptr;
+  A(!NumberIsIntPtr(negZero, &iptr));
+  A(NumberEqualsIntPtr(negZero, &iptr));
+  A(NumberTruncatesToIntPtr(negZero, &iptr));
+  A(iptr == 0);
 }
 
-// Used to test Number{Is,Equals}{Int32,Int64} for int32 values.
+// Used to test Number{Is,Equals,TruncatesTo}{Int32,Int64,IntPtr} for int32
+// values.
 template <typename T>
-static void TestEqualsIsForInt32(T aVal) {
+static void TestEqualsIsTruncatesToForInt32(T aVal) {
   int32_t i32;
   A(NumberIsInt32(aVal, &i32));
   MOZ_ASSERT(i32 == aVal);
   A(NumberEqualsInt32(aVal, &i32));
   MOZ_ASSERT(i32 == aVal);
+  A(NumberTruncatesToInt32(aVal, &i32));
+  MOZ_ASSERT(i32 == aVal);
 
   int64_t i64;
   A(NumberIsInt64(aVal, &i64));
   MOZ_ASSERT(i64 == aVal);
   A(NumberEqualsInt64(aVal, &i64));
   MOZ_ASSERT(i64 == aVal);
+  A(NumberTruncatesToInt64(aVal, &i64));
+  MOZ_ASSERT(i64 == aVal);
+
+  intptr_t iptr;
+  A(NumberIsIntPtr(aVal, &iptr));
+  MOZ_ASSERT(iptr == aVal);
+  A(NumberEqualsIntPtr(aVal, &iptr));
+  MOZ_ASSERT(iptr == aVal);
+  A(NumberTruncatesToIntPtr(aVal, &iptr));
+  MOZ_ASSERT(iptr == aVal);
 };
 
-// Used to test Number{Is,Equals}{Int32,Int64} for values that fit in int64 but
-// not int32.
+// Used to test Number{Is,Equals,TruncatesTo}{Int32,Int64,IntPtr} for values
+// that fit in int64 but not int32.
 template <typename T>
-static void TestEqualsIsForInt64(T aVal) {
+static void TestEqualsIsTruncatesToForInt64(T aVal) {
   int32_t i32;
   A(!NumberIsInt32(aVal, &i32));
   A(!NumberEqualsInt32(aVal, &i32));
+  A(!NumberTruncatesToInt32(aVal, &i32));
 
   int64_t i64;
   A(NumberIsInt64(aVal, &i64));
   MOZ_ASSERT(i64 == aVal);
   A(NumberEqualsInt64(aVal, &i64));
   MOZ_ASSERT(i64 == aVal);
+  A(NumberTruncatesToInt64(aVal, &i64));
+  MOZ_ASSERT(i64 == aVal);
+
+  intptr_t iptr;
+  constexpr bool is32Bit = std::is_same_v<intptr_t, int32_t>;
+  constexpr bool is64Bit = std::is_same_v<intptr_t, int64_t>;
+  static_assert(is32Bit || is64Bit);
+  if constexpr (is32Bit) {
+    A(!NumberIsIntPtr(aVal, &iptr));
+    A(!NumberEqualsIntPtr(aVal, &iptr));
+    A(!NumberTruncatesToIntPtr(aVal, &iptr));
+  } else {
+    A(NumberIsIntPtr(aVal, &iptr));
+    MOZ_ASSERT(iptr == aVal);
+    A(NumberEqualsIntPtr(aVal, &iptr));
+    MOZ_ASSERT(iptr == aVal);
+    A(NumberTruncatesToIntPtr(aVal, &iptr));
+    MOZ_ASSERT(iptr == aVal);
+  }
 };
 
-// Used to test Number{Is,Equals}{Int32,Int64} for values that aren't equal to
-// any int32 or int64.
+// Used to test Number{Is,Equals,TruncatesTo}{Int32,Int64,IntPtr} for values
+// that aren't equal to any int32 or int64.
 template <typename T>
-static void TestEqualsIsForNonInteger(T aVal) {
+static void TestEqualsIsTruncatesToForNonInteger(T aVal) {
   int32_t i32;
   A(!NumberIsInt32(aVal, &i32));
   A(!NumberEqualsInt32(aVal, &i32));
+  if (NumberTruncatesToInt32(aVal, &i32)) {
+    MOZ_ASSERT(i32 == int32_t(aVal));
+  }
 
   int64_t i64;
   A(!NumberIsInt64(aVal, &i64));
   A(!NumberEqualsInt64(aVal, &i64));
+  if (NumberTruncatesToInt64(aVal, &i64)) {
+    MOZ_ASSERT(i64 == int64_t(aVal));
+  }
+
+  intptr_t iptr;
+  A(!NumberIsIntPtr(aVal, &iptr));
+  A(!NumberEqualsIntPtr(aVal, &iptr));
+  if (NumberTruncatesToIntPtr(aVal, &iptr)) {
+    MOZ_ASSERT(iptr == intptr_t(aVal));
+  }
 };
 
 static void TestDoublesPredicates() {
@@ -358,17 +418,17 @@ static void TestDoublesPredicates() {
   A(!IsNegativeZero(1.0));
 
   // Edge case: negative zero.
-  TestEqualsIsForNegativeZero<double>();
+  TestEqualsIsTruncatesToForNegativeZero<double>();
 
   // Int32 values.
-  auto testInt32 = TestEqualsIsForInt32<double>;
+  auto testInt32 = TestEqualsIsTruncatesToForInt32<double>;
   testInt32(0.0);
   testInt32(1.0);
   testInt32(INT32_MIN);
   testInt32(INT32_MAX);
 
   // Int64 values that don't fit in int32.
-  auto testInt64 = TestEqualsIsForInt64<double>;
+  auto testInt64 = TestEqualsIsTruncatesToForInt64<double>;
   testInt64(2147483648);
   testInt64(2147483649);
   testInt64(-2147483649);
@@ -383,7 +443,7 @@ static void TestDoublesPredicates() {
   testInt64(MaxSafeInteger);
 
   // Doubles that aren't equal to any int32 or int64.
-  auto testNonInteger = TestEqualsIsForNonInteger<double>;
+  auto testNonInteger = TestEqualsIsTruncatesToForNonInteger<double>;
   testNonInteger(NegativeInfinity<double>());
   testNonInteger(PositiveInfinity<double>());
   testNonInteger(UnspecifiedNaN<double>());
@@ -474,10 +534,10 @@ static void TestFloatsPredicates() {
   A(!IsPositiveZero(1.0f));
 
   // Edge case: negative zero.
-  TestEqualsIsForNegativeZero<float>();
+  TestEqualsIsTruncatesToForNegativeZero<float>();
 
   // Int32 values.
-  auto testInt32 = TestEqualsIsForInt32<float>;
+  auto testInt32 = TestEqualsIsTruncatesToForInt32<float>;
   testInt32(0.0f);
   testInt32(1.0f);
   testInt32(INT32_MIN);
@@ -486,7 +546,7 @@ static void TestFloatsPredicates() {
   testInt32(BIG);
 
   // Int64 values that don't fit in int32.
-  auto testInt64 = TestEqualsIsForInt64<float>;
+  auto testInt64 = TestEqualsIsTruncatesToForInt64<float>;
   testInt64(INT64_MIN);
   testInt64(9007199254740992.0f);
   testInt64(-float(2147483648) - 256);
@@ -494,7 +554,7 @@ static void TestFloatsPredicates() {
   testInt64(float(2147483648) + 256);
 
   // Floats that aren't equal to any int32 or int64.
-  auto testNonInteger = TestEqualsIsForNonInteger<float>;
+  auto testNonInteger = TestEqualsIsTruncatesToForNonInteger<float>;
   testNonInteger(NegativeInfinity<float>());
   testNonInteger(PositiveInfinity<float>());
   testNonInteger(UnspecifiedNaN<float>());
