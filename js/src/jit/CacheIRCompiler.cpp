@@ -1386,8 +1386,11 @@ CacheIRStubInfo* CacheIRStubInfo::New(CacheKind kind, ICStubEngine engine,
   }
   fieldTypes[numStubFields] = uint8_t(StubField::Type::Limit);
 
-  return new (p) CacheIRStubInfo(kind, engine, makesGCCalls, codeStart,
-                                 writer.codeLength(), fieldTypes);
+  return new (p) CacheIRStubInfo(kind, engine, makesGCCalls,
+#ifdef JS_CACHET
+                                 writer.numOperandIds(),
+#endif
+                                 codeStart, writer.codeLength(), fieldTypes);
 }
 
 CacheIRStubInfo* CacheIRStubInfo::clone() const {

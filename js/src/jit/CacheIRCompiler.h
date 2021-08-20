@@ -1202,17 +1202,26 @@ class CacheIRStubInfo {
   CacheKind kind_ : 8;
   ICStubEngine engine_ : 8;
   bool makesGCCalls_ : 1;
+#ifdef JS_CACHET
+  uint16_t numOperandIds_;
+#endif
 
   const uint8_t* code_;
   uint32_t length_;
   const uint8_t* fieldTypes_;
 
   CacheIRStubInfo(CacheKind kind, ICStubEngine engine, bool makesGCCalls,
+#ifdef JS_CACHET
+                  uint16_t numOperandIds,
+#endif
                   const uint8_t* code, uint32_t codeLength,
                   const uint8_t* fieldTypes)
       : kind_(kind),
         engine_(engine),
         makesGCCalls_(makesGCCalls),
+#ifdef JS_CACHET
+        numOperandIds_(numOperandIds),
+#endif
         code_(code),
         length_(codeLength),
         fieldTypes_(fieldTypes) {
@@ -1230,6 +1239,10 @@ class CacheIRStubInfo {
 
   const uint8_t* code() const { return code_; }
   uint32_t codeLength() const { return length_; }
+
+#ifdef JS_CACHET
+  uint16_t numOperandIds() const { return numOperandIds_; }
+#endif
 
   bool hasStubFields() const;
   size_t numStubFields() const;

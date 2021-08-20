@@ -1160,6 +1160,12 @@ class NativeObject : public JSObject {
     getReservedSlotRef(index).set(this, HeapSlot::Slot, index, v);
   }
 
+  template <typename T>
+  T* maybePtrFromReservedSlot(uint32_t slot) const {
+    Value v = getReservedSlot(slot);
+    return v.isUndefined() ? nullptr : static_cast<T*>(v.toPrivate());
+  }
+
   // For slots which are known to always be fixed, due to the way they are
   // allocated.
 
@@ -1185,11 +1191,13 @@ class NativeObject : public JSObject {
     fixedSlots()[slot].init(this, HeapSlot::Slot, slot, value);
   }
 
-  template <typename T>
-  T* maybePtrFromReservedSlot(uint32_t slot) const {
-    Value v = getReservedSlot(slot);
-    return v.isUndefined() ? nullptr : static_cast<T*>(v.toPrivate());
-  }
+  // For slots which are allocated dynamically. Slot numbering for these
+  // accessors starts from the first dynamic slot.
+
+  inline HeapSlot& getDynamicSlotRef(uint32_t dynamicSlot);
+  inline const Value& getDynamicSlot(uint32_t dynamicSlot) const;
+  inline void setDynamicSlot(uint32_t dynamicSlot, const Value& value);
+  inline void initDynamicSlot(uint32_t dynamicSlot, const Value& value);
 
   /*
    * Calculate the number of dynamic slots to allocate to cover the properties

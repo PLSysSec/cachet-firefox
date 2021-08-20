@@ -450,6 +450,16 @@ option(
 set_define("JS_MASM_VERBOSE", depends_if("--enable-masm-verbose")(lambda _: True))
 set_config("JS_MASM_VERBOSE", depends_if("--enable-masm-verbose")(lambda _: True))
 
+
+option(
+    "--enable-cachet",
+    default=False,
+    help="{Enable|Disable} JavaScript CacheIR verification tooling",
+)
+set_define("JS_CACHET", depends_if("--enable-cachet")(lambda _: True))
+set_config("JS_CACHET", depends_if("--enable-cachet")(lambda _: True))
+
+
 # Architecture feature flags
 # =======================================================
 
@@ -485,6 +495,7 @@ def aarch64_jscvt(fjcvtzs, target, simulator):
 
 
 set_define("MOZ_AARCH64_JSCVT", aarch64_jscvt)
+
 
 # CTypes
 # =======================================================

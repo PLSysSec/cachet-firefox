@@ -141,6 +141,7 @@ oddly_ordered_inclnames = set(
         "frontend/ReservedWordsGenerated.h",
         "gc/StatsPhasesGenerated.h",  # Included in the body of gc/Statistics.h
         "gc/StatsPhasesGenerated.inc",  # Included in the body of gc/Statistics.cpp
+        "jit/CachetGenerated.h",  # Included in the body of jit/CachetInterpreter.h
         "psapi.h",  # Must be included after "util/Windows.h" on Windows
         "machine/endian.h",  # Must be included after <sys/types.h> on BSD
         "winbase.h",  # Must precede other system headers(?)
@@ -243,8 +244,9 @@ class FileKind(object):
     CPP = 2
     INL_H = 3
     H = 4
-    TBL = 5
-    MSG = 6
+    INC = 5
+    TBL = 6
+    MSG = 7
 
     @staticmethod
     def get(filename):
@@ -259,6 +261,9 @@ class FileKind(object):
 
         if filename.endswith(".h"):
             return FileKind.H
+
+        if filename.endswith(".inc"):
+            return FileKind.TBL
 
         if filename.endswith(".tbl"):
             return FileKind.TBL
@@ -307,7 +312,7 @@ def check_style(enable_fixup):
             filepath = os.path.join(dirpath, filename).replace("\\", "/")
             if not filepath.startswith(
                 tuple(ignored_js_src_dirs)
-            ) and filepath.endswith((".c", ".cpp", ".h", ".tbl", ".msg")):
+            ) and filepath.endswith((".c", ".cpp", ".h", ".inc", ".tbl", ".msg")):
                 inclname = filepath[len("js/src/") :]
                 js_names[filepath] = inclname
 
@@ -446,7 +451,7 @@ class Include(object):
           4. foo/Bar.h
           5. jsfooinlines.h
           6. foo/Bar-inl.h
-          7. non-.h, e.g. *.tbl, *.msg (these can be scattered throughout files)
+          7. non-.h, e.g. *.inc, *.tbl, *.msg (these can be scattered throughout files)
         """
 
         if self.is_system:

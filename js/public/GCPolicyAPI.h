@@ -92,10 +92,17 @@ struct GCPolicy : public StructGCPolicy<T> {};
 template <typename T>
 struct IgnoreGCPolicy {
   static void trace(JSTracer* trc, T* t, const char* name) {}
+  static void sweep(T* t) {}
   static bool needsSweep(T* v) { return false; }
   static bool traceWeak(JSTracer*, T* v) { return true; }
   static bool isValid(const T& v) { return true; }
 };
+template <>
+struct GCPolicy<bool> : public IgnoreGCPolicy<bool> {};
+template <>
+struct GCPolicy<int32_t> : public IgnoreGCPolicy<int32_t> {};
+template <>
+struct GCPolicy<int64_t> : public IgnoreGCPolicy<int64_t> {};
 template <>
 struct GCPolicy<uint32_t> : public IgnoreGCPolicy<uint32_t> {};
 template <>

@@ -72,6 +72,31 @@ js::NativeObject::calculateDynamicSlots(Shape* shape) {
                                shape->getObjectClass());
 }
 
+inline js::HeapSlot& js::NativeObject::getDynamicSlotRef(uint32_t dynamicSlot) {
+  MOZ_ASSERT(dynamicSlot < numDynamicSlots());
+  return *(slots_ + dynamicSlot);
+}
+
+inline const js::Value& js::NativeObject::getDynamicSlot(
+    uint32_t dynamicSlot) const {
+  MOZ_ASSERT(dynamicSlot < numDynamicSlots());
+  return slots_[dynamicSlot];
+}
+
+inline void js::NativeObject::setDynamicSlot(uint32_t dynamicSlot,
+                                             const js::Value& value) {
+  MOZ_ASSERT(dynamicSlot < numDynamicSlots());
+  checkStoredValue(value);
+  getDynamicSlotRef(dynamicSlot).set(this, HeapSlot::Slot, dynamicSlot, value);
+}
+
+inline void js::NativeObject::initDynamicSlot(uint32_t dynamicSlot,
+                                              const js::Value& value) {
+  MOZ_ASSERT(dynamicSlot < numDynamicSlots());
+  checkStoredValue(value);
+  getDynamicSlotRef(dynamicSlot).init(this, HeapSlot::Slot, dynamicSlot, value);
+}
+
 inline void JSObject::finalize(JSFreeOp* fop) {
   js::probes::FinalizeObject(this);
 

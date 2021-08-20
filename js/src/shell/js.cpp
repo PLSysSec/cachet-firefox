@@ -103,6 +103,9 @@
 #include "jit/CacheIRCompiler.h"
 #include "jit/CacheIRGenerated.h"
 #include "jit/CacheIRHealth.h"
+#ifdef JS_CACHET
+#  include "jit/CacheIRInterpreter.h"
+#endif
 #include "jit/CacheIRSpewer.h"
 #include "jit/ICState.h"
 #include "jit/InlinableNatives.h"
@@ -4916,8 +4919,124 @@ class ICStubObject : public NativeObject {
     return true;
   }
 
+#ifdef JS_CACHET
+  [[nodiscard]] static bool runInterpretedMethod(JSContext* const cx,
+                                                 const unsigned argc,
+                                                 Value* const vp) {
+    const CallArgs args(CallArgsFromVp(argc, vp));
+
+    const Rooted<ICStubObject*> icStubObj(
+        cx, UnwrapThisObject<ICStubObject>(cx, args, "runInterpreted"));
+    if (!icStubObj) {
+      return false;
+    }
+
+    CacheIRStubInfo& stubInfo(icStubObj->stubInfo());
+    uint8_t* const stubData(icStubObj->stubData());
+
+    const CacheKindSignature& sig(GetCacheKindSignature(stubInfo.kind()));
+    if (!args.requireAtLeast(cx, "ICStub.prototype.runInterpreted",
+                             sig.numInputs)) {
+      return false;
+    }
+
+    CacheIRInterpreter interpreter(cx, stubInfo, stubData);
+    if (!interpreter.init()) {
+      return false;
+    }
+
+    for (uint16_t inputIndex = 0; inputIndex < sig.numInputs; ++inputIndex) {
+      const CacheKindSignature::Input input(sig.inputs[inputIndex]);
+      switch (input.type) {
+#  define HANDLE_INPUT_TYPE_CASE(Name)                                  \
+    case CacheType::Name: {                                             \
+      CacheTypes<CacheType::Name> input##Name;                          \
+      if (!ValueToCacheIR##Name(cx, args[inputIndex], &input##Name)) {  \
+        return false;                                                   \
+      }                                                                 \
+      interpreter.setOperand(Name##OperandId(inputIndex), input##Name); \
+      break;                                                            \
+    }
+        CACHE_IR_TYPES(HANDLE_INPUT_TYPE_CASE)
+#  undef HANDLE_INPUT_TYPE_CASE
+      }
+    }
+
+    const mozilla::Maybe<CacheIRInterpreterResult> result(
+        interpreter.interpret());
+    if (result) {
+      switch (result.value()) {
+        case CacheIRInterpreterResult::Return: {
+          const Handle<CacheIROperand> output(interpreter.output());
+          if (sig.output) {
+            if (!output.isInitialized()) {
+              JS_ReportErrorASCII(cx, "Missing CacheIR output");
+              return false;
+            }
+
+            const CacheType outputType(output.type());
+            if (outputType != *sig.output) {
+              JS_ReportErrorASCII(
+                  cx, "Expected CacheIR output of type %s, found type %s",
+                  GetCacheTypeName(*sig.output), GetCacheTypeName(outputType));
+              return false;
+            }
+
+            if (output.isValLike()) {
+              args.rval().set(output.toVal());
+            } else {
+              switch (output.type()) {
+                case CacheType::ValueTag: {
+                  args.rval().set(Int32Value(output.asValueTag()));
+                  break;
+                }
+                case CacheType::IntPtr: {
+                  args.rval().set(NumberValue(output.asIntPtr()));
+                  break;
+                }
+                default: {
+                  MOZ_CRASH("Unexpected CacheIR type");
+                }
+              }
+            }
+            return true;
+          } else {
+            if (output.isInitialized()) {
+              JS_ReportErrorASCII(cx,
+                                  "Expected no CacheIR output, found type %s",
+                                  GetCacheTypeName(output.type()));
+              return false;
+            }
+            args.rval().setUndefined();
+            return true;
+          }
+        }
+        case CacheIRInterpreterResult::Bailout: {
+          JS_ReportErrorASCII(cx, "CacheIR stub bailed out");
+          return false;
+        }
+        case CacheIRInterpreterResult::Exception: {
+          JS_ReportErrorASCII(cx, "CacheIR stub threw exception");
+          return false;
+        }
+        case CacheIRInterpreterResult::UnsupportedOp: {
+          JS_ReportErrorASCII(cx, "Hit unsupported CacheIR op");
+          return false;
+        }
+      }
+    } else {
+      JS_ReportErrorASCII(cx, "CacheIR stub didn't terminate naturally");
+      return false;
+    }
+  }
+#endif /* JS_CACHET */
+
   static constexpr JSFunctionSpec methods[] = {
-      JS_FN("toString", toStringMethod, 0, JSPROP_ENUMERATE), JS_FS_END};
+      JS_FN("toString", toStringMethod, 0, JSPROP_ENUMERATE),
+#ifdef JS_CACHET
+      JS_FN("runInterpreted", runInterpretedMethod, 0, JSPROP_ENUMERATE),
+#endif /* JS_CACHET */
+      JS_FS_END};
 
  public:
   [[nodiscard]] static JSObject* initClass(JSContext* const cx,

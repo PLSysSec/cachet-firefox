@@ -394,6 +394,65 @@ def gen_clone_method(name, args):
     return code
 
 
+def gen_interpreter_base_method(name, args):
+    """Generates CacheIRInterpreterBase header code for a single opcode."""
+
+    method_name = "interpret" + name
+
+    # In the base class, we generate a default method that can be overridden by
+    # CacheIRInterpeter for supported opcodes. For example:
+    #
+    #   mozilla::Maybe<CacheIRInterpreterResult>
+    #   interpretGuardShape(ObjOperandId objId, uint32_t shapeOffset) {
+    #     return mozilla::Some(CacheIRInterpreterResult::UnsupportedOp);
+    #   }
+    method_args = []
+    if args:
+        for arg_name, arg_type in six.iteritems(args):
+            cpp_type, suffix, _ = arg_reader_info[arg_type]
+            cpp_name = arg_name + suffix
+            method_args.append("{} {}".format(cpp_type, cpp_name))
+
+    code = "inline mozilla::Maybe<CacheIRInterpreterResult>\\\n"
+    code += "{}({}) {{\\\n".format(method_name, ", ".join(method_args))
+    code += "  return mozilla::Some(CacheIRInterpreterResult::UnsupportedOp);\\\n"
+    code += "}\\\n"
+
+    return code
+
+
+def gen_interpreter_dispatch_method(name, args):
+    """Generates CacheIRInterpreter dispatch code for a single opcode."""
+
+    method_name = "interpret" + name
+
+    # We generate a method which takes a CacheIRReader, unpacks the instruction,
+    # and forwards to a separate implementation. For example:
+    #
+    #   mozilla::Maybe<CacheIRInterpreterResult>
+    #   interpretGuardShape(CacheIRReader& reader) {
+    #     const ObjOperandId objId(reader.objOperandId());
+    #     uint32_t shapeOffset = reader.stubOffset();
+    #     return interpretGuardShape(objId, shapeOffset);
+    #   }
+    cpp_args = []
+    args_code = ""
+    if args:
+        for arg_name, arg_type in six.iteritems(args):
+            cpp_type, suffix, readexpr = arg_reader_info[arg_type]
+            cpp_name = arg_name + suffix
+            cpp_args.append(cpp_name)
+            args_code += "  {} {} = {};\\\n".format(cpp_type, cpp_name, readexpr)
+
+    code = "inline mozilla::Maybe<CacheIRInterpreterResult>\\\n"
+    code += "{}(CacheIRReader& reader) {{\\\n".format(method_name)
+    code += args_code
+    code += "  return {}({});\\\n".format(method_name, ", ".join(cpp_args))
+    code += "}\\\n"
+
+    return code
+
+
 def gen_kind_signature(name, inputs, output):
     """Generates an element of CacheKindSignatures, mapping out the inputs and
     output of a CacheKind."""
@@ -987,7 +1046,7 @@ def generate_cacheir_header(c_out, yaml_path):
 def generate_cacheirops_header(c_out, yaml_path):
     """Generate CacheIROpsGenerated.h from CacheIROps.yaml. The generated files
     contains a list of all CacheIR ops, and generated source code for
-    CacheIRWriter and CacheIRCompiler."""
+    CacheIRWriter, CacheIRCompiler, and CacheIRInterpreter."""
 
     cache_ops = load_yaml(yaml_path)
 
@@ -1013,6 +1072,12 @@ def generate_cacheirops_header(c_out, yaml_path):
 
     # Generated methods for cloning IC stubs
     clone_methods = []
+
+    # Generated default methods for CacheIRInterpreterBase.
+    interpreter_base_methods = []
+
+    # Generated dispatch methods for CacheIRInterpreter.
+    interpreter_dispatch_methods = []
 
     for name, op in cache_ops.items():
         args = op["args"]
@@ -1056,6 +1121,9 @@ def generate_cacheirops_header(c_out, yaml_path):
 
         clone_methods.append(gen_clone_method(name, args))
 
+        interpreter_base_methods.append(gen_interpreter_base_method(name, args))
+        interpreter_dispatch_methods.append(gen_interpreter_dispatch_method(name, args))
+
     contents = "#define CACHE_IR_OPS(_)\\\n"
     contents += "\\\n".join(ops_items)
     contents += "\n\n"
@@ -1087,5 +1155,12 @@ def generate_cacheirops_header(c_out, yaml_path):
     contents += "#define CACHE_IR_CLONE_GENERATED \\\n"
     contents += "\\\n".join(clone_methods)
     contents += "\n\n"
+
+    contents += "#define CACHE_IR_INTERPRETER_BASE_GENERATED \\\n"
+    contents += "\\\n".join(interpreter_base_methods)
+    contents += "\n\n"
+
+    contents += "#define CACHE_IR_INTERPRETER_DISPATCH_GENERATED \\\n"
+    contents += "\\\n".join(interpreter_dispatch_methods)
 
     generate_header(c_out, "jit_CacheIROpsGenerated_h", contents)
