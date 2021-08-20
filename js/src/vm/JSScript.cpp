@@ -42,6 +42,7 @@
 #include "jit/CacheIRHealth.h"
 #include "jit/Invalidation.h"
 #include "jit/Ion.h"
+#include "jit/IonOptimizationLevels.h"
 #include "jit/IonScript.h"
 #include "jit/JitCode.h"
 #include "jit/JitOptions.h"
@@ -4773,6 +4774,18 @@ bool JSScript::mayReadFrameArgsDirectly() {
   return needsArgsObj() || hasRest();
 }
 
+void JSScript::resetWarmUpCounterToForceIonCompilation() {
+  const jit::OptimizationInfo* const optimizationInfo =
+      jit::IonOptimizations.get(jit::OptimizationLevel::Normal);
+  const uint32_t newCount(
+      std::max(jit::JitOptions.baselineJitWarmUpThreshold + 1,
+               optimizationInfo->compilerWarmUpThreshold(this)));
+
+  if (newCount > getWarmUpCount()) {
+    resetWarmUpCounter(newCount);
+  }
+}
+
 void JSScript::resetWarmUpCounterToDelayIonCompilation() {
   // Reset the warm-up count only if it's greater than the BaselineCompiler
   // threshold. We do this to ensure this has no effect on Baseline compilation
@@ -4780,13 +4793,7 @@ void JSScript::resetWarmUpCounterToDelayIonCompilation() {
   // pathological cases.
 
   if (getWarmUpCount() > jit::JitOptions.baselineJitWarmUpThreshold) {
-    incWarmUpResetCounter();
-    uint32_t newCount = jit::JitOptions.baselineJitWarmUpThreshold;
-    if (warmUpData_.isWarmUpCount()) {
-      warmUpData_.resetWarmUpCount(newCount);
-    } else {
-      warmUpData_.toJitScript()->resetWarmUpCount(newCount);
-    }
+    resetWarmUpCounter(jit::JitOptions.baselineJitWarmUpThreshold);
   }
 }
 

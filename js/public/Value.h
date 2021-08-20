@@ -144,6 +144,7 @@ namespace detail {
 #if defined(JS_NUNBOX32)
 
 constexpr JSValueTag ValueTypeToTag(JSValueType type) {
+  MOZ_ASSERT(type <= JSVAL_TYPE_OBJECT);
   return static_cast<JSValueTag>(JSVAL_TAG_CLEAR | type);
 }
 
@@ -158,6 +159,7 @@ constexpr JSValueTag ValueLowerInclGCThingTag = JSVAL_TAG_STRING;
 #elif defined(JS_PUNBOX64)
 
 constexpr JSValueTag ValueTypeToTag(JSValueType type) {
+  MOZ_ASSERT(type <= JSVAL_TYPE_OBJECT);
   return static_cast<JSValueTag>(JSVAL_TAG_MAX_DOUBLE | type);
 }
 
@@ -1056,6 +1058,74 @@ static inline Value PrivateGCThingValue(js::gc::Cell* cell) {
   v.setPrivateGCThing(cell);
   return v;
 }
+
+template <JSValueType type>
+struct TypedValue;
+
+template <>
+struct TypedValue<JSVAL_TYPE_DOUBLE> {
+  static Value create(double dbl) { return DoubleValue(dbl); }
+};
+
+template <>
+struct TypedValue<JSVAL_TYPE_INT32> {
+  static Value create(int32_t i32) { return Int32Value(i32); }
+};
+
+template <>
+struct TypedValue<JSVAL_TYPE_BOOLEAN> {
+  static Value create(bool boo) { return BooleanValue(boo); }
+};
+
+template <>
+struct TypedValue<JSVAL_TYPE_UNDEFINED> {
+  static Value create() { return UndefinedValue(); }
+};
+
+template <>
+struct TypedValue<JSVAL_TYPE_NULL> {
+  static Value create() { return NullValue(); }
+};
+
+template <>
+struct TypedValue<JSVAL_TYPE_MAGIC> {
+  static Value create(JSWhyMagic why) { return MagicValue(why); }
+};
+
+template <>
+struct TypedValue<JSVAL_TYPE_STRING> {
+  static Value create(JSString* str) { return StringValue(str); }
+};
+
+template <>
+struct TypedValue<JSVAL_TYPE_SYMBOL> {
+  static Value create(JS::Symbol* sym) { return SymbolValue(sym); }
+};
+
+template <>
+struct TypedValue<JSVAL_TYPE_PRIVATE_GCTHING> {
+  static Value create(js::gc::Cell* cell) { return PrivateGCThingValue(cell); }
+};
+
+template <>
+struct TypedValue<JSVAL_TYPE_BIGINT> {
+  static Value create(JS::BigInt* bi) { return BigIntValue(bi); }
+};
+
+template <>
+struct TypedValue<JSVAL_TYPE_OBJECT> {
+  static Value create(JSObject& obj) { return ObjectValue(obj); }
+
+  static Value create(JSObject* obj) {
+    MOZ_ASSERT(obj);
+    return ObjectValue(*obj);
+  }
+};
+
+template <>
+struct TypedValue<JSVAL_TYPE_UNKNOWN> {
+  static Value create(Value v) { return v; }
+};
 
 inline bool SameType(const Value& lhs, const Value& rhs) {
 #if defined(JS_NUNBOX32)

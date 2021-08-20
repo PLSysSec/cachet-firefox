@@ -170,6 +170,11 @@ class alignas(8) IonScript final : public TrailingArray {
     // post barrier is not required..
     return offsetToPointer<PreBarrieredValue>(constantTableOffset());
   }
+  const PreBarrieredValue* constants() const {
+    // Nursery constants are manually barriered in CodeGenerator::link() so a
+    // post barrier is not required..
+    return offsetToPointer<PreBarrieredValue>(constantTableOffset());
+  }
   size_t numConstants() const {
     return numElements<PreBarrieredValue>(constantTableOffset(),
                                           runtimeDataOffset());
@@ -181,6 +186,9 @@ class alignas(8) IonScript final : public TrailingArray {
   uint8_t* runtimeData() {
     return offsetToPointer<uint8_t>(runtimeDataOffset());
   }
+  const uint8_t* runtimeData() const {
+    return offsetToPointer<uint8_t>(runtimeDataOffset());
+  }
   size_t runtimeSize() const {
     return numElements<uint8_t>(runtimeDataOffset(), nurseryObjectsOffset());
   }
@@ -190,6 +198,9 @@ class alignas(8) IonScript final : public TrailingArray {
   // (JSObject* alignment)
   //
   HeapPtrObject* nurseryObjects() {
+    return offsetToPointer<HeapPtrObject>(nurseryObjectsOffset());
+  }
+  const HeapPtrObject* nurseryObjects() const {
     return offsetToPointer<HeapPtrObject>(nurseryObjectsOffset());
   }
   size_t numNurseryObjects() const {
@@ -232,6 +243,9 @@ class alignas(8) IonScript final : public TrailingArray {
   SnapshotOffset* bailoutTable() {
     return offsetToPointer<SnapshotOffset>(bailoutTableOffset());
   }
+  const SnapshotOffset* bailoutTable() const {
+    return offsetToPointer<SnapshotOffset>(bailoutTableOffset());
+  }
   size_t numBailoutEntries() const {
     return numElements<SizeOf_SnapshotOffset>(bailoutTableOffset(),
                                               icIndexOffset());
@@ -241,7 +255,10 @@ class alignas(8) IonScript final : public TrailingArray {
   // Offset into `runtimeData` for each (variable-length) IonIC.
   //
   uint32_t* icIndex() { return offsetToPointer<uint32_t>(icIndexOffset()); }
-  size_t numICs() const {
+  const uint32_t* icIndex() const {
+    return offsetToPointer<uint32_t>(icIndexOffset());
+  }
+  uint32_t numICs() const {
     return numElements<uint32_t>(icIndexOffset(), safepointsOffset());
   }
 
@@ -263,6 +280,9 @@ class alignas(8) IonScript final : public TrailingArray {
   }
   size_t snapshotsListSize() const {
     return numElements<uint8_t>(snapshotsOffset(), rvaTableOffset());
+  }
+  const uint8_t* snapshotsRVATable() const {
+    return offsetToPointer<uint8_t>(rvaTableOffset());
   }
   size_t snapshotsRVATableSize() const {
     return numElements<uint8_t>(rvaTableOffset(), recoversOffset());
@@ -380,6 +400,10 @@ class alignas(8) IonScript final : public TrailingArray {
     MOZ_ASSERT(index < numConstants());
     return constants()[index];
   }
+  const PreBarrieredValue& getConstant(size_t index) const {
+    MOZ_ASSERT(index < numConstants());
+    return constants()[index];
+  }
   uint32_t frameSlots() const { return frameSlots_; }
   uint32_t argumentSlots() const { return argumentSlots_; }
   uint32_t frameSize() const { return frameSize_; }
@@ -395,24 +419,43 @@ class alignas(8) IonScript final : public TrailingArray {
   const OsiIndex* getOsiIndex(uint32_t disp) const;
   const OsiIndex* getOsiIndex(uint8_t* retAddr) const;
 
-  IonIC& getICFromIndex(uint32_t index) {
-    MOZ_ASSERT(index < numICs());
-    uint32_t offset = icIndex()[index];
-    return getIC(offset);
+  IonIC& getICFromIndex(size_t index) {
+    return getIC(getICOffsetFromIndex(index));
   }
+  const IonIC& getICFromIndex(size_t index) const {
+    return getIC(getICOffsetFromIndex(index));
+  }
+
+  inline uint32_t getICOffsetFromIndex(size_t index) const {
+    MOZ_ASSERT(index < numICs());
+    return icIndex()[index];
+  }
+
   inline IonIC& getIC(uint32_t offset) {
     MOZ_ASSERT(offset < runtimeSize());
     return *reinterpret_cast<IonIC*>(runtimeData() + offset);
   }
+  inline const IonIC& getIC(uint32_t offset) const {
+    MOZ_ASSERT(offset < runtimeSize());
+    return *reinterpret_cast<const IonIC*>(runtimeData() + offset);
+  }
+
   void purgeICs(Zone* zone);
-  void copySnapshots(const SnapshotWriter* writer);
-  void copyRecovers(const RecoverWriter* writer);
+
+  void copySnapshots(const uint8_t* snapshots,
+                     const uint8_t* snapshotsRVATable);
+  void copyRecovers(const uint8_t* recovers);
   void copyBailoutTable(const SnapshotOffset* table);
   void copyConstants(const Value* vp);
-  void copySafepointIndices(const CodegenSafepointIndex* si);
+  void copySafepointIndices(const SafepointIndex* si);
   void copyOsiIndices(const OsiIndex* oi);
   void copyRuntimeData(const uint8_t* data);
   void copyICEntries(const uint32_t* icEntries);
+  void copySafepoints(const uint8_t* safepoints);
+
+  void copySnapshots(const SnapshotWriter* writer);
+  void copyRecovers(const RecoverWriter* writer);
+  void copySafepointIndices(const CodegenSafepointIndex* si);
   void copySafepoints(const SafepointWriter* writer);
 
   bool invalidated() const { return invalidationCount_ != 0; }

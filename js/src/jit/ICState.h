@@ -114,8 +114,8 @@ class ICState {
     return true;
   }
 
-  void reset() {
-    setMode(Mode::Specialized);
+  void reset(Mode mode = Mode::Specialized) {
+    setMode(mode);
 #ifdef DEBUG
     if (JitOptions.forceMegamorphicICs) {
       setMode(Mode::Megamorphic);

@@ -1995,11 +1995,14 @@ class JSScript : public js::BaseScript {
 
   bool shareScriptData(JSContext* cx);
 
+  inline void resetWarmUpCounter(uint32_t newCount);
+
  public:
   inline uint32_t getWarmUpCount() const;
   inline void incWarmUpCounter(uint32_t amount = 1);
   inline void resetWarmUpCounterForGC();
 
+  void resetWarmUpCounterToForceIonCompilation();
   void resetWarmUpCounterToDelayIonCompilation();
 
   unsigned getWarmUpResetCount() const {

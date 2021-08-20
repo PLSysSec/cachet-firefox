@@ -1231,7 +1231,12 @@ class CacheIRStubInfo {
   const uint8_t* code() const { return code_; }
   uint32_t codeLength() const { return length_; }
 
+  bool hasStubFields() const;
+  size_t numStubFields() const;
   size_t stubDataSize() const;
+
+  static size_t totalSize(uint32_t codeLength, size_t numStubFields);
+  size_t totalSize() const { return totalSize(codeLength(), numStubFields()); }
 
   StubField::Type fieldType(uint32_t i) const {
     return (StubField::Type)fieldTypes_[i];
@@ -1239,6 +1244,7 @@ class CacheIRStubInfo {
 
   static CacheIRStubInfo* New(CacheKind kind, ICStubEngine engine,
                               bool canMakeCalls, const CacheIRWriter& writer);
+  CacheIRStubInfo* clone() const;
 
   template <class T>
   js::GCPtr<T>& getStubField(uint8_t* stubData, uint32_t offset) const;

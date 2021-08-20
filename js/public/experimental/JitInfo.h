@@ -26,94 +26,9 @@ enum class InlinableNative : uint16_t;
 
 }  // namespace js
 
-/**
- * A class, expected to be passed by value, which represents the CallArgs for a
- * JSJitGetterOp.
- */
-class JSJitGetterCallArgs : protected JS::MutableHandle<JS::Value> {
- public:
-  explicit JSJitGetterCallArgs(const JS::CallArgs& args)
-      : JS::MutableHandle<JS::Value>(args.rval()) {}
-
-  explicit JSJitGetterCallArgs(JS::Rooted<JS::Value>* rooted)
-      : JS::MutableHandle<JS::Value>(rooted) {}
-
-  explicit JSJitGetterCallArgs(JS::MutableHandle<JS::Value> handle)
-      : JS::MutableHandle<JS::Value>(handle) {}
-
-  JS::MutableHandle<JS::Value> rval() { return *this; }
-};
-
-/**
- * A class, expected to be passed by value, which represents the CallArgs for a
- * JSJitSetterOp.
- */
-class JSJitSetterCallArgs : protected JS::MutableHandle<JS::Value> {
- public:
-  explicit JSJitSetterCallArgs(const JS::CallArgs& args)
-      : JS::MutableHandle<JS::Value>(args[0]) {}
-
-  explicit JSJitSetterCallArgs(JS::Rooted<JS::Value>* rooted)
-      : JS::MutableHandle<JS::Value>(rooted) {}
-
-  JS::MutableHandle<JS::Value> operator[](unsigned i) {
-    MOZ_ASSERT(i == 0);
-    return *this;
-  }
-
-  unsigned length() const { return 1; }
-
-  // Add get() or maybe hasDefined() as needed
-};
-
-struct JSJitMethodCallArgsTraits;
-
-/**
- * A class, expected to be passed by reference, which represents the CallArgs
- * for a JSJitMethodOp.
- */
-class JSJitMethodCallArgs
-    : protected JS::detail::CallArgsBase<JS::detail::NoUsedRval> {
- private:
-  using Base = JS::detail::CallArgsBase<JS::detail::NoUsedRval>;
-  friend struct JSJitMethodCallArgsTraits;
-
- public:
-  explicit JSJitMethodCallArgs(const JS::CallArgs& args) {
-    argv_ = args.array();
-    argc_ = args.length();
-  }
-
-  JS::MutableHandle<JS::Value> rval() const { return Base::rval(); }
-
-  unsigned length() const { return Base::length(); }
-
-  JS::MutableHandle<JS::Value> operator[](unsigned i) const {
-    return Base::operator[](i);
-  }
-
-  bool hasDefined(unsigned i) const { return Base::hasDefined(i); }
-
-  JSObject& callee() const {
-    // We can't use Base::callee() because that will try to poke at
-    // this->usedRval_, which we don't have.
-    return argv_[-2].toObject();
-  }
-
-  JS::Handle<JS::Value> get(unsigned i) const { return Base::get(i); }
-
-  bool requireAtLeast(JSContext* cx, const char* fnname,
-                      unsigned required) const {
-    // Can just forward to Base, since it only needs the length and we
-    // forward that already.
-    return Base::requireAtLeast(cx, fnname, required);
-  }
-};
-
-struct JSJitMethodCallArgsTraits {
-  static constexpr size_t offsetOfArgv = offsetof(JSJitMethodCallArgs, argv_);
-  static constexpr size_t offsetOfArgc = offsetof(JSJitMethodCallArgs, argc_);
-};
+class JSJitGetterCallArgs;
+class JSJitSetterCallArgs;
+class JSJitMethodCallArgs;
 
 using JSJitGetterOp = bool (*)(JSContext*, JS::Handle<JSObject*>, void*,
                                JSJitGetterCallArgs);
@@ -331,6 +246,113 @@ struct JSTypedMethodJitInfo {
                                                for example, to figure out
                                                when argument coercions can
                                                have side-effects. */
+};
+
+/**
+ * A class, expected to be passed by value, which represents the CallArgs for a
+ * JSJitGetterOp.
+ */
+class JSJitGetterCallArgs : protected JS::MutableHandle<JS::Value> {
+ public:
+  explicit JSJitGetterCallArgs(const JS::CallArgs& args)
+      : JS::MutableHandle<JS::Value>(args.rval()) {}
+
+  explicit JSJitGetterCallArgs(JS::Rooted<JS::Value>* rooted)
+      : JS::MutableHandle<JS::Value>(rooted) {}
+
+  explicit JSJitGetterCallArgs(JS::MutableHandle<JS::Value> handle)
+      : JS::MutableHandle<JS::Value>(handle) {}
+
+  JS::MutableHandle<JS::Value> rval() { return *this; }
+
+  bool call(JSContext* cx, const JSJitInfo* info, JS::Handle<JSObject*> obj,
+            void* self) {
+    MOZ_ASSERT(info->type() == JSJitInfo::OpType::Getter);
+    return (info->getter)(cx, obj, self, *this);
+  }
+};
+
+/**
+ * A class, expected to be passed by value, which represents the CallArgs for a
+ * JSJitSetterOp.
+ */
+class JSJitSetterCallArgs : protected JS::MutableHandle<JS::Value> {
+ public:
+  explicit JSJitSetterCallArgs(const JS::CallArgs& args)
+      : JS::MutableHandle<JS::Value>(args[0]) {}
+
+  explicit JSJitSetterCallArgs(JS::Rooted<JS::Value>* rooted)
+      : JS::MutableHandle<JS::Value>(rooted) {}
+
+  JS::MutableHandle<JS::Value> operator[](unsigned i) {
+    MOZ_ASSERT(i == 0);
+    return *this;
+  }
+
+  unsigned length() const { return 1; }
+
+  // Add get() or maybe hasDefined() as needed
+
+  bool call(JSContext* cx, const JSJitInfo* info, JS::Handle<JSObject*> obj,
+            void* self) {
+    MOZ_ASSERT(info->type() == JSJitInfo::OpType::Setter);
+    return (info->setter)(cx, obj, self, *this);
+  }
+};
+
+struct JSJitMethodCallArgsTraits;
+
+/**
+ * A class, expected to be passed by reference, which represents the CallArgs
+ * for a JSJitMethodOp.
+ */
+class JSJitMethodCallArgs
+    : protected JS::detail::CallArgsBase<JS::detail::NoUsedRval> {
+ private:
+  using Base = JS::detail::CallArgsBase<JS::detail::NoUsedRval>;
+  friend struct JSJitMethodCallArgsTraits;
+
+ public:
+  explicit JSJitMethodCallArgs(const JS::CallArgs& args) {
+    argv_ = args.array();
+    argc_ = args.length();
+  }
+
+  JS::MutableHandle<JS::Value> rval() const { return Base::rval(); }
+
+  unsigned length() const { return Base::length(); }
+
+  JS::MutableHandle<JS::Value> operator[](unsigned i) const {
+    return Base::operator[](i);
+  }
+
+  bool hasDefined(unsigned i) const { return Base::hasDefined(i); }
+
+  JSObject& callee() const {
+    // We can't use Base::callee() because that will try to poke at
+    // this->usedRval_, which we don't have.
+    return argv_[-2].toObject();
+  }
+
+  JS::Handle<JS::Value> get(unsigned i) const { return Base::get(i); }
+
+  bool requireAtLeast(JSContext* cx, const char* fnname,
+                      unsigned required) const {
+    // Can just forward to Base, since it only needs the length and we
+    // forward that already.
+    return Base::requireAtLeast(cx, fnname, required);
+  }
+
+  bool call(JSContext* cx, const JSJitInfo* info, JS::Handle<JSObject*> obj,
+            void* self) {
+    MOZ_ASSERT(info->type() == JSJitInfo::OpType::Method);
+    return (info->method)(cx, obj, self, *this);
+  }
+};
+
+struct JSJitMethodCallArgsTraits {
+  static constexpr size_t offsetOfArgv = offsetof(JSJitMethodCallArgs, argv_);
+  static constexpr size_t offsetOfArgc = offsetof(JSJitMethodCallArgs, argc_);
 };
 
 #endif  // js_experimental_JitInfo_h

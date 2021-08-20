@@ -1025,6 +1025,25 @@ void CacheRegisterAllocator::restoreInputState(MacroAssembler& masm,
   }
 }
 
+bool CacheIRStubInfo::hasStubFields() const {
+  return fieldType(0) != StubField::Type::Limit;
+}
+
+size_t CacheIRStubInfo::numStubFields() const {
+  size_t field = 0;
+  while (true) {
+    StubField::Type type = fieldType(field++);
+    if (type == StubField::Type::Limit) {
+      return field - 1;
+    }
+  }
+}
+
+size_t CacheIRStubInfo::totalSize(uint32_t codeLength, size_t numStubFields) {
+  return sizeof(CacheIRStubInfo) + codeLength +
+         (numStubFields + 1);  // +1 for the GCType::Limit terminator.
+}
+
 size_t CacheIRStubInfo::stubDataSize() const {
   size_t field = 0;
   size_t size = 0;
@@ -1283,6 +1302,9 @@ template void jit::TraceCacheIRStub(JSTracer* trc, ICCacheIRStub* stub,
 template void jit::TraceCacheIRStub(JSTracer* trc, IonICStub* stub,
                                     const CacheIRStubInfo* stubInfo);
 
+template void jit::TraceCacheIRStub(JSTracer* trc, uint8_t* stubData,
+                                    const CacheIRStubInfo* stubInfo);
+
 bool CacheIRWriter::stubDataEquals(const uint8_t* stubData) const {
   MOZ_ASSERT(!failed());
 
@@ -1342,9 +1364,7 @@ CacheIRStubInfo* CacheIRStubInfo::New(CacheKind kind, ICStubEngine engine,
                                       bool makesGCCalls,
                                       const CacheIRWriter& writer) {
   size_t numStubFields = writer.numStubFields();
-  size_t bytesNeeded =
-      sizeof(CacheIRStubInfo) + writer.codeLength() +
-      (numStubFields + 1);  // +1 for the GCType::Limit terminator.
+  size_t bytesNeeded = totalSize(writer.codeLength(), numStubFields);
   uint8_t* p = js_pod_malloc<uint8_t>(bytesNeeded);
   if (!p) {
     return nullptr;
@@ -1366,6 +1386,20 @@ CacheIRStubInfo* CacheIRStubInfo::New(CacheKind kind, ICStubEngine engine,
 
   return new (p) CacheIRStubInfo(kind, engine, makesGCCalls, codeStart,
                                  writer.codeLength(), fieldTypes);
+}
+
+CacheIRStubInfo* CacheIRStubInfo::clone() const {
+  size_t bytesNeeded = totalSize();
+  uint8_t* p = js_pod_malloc<uint8_t>(bytesNeeded);
+  if (!p) {
+    return nullptr;
+  }
+  mozilla::PodCopy(p, (const uint8_t*)this, bytesNeeded);
+
+  CacheIRStubInfo* cloned = (CacheIRStubInfo*)p;
+  cloned->code_ = p + sizeof(CacheIRStubInfo);
+  cloned->fieldTypes_ = cloned->code_ + codeLength();
+  return cloned;
 }
 
 bool OperandLocation::operator==(const OperandLocation& other) const {

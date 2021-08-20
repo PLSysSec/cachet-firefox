@@ -244,13 +244,15 @@ inline void JSScript::incWarmUpCounter(uint32_t amount) {
   }
 }
 
-inline void JSScript::resetWarmUpCounterForGC() {
+inline void JSScript::resetWarmUpCounter(uint32_t newCount) {
   incWarmUpResetCounter();
   if (warmUpData_.isWarmUpCount()) {
-    warmUpData_.resetWarmUpCount(0);
+    warmUpData_.resetWarmUpCount(newCount);
   } else {
-    warmUpData_.toJitScript()->resetWarmUpCount(0);
+    warmUpData_.toJitScript()->resetWarmUpCount(newCount);
   }
 }
+
+inline void JSScript::resetWarmUpCounterForGC() { resetWarmUpCounter(0); }
 
 #endif /* vm_JSScript_inl_h */
