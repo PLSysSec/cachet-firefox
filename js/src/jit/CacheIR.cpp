@@ -8,6 +8,7 @@
 
 #include "mozilla/DebugOnly.h"
 #include "mozilla/FloatingPoint.h"
+#include "mozilla/Maybe.h"
 
 #include "jsmath.h"
 
@@ -60,11 +61,20 @@ using mozilla::Maybe;
 using JS::DOMProxyShadowsResult;
 using JS::ExpandoAndGeneration;
 
+const char* const js::jit::CacheTypeNames[] = {
+#define DEFINE_TYPE(Name) #Name,
+    CACHE_IR_TYPES(DEFINE_TYPE)
+#undef DEFINE_TYPE
+};
+
 const char* const js::jit::CacheKindNames[] = {
 #define DEFINE_KIND(kind) #kind,
     CACHE_IR_KINDS(DEFINE_KIND)
 #undef DEFINE_KIND
 };
+
+const CacheKindSignature js::jit::CacheKindSignatures[] = {
+    CACHE_IR_KIND_SIGNATURES_GENERATED};
 
 const char* const js::jit::CacheIROpNames[] = {
 #define OPNAME(op, ...) #op,
@@ -84,41 +94,11 @@ const uint32_t js::jit::CacheIROpHealth[] = {
 #undef OPHEALTH
 };
 
-#ifdef DEBUG
-size_t js::jit::NumInputsForCacheKind(CacheKind kind) {
-  switch (kind) {
-    case CacheKind::NewArray:
-    case CacheKind::NewObject:
-    case CacheKind::GetIntrinsic:
-      return 0;
-    case CacheKind::GetProp:
-    case CacheKind::TypeOf:
-    case CacheKind::ToPropertyKey:
-    case CacheKind::GetIterator:
-    case CacheKind::ToBool:
-    case CacheKind::UnaryArith:
-    case CacheKind::GetName:
-    case CacheKind::BindName:
-    case CacheKind::Call:
-    case CacheKind::OptimizeSpreadCall:
-      return 1;
-    case CacheKind::Compare:
-    case CacheKind::GetElem:
-    case CacheKind::GetPropSuper:
-    case CacheKind::SetProp:
-    case CacheKind::In:
-    case CacheKind::HasOwn:
-    case CacheKind::CheckPrivateField:
-    case CacheKind::InstanceOf:
-    case CacheKind::BinaryArith:
-      return 2;
-    case CacheKind::GetElemSuper:
-    case CacheKind::SetElem:
-      return 3;
-  }
-  MOZ_CRASH("Invalid kind");
-}
-#endif
+const char* const js::jit::StubField::TypeNames[] = {
+#define DEFINE_TYPE(type) #type,
+    CACHE_IR_STUB_FIELD_TYPES(DEFINE_TYPE)
+#undef DEFINE_TYPE
+};
 
 #ifdef DEBUG
 void CacheIRWriter::assertSameCompartment(JSObject* obj) {
@@ -9641,6 +9621,48 @@ void CallIRGenerator::trackAttached(const char* name) {
     }
   }
 #endif
+}
+
+const JSClass* jit::ClassForGuardClassKind(const JSRuntime* const runtime,
+                                           const GuardClassKind kind) {
+  switch (kind) {
+    case GuardClassKind::Array: {
+      return &ArrayObject::class_;
+    }
+    case GuardClassKind::ArrayBuffer: {
+      return &ArrayBufferObject::class_;
+    }
+    case GuardClassKind::SharedArrayBuffer: {
+      return &SharedArrayBufferObject::class_;
+    }
+    case GuardClassKind::DataView: {
+      return &DataViewObject::class_;
+    }
+    case GuardClassKind::MappedArguments: {
+      return &MappedArgumentsObject::class_;
+    }
+    case GuardClassKind::UnmappedArguments: {
+      return &UnmappedArgumentsObject::class_;
+    }
+    case GuardClassKind::WindowProxy: {
+      return runtime->maybeWindowProxyClass();
+    }
+    case GuardClassKind::JSFunction: {
+      return &JSFunction::class_;
+    }
+    case GuardClassKind::Set: {
+      return &SetObject::class_;
+    }
+    case GuardClassKind::Map: {
+      return &MapObject::class_;
+    }
+  }
+  MOZ_ASSERT_UNREACHABLE("Invalid GuardClassKind");
+}
+
+const JSClass* jit::ClassForGuardClassKind(const JSContext* const cx,
+                                           const GuardClassKind kind) {
+  return ClassForGuardClassKind(cx->runtime(), kind);
 }
 
 // Class which holds a shape pointer for use when caches might reference data in

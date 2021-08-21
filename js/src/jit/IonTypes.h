@@ -497,7 +497,7 @@ enum class MIRType : uint8_t {
   Last = Shape
 };
 
-static inline MIRType MIRTypeFromValueType(JSValueType type) {
+static inline constexpr MIRType MIRTypeFromValueType(JSValueType type) {
   // This function does not deal with magic types. Magic constants should be
   // filtered out in MIRTypeFromValue.
   switch (type) {
@@ -526,7 +526,7 @@ static inline MIRType MIRTypeFromValueType(JSValueType type) {
   }
 }
 
-static inline JSValueType ValueTypeFromMIRType(MIRType type) {
+static inline constexpr JSValueType ValueTypeFromMIRType(MIRType type) {
   switch (type) {
     case MIRType::Undefined:
       return JSVAL_TYPE_UNDEFINED;

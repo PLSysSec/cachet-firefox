@@ -24,6 +24,10 @@ uint8_t* IonIC::fallbackAddr(IonScript* ionScript) const {
   return ionScript->method()->raw() + fallbackOffset_;
 }
 
+uint8_t* IonIC::fallbackCallAddr(IonScript* ionScript) const {
+  return ionScript->method()->raw() + fallbackCallOffset_;
+}
+
 uint8_t* IonIC::rejoinAddr(IonScript* ionScript) const {
   return ionScript->method()->raw() + rejoinOffset_;
 }
@@ -183,7 +187,7 @@ bool IonGetPropertyIC::update(JSContext* cx, HandleScript outerScript,
 /* static */
 bool IonGetPropSuperIC::update(JSContext* cx, HandleScript outerScript,
                                IonGetPropSuperIC* ic, HandleObject obj,
-                               HandleValue receiver, HandleValue idVal,
+                               HandleValue idVal, HandleValue receiver,
                                MutableHandleValue res) {
   IonScript* ionScript = outerScript->ionScript();
 
@@ -404,20 +408,14 @@ bool IonOptimizeSpreadCallIC::update(JSContext* cx, HandleScript outerScript,
 
 /* static */
 bool IonHasOwnIC::update(JSContext* cx, HandleScript outerScript,
-                         IonHasOwnIC* ic, HandleValue val, HandleValue idVal,
-                         int32_t* res) {
+                         IonHasOwnIC* ic, HandleValue idVal, HandleValue val,
+                         bool* res) {
   IonScript* ionScript = outerScript->ionScript();
 
   TryAttachIonStub<HasPropIRGenerator>(cx, ic, ionScript, CacheKind::HasOwn,
                                        idVal, val);
 
-  bool found;
-  if (!HasOwnProperty(cx, val, idVal, &found)) {
-    return false;
-  }
-
-  *res = found;
-  return true;
+  return HasOwnProperty(cx, val, idVal, res);
 }
 
 /* static */
@@ -685,10 +683,6 @@ bool IonCompareIC::update(JSContext* cx, HandleScript outerScript,
   TryAttachIonStub<CompareIRGenerator>(cx, ic, ionScript, op, lhs, rhs);
 
   return true;
-}
-
-uint8_t* IonICStub::stubDataStart() {
-  return reinterpret_cast<uint8_t*>(this) + stubInfo_->stubDataOffset();
 }
 
 void IonIC::attachStub(IonICStub* newStub, JitCode* code) {

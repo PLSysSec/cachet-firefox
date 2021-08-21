@@ -2,11 +2,14 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-# This script generates jit/CacheIROpsGenerated.h from CacheIROps.yaml
+# This script generates jit/CacheIRGenerated.h from CacheIR.yaml and
+# jit/CacheIROpsGenerated.h from CacheIROps.yaml.
 
 import buildconfig
 import yaml
+import re
 import six
+import textwrap
 from collections import OrderedDict
 from mozbuild.preprocessor import Preprocessor
 
@@ -59,6 +62,22 @@ def load_yaml(yaml_path):
     tag = yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG
     OrderedLoader.add_constructor(tag, construct_mapping)
     return yaml.load(contents, OrderedLoader)
+
+
+# Information describing the CacheIR operand types. Tuple stores the C++ type,
+# the MIR type, the JS Value type, and whether or not the type is garbage
+# collected.
+operand_type_info = OrderedDict(
+    ValueTag=("JSValueTag", "MIRType::Int32", "JSVAL_TYPE_UNKNOWN", False),
+    IntPtr=("intptr_t", "MIRType::IntPtr", "JSVAL_TYPE_UNKNOWN", False),
+    Boolean=("bool", "MIRType::Boolean", "JSVAL_TYPE_BOOLEAN", False),
+    Int32=("int32_t", "MIRType::Int32", "JSVAL_TYPE_INT32", False),
+    Val=("Value", "MIRType::Value", "JSVAL_TYPE_UNKNOWN", True),
+    Obj=("JSObject*", "MIRType::Object", "JSVAL_TYPE_OBJECT", True),
+    String=("JSString*", "MIRType::String", "JSVAL_TYPE_STRING", True),
+    Symbol=("JS::Symbol*", "MIRType::Symbol", "JSVAL_TYPE_SYMBOL", True),
+    BigInt=("BigInt*", "MIRType::BigInt", "JSVAL_TYPE_BIGINT", True),
+)
 
 
 # Information for generating CacheIRWriter code for a single argument. Tuple
@@ -296,21 +315,22 @@ def gen_spewer_method(name, args):
     #
     #  void spewGuardShape(CacheIRReader& reader) {
     #     spewOp(CacheOp::GuardShape);
-    #     spewOperandId("objId", reader.objOperandId());
+    #     spewOperandId("obj", "ObjId", reader.objOperandId());
     #     spewOperandSeparator();
-    #     spewField("shapeOffset", reader.stubOffset());
+    #     spewField("shape", "ShapeField", reader.stubOffset());
     #     spewOpEnd();
     #  }
     args_code = ""
     if args:
         is_first = True
         for arg_name, arg_type in six.iteritems(args):
-            _, suffix, readexpr = arg_reader_info[arg_type]
-            arg_name += suffix
+            _, _, readexpr = arg_reader_info[arg_type]
             spew_method = arg_spewer_method[arg_type]
             if not is_first:
                 args_code += "  spewArgSeparator();\\\n"
-            args_code += '  {}("{}", {});\\\n'.format(spew_method, arg_name, readexpr)
+            args_code += '  {}("{}", "{}", {});\\\n'.format(
+                spew_method, arg_name, arg_type, readexpr
+            )
             is_first = False
 
     code = "void {}(CacheIRReader& reader) {{\\\n".format(method_name)
@@ -374,6 +394,334 @@ def gen_clone_method(name, args):
     return code
 
 
+def gen_kind_signature(name, inputs, output):
+    """Generates an element of CacheKindSignatures, mapping out the inputs and
+    output of a CacheKind."""
+
+    signature_num_inputs = len(inputs)
+
+    signature_inputs = ",\\\n      ".join(
+        f'{{ "{name}", CacheType::{type_} }}' for name, type_ in inputs.items()
+    )
+
+    signature_output = "mozilla::" + (
+        "Nothing()" if output is None else f"Some(CacheType::{output})"
+    )
+
+    return (
+        f"  /* {name} = */ {{\\\n"
+        f"    /* numInputs = */ {signature_num_inputs},\\\n"
+        f"    /* inputs = */ new CacheKindSignature::Input[{signature_num_inputs}] {{\\\n"
+        f"      {signature_inputs}\\\n"
+        f"    }},\\\n"
+        f"    /* output = */ {signature_output}\\\n"
+        f"  }},"
+        #
+    )
+
+
+pascal_case_re = re.compile(r"^(?P<init>[A-Z]*)(?P<tail>.*)$")
+
+
+def pascal_to_camel_case(name):
+    """Converts a name from PascalCase to camelCase."""
+
+    match = pascal_case_re.match(name)
+    return match.group("init").lower() + match.group("tail")
+
+
+def match_cache_kinds(kinds):
+    """Generates switch statement cases matching the given CacheKinds."""
+
+    code = "case CacheKind::"
+    code += ":\\\ncase CacheKind::".join(kinds)
+    code += ":"
+    return code
+
+
+def gen_ion_init_case(name, kinds, inputs, output, temps):
+    """Generates a case for IonCacheIRCompiler::init, setting up locations for
+    inputs, output, and temps from an instance of Ion<name>IC."""
+
+    ic_var_name = f"{pascal_to_camel_case(name)}IC"
+
+    code = (
+        f"{match_cache_kinds(kinds)} {{\\\n"
+        f"  const Ion{name}IC* const {ic_var_name}(ic_->as{name}IC());\\\n"
+        f"  liveRegs_.emplace({ic_var_name}->liveRegs());\\\n"
+        f"  \\\n"
+        #
+    )
+
+    # Set up input locations.
+    if len(inputs) > 0:
+        code += "  size_t i(0);\\\n"
+
+        for input_name, input_data in inputs.items():
+            input_type = input_data["type"]
+            input_kinds = input_data["kinds"]
+
+            _, mir_type, _, _ = operand_type_info[input_type]
+
+            input_code = f"{ic_var_name}->{input_name}()"
+
+            if input_type != "Val":
+                input_code = (
+                    f"TypedOrValueRegister({mir_type}, AnyRegister({input_code}))"
+                )
+
+            input_code = f"  allocator.initInputLocation(i++, {input_code});\\\n"
+
+            # Some inputs may not be present on all CacheKinds handled by the
+            # IonIC.
+            if len(input_kinds) < len(kinds):
+                input_code = (
+                    f"  switch (ic_->kind()) {{\\\n"
+                    f"{textwrap.indent(match_cache_kinds(input_kinds), '    ')} {{\\\n"
+                    f"{textwrap.indent(input_code, '    ')}"
+                    f"      break;\\\n"
+                    f"    }}\\\n"
+                    f"    default: {{\\\n"
+                    f"      break;\\\n"
+                    f"    }}\\\n"
+                    f"  }}\\\n"
+                    #
+                )
+
+            code += input_code
+
+        code += "  \\\n"
+
+    # Optionally set up an output location.
+    if output is not None:
+        code += (
+            f"  auto output({ic_var_name}->output());\\\n"
+            f"  available.add(output);\\\n"
+            f"  outputUnchecked_.emplace("
+            #
+        )
+
+        if output == "Val":
+            code += "output"
+        else:
+            _, mir_type, _, _ = operand_type_info[output]
+            code += f"TypedOrValueRegister({mir_type}, AnyRegister(output))"
+
+        code += (
+            ");\\\n"
+            "  \\\n"
+            #
+        )
+
+    # Set up locations for the temps.
+    if temps > 0:
+        # Use .temp() if the IonIC has just a single temp and .temp<i>()
+        # otherwise.
+        temps = ["temp"] if temps == 1 else (f"temp{i}" for i in range(1, temps + 1))
+        for temp in temps:
+            code += f"  available.add({ic_var_name}->{temp}());\\\n"
+        code += "  \\\n"
+
+    code += (
+        "  break;\\\n"
+        "}"
+        #
+    )
+
+    return code
+
+
+def gen_ion_fallback_case(name, kinds, inputs, output):
+    """Generates a case for IonCacheIRCompiler::init, setting up locations for
+    inputs, output, and temps from an instance of Ion<name>IC."""
+
+    ic_var_name = f"{pascal_to_camel_case(name)}IC"
+
+    code = (
+        f"{match_cache_kinds(kinds)} {{\\\n"
+        f"  Ion{name}IC* const {ic_var_name}(ic->as{name}IC());\\\n"
+        f"  \\\n"
+        f"  saveLive(lir);\\\n"
+        f"  \\\n"
+        #
+    )
+
+    # Push arguemnts to Ion<name>IC::update onto the stack in reverse order.
+    for input_name in reversed(inputs.keys()):
+        code += f"  pushArg({ic_var_name}->{input_name}());\\\n"
+    code += (
+        "  icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));\\\n"
+        "  pushArg(ImmGCPtr(gen->outerInfo().script()));\\\n"
+        "  \\\n"
+        #
+    )
+
+    # Compute the function signature for Ion<name>IC::update.
+
+    fn_return_cpp_type = "bool"
+    fn_out_param_cpp_type = None
+
+    if output is not None:
+        cpp_type, _, _, is_gc_type = operand_type_info[output]
+        if output == "Obj":
+            # Object outputs are returned directly from the update function.
+            fn_return_cpp_type = cpp_type
+        else:
+            # All other outputs are fed through an out-parameter.
+            if is_gc_type:
+                fn_out_param_cpp_type = f"MutableHandle<{cpp_type}>"
+            else:
+                fn_out_param_cpp_type = f"{cpp_type}*"
+
+    code += (
+        f"  using Fn = {fn_return_cpp_type} (*)(JSContext*, HandleScript, Ion{name}IC*"
+    )
+
+    for input_name, input_data in inputs.items():
+        input_type = input_data["type"]
+        cpp_type, _, _, is_gc_type = operand_type_info[input_type]
+        if is_gc_type:
+            cpp_type = f"Handle<{cpp_type}>"
+        code += f", {cpp_type}"
+
+    if fn_out_param_cpp_type is not None:
+        code += f", {fn_out_param_cpp_type}"
+
+    code += ");\\\n"
+
+    # Insert the call to Ion<name>IC::update.
+    code += (
+        f"  {ic_var_name}->setFallbackCallOffset(callVM<Fn, Ion{name}IC::update>(lir));\\\n"
+        f"  \\\n"
+        #
+    )
+
+    # Restore registers following the call.
+    if output is None:
+        code += "  restoreLive(lir);\\\n"
+    else:
+        store_code = f"{ic_var_name}->output()"
+        if output == "Val":
+            store_code = f"StoreValueTo({store_code})"
+        else:
+            store_code = f"StoreAnyRegisterTo(AnyRegister({store_code}))"
+
+        code += (
+            f"  {store_code}.generate(this);\\\n"
+            f"  restoreLiveIgnore(lir, {store_code}.clobbered());\\\n"
+            #
+        )
+
+    # Jump back into script code.
+    code += (
+        "  \\\n"
+        "  masm.jump(ool->rejoin());\\\n"
+        "  break;\\\n"
+        "}"
+        #
+    )
+
+    return code
+
+
+def gen_shell_generate_ion_stub_case(name, kinds, inputs, output):
+    """Generates a case for IonICObject::generateStubMethod in the JS shell,
+    extracting inputs from JS argument values and wiring them into
+    Ion<name>IC::update."""
+
+    ic_var_name = f"ion{name}IC"
+
+    code = (
+        f"{match_cache_kinds(kinds)} {{\\\n"
+        f"  Ion{name}IC* const {ic_var_name}(ionIC.as{name}IC());\\\n"
+        #
+    )
+
+    input_args_code = ""
+    if len(inputs) > 0:
+        code += (
+            "  \\\n"
+            "  size_t i(0);\\\n"
+            "  \\\n"
+            #
+        )
+
+        for input_name, input_data in inputs.items():
+            input_var_name = f"{input_name}Input"
+            input_args_code += f", {input_var_name}"
+
+            input_type = input_data["type"]
+            input_kinds = input_data["kinds"]
+
+            cpp_type, _, _, is_gc_type = operand_type_info[input_type]
+            if is_gc_type:
+                cpp_type = f"Rooted<{cpp_type}>"
+
+            code += f"  {cpp_type} {input_var_name}("
+            if is_gc_type:
+                code += "cx"
+            code += ");\\\n"
+
+            def gen_populate_input_var_code(input_value_code):
+                return (
+                    f"  if (!ValueToCacheIR{input_type}(cx, {input_value_code}, "
+                    f"&{input_var_name})) {{\\\n"
+                    f"    return false;\\\n"
+                    f"  }}\\\n"
+                    #
+                )
+
+            populate_input_var_code = gen_populate_input_var_code("args[i++]")
+
+            # Some inputs may not be present on all CacheKinds handled by the
+            # IonIC.
+            if len(input_kinds) < len(kinds):
+                populate_input_var_code = (
+                    f"  switch (ionIC.kind()) {{\\\n"
+                    f"{textwrap.indent(match_cache_kinds(input_kinds), '    ')} {{\\\n"
+                    f"{textwrap.indent(populate_input_var_code, '    ')}"
+                    f"      break;\\\n"
+                    f"    }}\\\n"
+                    f"    default: {{\\\n"
+                    f"      const RootedValue constant(cx, "
+                    f"{ic_var_name}->{input_name}().value());\\\n"
+                    f"{textwrap.indent(gen_populate_input_var_code('constant'), '    ')}"
+                    f"      break;\\\n"
+                    f"    }}\\\n"
+                    f"  }}\\\n"
+                    #
+                )
+
+            code += populate_input_var_code
+            code += "  \\\n"
+
+    if output is None or output == "Obj":
+        output_arg_code = ""
+    else:
+        cpp_type, _, _, is_gc_type = operand_type_info[output]
+        if is_gc_type:
+            cpp_type = f"Rooted<{cpp_type}>"
+
+        code += f"  {cpp_type} output"
+        if is_gc_type:
+            code += "(cx)"
+        code += ";\\\n"
+
+        output_arg_code = ", &output"
+
+    code += (
+        f"  if (!Ion{name}IC::update(cx, script, {ic_var_name}"
+        f"{input_args_code}{output_arg_code})) {{\\\n"
+        f"    return false;\\\n"
+        f"  }}\\\n"
+        f"  break;\\\n"
+        f"}}"
+        #
+    )
+
+    return code
+
+
 # Length in bytes for each argument type, either an integer or a C++ expression.
 # This is used to generate the CacheIROpArgLengths array. CacheIRWriter asserts
 # the number of bytes written matches the value in that array.
@@ -421,12 +769,227 @@ arg_length = {
 }
 
 
-def generate_cacheirops_header(c_out, yaml_path):
-    """Generate CacheIROpsGenerated.h from CacheIROps.yaml. The generated file
-    contains a list of all CacheIR ops and generated source code for
-    CacheIRWriter and CacheIRCompiler."""
+def generate_cacheir_header(c_out, yaml_path):
+    """Generate CacheIRGenerated.h from CacheIR.yaml. The generated file
+    contains a list of CacheIR types and kinds, and generated source code for
+    CodeGenerator, IonCacheIRCompiler, and IonICObject."""
 
     data = load_yaml(yaml_path)
+    cache_kinds = data["cache_kinds"]
+    ion_ics = data.get("ion_ics", OrderedDict())
+
+    # CACHE_IR_PRIMITIVE_TYPES and CACHE_IR_GC_TYPES items.
+    primitive_types_items = []
+    gc_types_items = []
+
+    # Specializations of CacheTypesHelper, which map CacheIR types to C++ types.
+    types_helper_specializations = []
+
+    # Generated cases for CacheType conversion.
+    mir_type_cases = []
+    value_type_cases = []
+
+    # CACHE_IR_KINDS items. Each item stores the name of a CacheKind. For
+    # example: _(GetProp)
+    kinds_items = []
+
+    # Generated signatures for the available CacheKinds, describing their inputs
+    # and outputs.
+    kind_signatures = []
+
+    # Generated cases for IonCacheIRCompiler::init.
+    ion_init_cases = []
+
+    # Generated cases for CodeGenerator::visitOutOfLineICFallback.
+    ion_fallback_cases = []
+
+    # Fall-through cases for CacheKinds not supported by Ion.
+    ion_unsupported_cases = []
+
+    # Cases for generating Ion CacheIR stubs via the JS shell.
+    shell_generate_ion_stub_cases = []
+
+    for name, (cpp_type, mir_type, value_type, is_gc_type) in operand_type_info.items():
+        types_items = gc_types_items if is_gc_type else primitive_types_items
+        types_items.append(f"_({name})")
+
+        types_helper_specializations.append(
+            f"template <>\\\n"
+            f"struct CacheTypesHelper<CacheType::{name}> {{\\\n"
+            f"  using Type = {cpp_type};\\\n"
+            f"}};"
+            #
+        )
+
+        mir_type_cases.append(
+            f"case CacheType::{name}: {{\\\n"
+            f"  return {mir_type};\\\n"
+            f"}}"
+            #
+        )
+        value_type_cases.append(
+            f"case CacheType::{name}: {{\\\n"
+            f"  return {value_type};\\\n"
+            f"}}"
+            #
+        )
+
+    for name, kind in cache_kinds.items():
+        inputs = kind.get("inputs", OrderedDict())
+        assert all(input_type is not None for input_type in inputs.values())
+
+        output = kind.get("output")
+        ion_ic_name = kind.get("ion_ic")
+
+        kinds_items.append(f"_({name})")
+        kind_signatures.append(gen_kind_signature(name, inputs, output))
+
+        if ion_ic_name is None:
+            ion_unsupported_cases.append(f"case CacheKind::{name}:")
+        else:
+            ion_ic = ion_ics.get(ion_ic_name)
+            if ion_ic is None:
+                ion_ic = ion_ics[ion_ic_name] = {}
+
+            ion_ic.setdefault("kinds", []).append(name)
+
+            ion_ic_inputs = ion_ic.get("inputs")
+            if ion_ic_inputs is None:
+                # If the IonIC doesn't specify its inputs, autopopulate with the
+                # inputs of the first CacheKind that points to it.
+                ion_ic_inputs = list(inputs.keys())
+            if isinstance(ion_ic_inputs, list):
+                # Convert from the short list form to dictionary form,
+                # marking each input type as initially unknown.
+                ion_ic_inputs = ion_ic["inputs"] = OrderedDict(
+                    (input_name, {"type": None, "kinds": []})
+                    for input_name in ion_ic_inputs
+                )
+
+            ion_ic_inputs_iter = ion_ic_inputs.items()
+            for input_name, input_type in inputs.items():
+                # Find the corresponding IonIC input for each CacheKind
+                # input. The order of the CacheKind inputs must match the
+                # IonIC, though a CacheKind can omit inputs present in its
+                # IonIC.
+                for ion_ic_input_name, ion_ic_input in ion_ic_inputs_iter:
+                    if ion_ic_input_name == input_name:
+                        break
+                else:
+                    assert False, (
+                        f"Can't match input {input_name} on CacheKind {name} with a corresponding "
+                        f"input on IonIC {ion_ic_name}"
+                    )
+
+                ion_ic_input["kinds"].append(name)
+
+                if ion_ic_input["type"] is None:
+                    # Learn IonIC input types from their CacheKinds.
+                    ion_ic_input["type"] = input_type
+                else:
+                    assert input_type == ion_ic_input["type"], (
+                        f"Input {input_name} has type {input_type} on CacheKind {name}, but type "
+                        f"{ion_ic_input['type']} on IonIC {ion_ic_name}"
+                    )
+
+            if "output" in ion_ic:
+                ion_ic_output = ion_ic["output"]
+                assert output == ion_ic_output, (
+                    f"CacheKind {name} has output type {output}, but IonIC {ion_ic_name} has "
+                    f"output type {ion_ic_output}"
+                )
+            else:
+                # Learn IonIC output types from their CacheKinds.
+                ion_ic["output"] = output
+
+    for name, ion_ic in ion_ics.items():
+        inputs = ion_ic["inputs"]
+        for input_name, input_type in inputs.items():
+            assert (
+                input_type is not None
+            ), f"Couldn't infer type for input {input_name} on IonIC {name}"
+
+        kinds = ion_ic.get("kinds")
+        if kinds is None:
+            continue
+
+        output = ion_ic["output"]
+        temps = ion_ic.get("temps", 0)
+
+        ion_init_cases.append(gen_ion_init_case(name, kinds, inputs, output, temps))
+        ion_fallback_cases.append(gen_ion_fallback_case(name, kinds, inputs, output))
+        shell_generate_ion_stub_cases.append(
+            gen_shell_generate_ion_stub_case(name, kinds, inputs, output)
+        )
+
+    if len(ion_unsupported_cases) > 0:
+        ion_unsupported_cases = "\\\n".join(ion_unsupported_cases)
+        ion_unsupported_cases = (
+            f"\\\n"
+            f"{ion_unsupported_cases} {{\\\n"
+            f'  MOZ_CRASH("Unsupported IC");\\\n'
+            f"}}"
+            #
+        )
+    else:
+        ion_unsupported_cases = ""
+
+    contents = "#define CACHE_IR_PRIMITIVE_TYPES(_)\\\n"
+    contents += "\\\n".join(primitive_types_items)
+    contents += "\n\n"
+
+    contents += "#define CACHE_IR_GC_TYPES(_)\\\n"
+    contents += "\\\n".join(gc_types_items)
+    contents += "\n\n"
+
+    contents += "#define CACHE_IR_TYPES(_)\\\n"
+    contents += "CACHE_IR_PRIMITIVE_TYPES(_)\\\n"
+    contents += "CACHE_IR_GC_TYPES(_)"
+    contents += "\n\n"
+
+    contents += "#define CACHE_IR_TYPES_HELPER_SPECIALIZATIONS_GENERATED \\\n"
+    contents += "\\\n".join(types_helper_specializations)
+    contents += "\n\n"
+
+    contents += "#define CACHE_IR_MIR_TYPE_CASES_GENERATED \\\n"
+    contents += "\\\n".join(mir_type_cases)
+    contents += "\n\n"
+
+    contents += "#define CACHE_IR_VALUE_TYPE_CASES_GENERATED \\\n"
+    contents += "\\\n".join(value_type_cases)
+    contents += "\n\n"
+
+    contents += "#define CACHE_IR_KINDS(_)\\\n"
+    contents += "\\\n".join(kinds_items)
+    contents += "\n\n"
+
+    contents += "#define CACHE_IR_KIND_SIGNATURES_GENERATED \\\n"
+    contents += "\\\n".join(kind_signatures)
+    contents += "\n\n"
+
+    contents += "#define CACHE_IR_ION_INIT_CASES_GENERATED \\\n"
+    contents += "\\\n".join(ion_init_cases)
+    contents += ion_unsupported_cases
+    contents += "\n\n"
+
+    contents += "#define CACHE_IR_ION_FALLBACK_CASES_GENERATED \\\n"
+    contents += "\\\n".join(ion_fallback_cases)
+    contents += ion_unsupported_cases
+    contents += "\n\n"
+
+    contents += "#define CACHE_IR_SHELL_GENERATE_ION_STUB_CASES_GENERATED \\\n"
+    contents += "\\\n".join(shell_generate_ion_stub_cases)
+    contents += ion_unsupported_cases
+
+    generate_header(c_out, "jit_CacheIRGenerated_h", contents)
+
+
+def generate_cacheirops_header(c_out, yaml_path):
+    """Generate CacheIROpsGenerated.h from CacheIROps.yaml. The generated files
+    contains a list of all CacheIR ops, and generated source code for
+    CacheIRWriter and CacheIRCompiler."""
+
+    cache_ops = load_yaml(yaml_path)
 
     # CACHE_IR_OPS items. Each item stores an opcode name and arguments length
     # expression. For example: _(GuardShape, 1 + 1)
@@ -451,9 +1014,7 @@ def generate_cacheirops_header(c_out, yaml_path):
     # Generated methods for cloning IC stubs
     clone_methods = []
 
-    for op in data:
-        name = op["name"]
-
+    for name, op in cache_ops.items():
         args = op["args"]
         assert args is None or isinstance(args, OrderedDict)
 

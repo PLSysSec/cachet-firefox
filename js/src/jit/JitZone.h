@@ -48,6 +48,18 @@ enum class ICStubEngine : uint8_t {
   IonIC
 };
 
+constexpr const char* GetICStubEngineName(const ICStubEngine engine) {
+  switch (engine) {
+    case ICStubEngine::Baseline: {
+      return "Baseline";
+    }
+    case ICStubEngine::IonIC: {
+      return "IonIC";
+    }
+  }
+  MOZ_CRASH("Unknown ICStubEngine.");
+}
+
 struct CacheIRStubKey : public DefaultHasher<CacheIRStubKey> {
   struct Lookup {
     CacheKind kind;

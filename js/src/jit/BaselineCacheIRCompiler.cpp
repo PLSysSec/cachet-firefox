@@ -50,9 +50,8 @@ BaseValueIndex CacheRegisterAllocator::addressOf(MacroAssembler& masm,
 
 // BaselineCacheIRCompiler compiles CacheIR to BaselineIC native code.
 BaselineCacheIRCompiler::BaselineCacheIRCompiler(JSContext* cx,
-                                                 const CacheIRWriter& writer,
-                                                 uint32_t stubDataOffset)
-    : CacheIRCompiler(cx, writer, stubDataOffset, Mode::Baseline,
+                                                 const CacheIRWriter& writer)
+    : CacheIRCompiler(cx, writer, ICStubEngine::Baseline,
                       StubFieldPolicy::Address),
       makesGCCalls_(false) {}
 
@@ -105,7 +104,7 @@ AutoStubFrame::~AutoStubFrame() { MOZ_ASSERT(!compiler.preparedForVMCall_); }
 bool BaselineCacheIRCompiler::makesGCCalls() const { return makesGCCalls_; }
 
 Address BaselineCacheIRCompiler::stubAddress(uint32_t offset) const {
-  return Address(ICStubReg, stubDataOffset_ + offset);
+  return Address(ICStubReg, int32_t(ICCacheIRStubDataOffset + offset));
 }
 
 template <typename Fn, Fn fn>
@@ -2064,10 +2063,6 @@ ICCacheIRStub* js::jit::AttachBaselineCacheIRStub(
   MOZ_ASSERT(stub->numOptimizedStubs() < MaxOptimizedCacheIRStubs);
 #endif
 
-  constexpr uint32_t stubDataOffset = sizeof(ICCacheIRStub);
-  static_assert(stubDataOffset % sizeof(uint64_t) == 0,
-                "Stub fields must be aligned");
-
   JitZone* jitZone = cx->zone()->jitZone();
 
   // Check if we already have JitCode for this stub.
@@ -2078,7 +2073,7 @@ ICCacheIRStub* js::jit::AttachBaselineCacheIRStub(
   if (!code) {
     // We have to generate stub code.
     JitContext jctx(cx, nullptr);
-    BaselineCacheIRCompiler comp(cx, writer, stubDataOffset);
+    BaselineCacheIRCompiler comp(cx, writer);
     if (!comp.init(kind)) {
       return nullptr;
     }
@@ -2093,9 +2088,8 @@ ICCacheIRStub* js::jit::AttachBaselineCacheIRStub(
     // to the stub code HashMap, so we don't have to worry about freeing
     // it below.
     MOZ_ASSERT(!stubInfo);
-    stubInfo =
-        CacheIRStubInfo::New(kind, ICStubEngine::Baseline, comp.makesGCCalls(),
-                             stubDataOffset, writer);
+    stubInfo = CacheIRStubInfo::New(kind, ICStubEngine::Baseline,
+                                    comp.makesGCCalls(), writer);
     if (!stubInfo) {
       return nullptr;
     }
@@ -2108,6 +2102,7 @@ ICCacheIRStub* js::jit::AttachBaselineCacheIRStub(
 
   MOZ_ASSERT(code);
   MOZ_ASSERT(stubInfo);
+  MOZ_ASSERT(stubInfo->engine() == ICStubEngine::Baseline);
   MOZ_ASSERT(stubInfo->stubDataSize() == writer.stubDataSize());
 
   ICEntry* icEntry = icScript->icEntryForStub(stub);
@@ -2137,7 +2132,7 @@ ICCacheIRStub* js::jit::AttachBaselineCacheIRStub(
 
   // Time to allocate and attach a new stub.
 
-  size_t bytesNeeded = stubInfo->stubDataOffset() + stubInfo->stubDataSize();
+  size_t bytesNeeded = ICCacheIRStubDataOffset + stubInfo->stubDataSize();
 
   ICStubSpace* stubSpace =
       StubSpaceForStub(stubInfo->makesGCCalls(), outerScript, icScript);
@@ -2168,10 +2163,6 @@ ICCacheIRStub* js::jit::AttachBaselineCacheIRStub(
   stub->addNewStub(icEntry, newStub);
   *attached = true;
   return newStub;
-}
-
-uint8_t* ICCacheIRStub::stubDataStart() {
-  return reinterpret_cast<uint8_t*>(this) + stubInfo_->stubDataOffset();
 }
 
 bool BaselineCacheIRCompiler::emitCallStringObjectConcatResult(

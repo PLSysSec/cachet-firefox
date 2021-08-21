@@ -1068,8 +1068,7 @@ bool WarpScriptOracle::replaceNurseryAndAllocSitePointers(
                       "Code assumes scripts are tenured");
         break;
       case StubField::Type::JSObject: {
-        JSObject* obj =
-            stubInfo->getStubField<ICCacheIRStub, JSObject*>(stub, offset);
+        JSObject* obj = stubInfo->getStubField<JSObject*>(stub, offset);
         if (IsInsideNursery(obj)) {
           uint32_t nurseryIndex;
           if (!oracle_->registerNurseryObject(obj, &nurseryIndex)) {
@@ -1084,8 +1083,7 @@ bool WarpScriptOracle::replaceNurseryAndAllocSitePointers(
       }
       case StubField::Type::String: {
 #ifdef DEBUG
-        JSString* str =
-            stubInfo->getStubField<ICCacheIRStub, JSString*>(stub, offset);
+        JSString* str = stubInfo->getStubField<JSString*>(stub, offset);
         MOZ_ASSERT(!IsInsideNursery(str));
 #endif
         break;
@@ -1093,7 +1091,7 @@ bool WarpScriptOracle::replaceNurseryAndAllocSitePointers(
       case StubField::Type::Id: {
 #ifdef DEBUG
         // jsid never contains nursery-allocated things.
-        jsid id = stubInfo->getStubField<ICCacheIRStub, jsid>(stub, offset);
+        jsid id = stubInfo->getStubField<jsid>(stub, offset);
         MOZ_ASSERT_IF(id.isGCThing(),
                       !IsInsideNursery(id.toGCCellPtr().asCell()));
 #endif
@@ -1101,8 +1099,7 @@ bool WarpScriptOracle::replaceNurseryAndAllocSitePointers(
       }
       case StubField::Type::Value: {
 #ifdef DEBUG
-        Value v =
-            stubInfo->getStubField<ICCacheIRStub, JS::Value>(stub, offset);
+        Value v = stubInfo->getStubField<JS::Value>(stub, offset);
         MOZ_ASSERT_IF(v.isGCThing(), !IsInsideNursery(v.toGCThing()));
 #endif
         break;

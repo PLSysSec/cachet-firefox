@@ -239,6 +239,14 @@ GeneratedFile(
     inputs=["LIROps.yaml"],
 )
 
+# Generate jit/CacheIRGenerated.h from jit/CacheIR.yaml
+GeneratedFile(
+    "CacheIRGenerated.h",
+    script="GenerateCacheIRFiles.py",
+    entry_point="generate_cacheir_header",
+    inputs=["CacheIR.yaml"],
+)
+
 # Generate jit/CacheIROpsGenerated.h from jit/CacheIROps.yaml
 GeneratedFile(
     "CacheIROpsGenerated.h",

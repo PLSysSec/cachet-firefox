@@ -44,6 +44,7 @@ class FreeSpan;
 namespace jit {
 
 class JitRuntime;
+enum class GuardClassKind : uint8_t;
 
 // During Ion compilation we need access to various bits of the current
 // compartment, runtime and so forth. However, since compilation can run off
@@ -52,6 +53,7 @@ class JitRuntime;
 // all necessary information in a threadsafe fashion.
 
 class CompileRuntime {
+  const JSRuntime* runtime() const;
   JSRuntime* runtime();
 
  public:
@@ -73,7 +75,7 @@ class CompileRuntime {
   const PropertyName* emptyString();
   const StaticStrings& staticStrings();
   const WellKnownSymbols& wellKnownSymbols();
-  const JSClass* maybeWindowProxyClass();
+  const JSClass* classForGuardClassKind(GuardClassKind kind) const;
 
   const void* mainContextPtr();
   uint32_t* addressOfTenuredAllocCount();

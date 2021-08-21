@@ -9,12 +9,14 @@
 #  include "jit/CacheIRSpewer.h"
 
 #  include "mozilla/Sprintf.h"
+#  include "mozilla/TextUtils.h"
 
 #  include <algorithm>
 #  include <stdarg.h>
 
 #  include "jsmath.h"
 
+#  include "jit/CacheIRCompiler.h"
 #  include "js/ScalarType.h"  // js::Scalar::Type
 #  include "util/GetPidProvider.h"
 #  include "util/Text.h"
@@ -31,9 +33,9 @@ using namespace js::jit;
 // Text spewer for CacheIR ops that can be used with JitSpew.
 // Output looks like this:
 //
-//   GuardToInt32                   inputId 0, resultId 2
-//   GuardToInt32                   inputId 1, resultId 3
-//   CompareInt32Result             op JSOp::Lt, lhsId 2, rhsId 3
+//   GuardToInt32       [ValId input] 0
+//   GuardToInt32       [ValId input] 1
+//   CompareInt32Result [JSOpImm op] Lt, [Int32Id lhs] 0, [Int32Id rhs] 1
 //   ReturnFromIC
 class MOZ_RAII CacheIROpsJitSpewer {
   GenericPrinter& out_;
@@ -51,64 +53,70 @@ class MOZ_RAII CacheIROpsJitSpewer {
 
   void spewArgSeparator() { out_.printf(", "); }
 
-  void spewOperandId(const char* name, OperandId id) {
-    spewRawOperandId(name, id.id());
+  void spewOperandId(const char* name, const char* type, OperandId id) {
+    spewRawOperandId(name, type, id.id());
   }
-  void spewRawOperandId(const char* name, uint32_t id) {
-    out_.printf("%s %u", name, id);
+  void spewRawOperandId(const char* name, const char* type, uint32_t id) {
+    out_.printf("[%s %s] %u", type, name, id);
   }
-  void spewField(const char* name, uint32_t offset) {
-    out_.printf("%s %u", name, offset);
+  void spewField(const char* name, const char* type, uint32_t offset) {
+    out_.printf("[%s %s] %u", type, name, offset);
   }
-  void spewBoolImm(const char* name, bool b) {
-    out_.printf("%s %s", name, b ? "true" : "false");
+  void spewBoolImm(const char* name, const char* type, bool b) {
+    out_.printf("[%s %s] %s", type, name, b ? "true" : "false");
   }
-  void spewByteImm(const char* name, uint8_t val) {
-    out_.printf("%s %u", name, val);
+  void spewByteImm(const char* name, const char* type, uint8_t val) {
+    out_.printf("[%s %s] %u", type, name, val);
   }
-  void spewJSOpImm(const char* name, JSOp op) {
-    out_.printf("%s JSOp::%s", name, CodeName(op));
+  void spewJSOpImm(const char* name, const char* type, JSOp op) {
+    out_.printf("[%s %s] %s", type, name, CodeName(op));
   }
-  void spewStaticStringImm(const char* name, const char* str) {
-    out_.printf("%s \"%s\"", name, str);
+  void spewStaticStringImm(const char* name, const char* type,
+                           const char* str) {
+    out_.printf("[%s %s] \"%s\"", type, name, str);
   }
-  void spewInt32Imm(const char* name, int32_t val) {
-    out_.printf("%s %d", name, val);
+  void spewInt32Imm(const char* name, const char* type, int32_t val) {
+    out_.printf("[%s %s] %d", type, name, val);
   }
-  void spewUInt32Imm(const char* name, uint32_t val) {
-    out_.printf("%s %u", name, val);
+  void spewUInt32Imm(const char* name, const char* type, uint32_t val) {
+    out_.printf("[%s %s] %u", type, name, val);
   }
-  void spewCallFlagsImm(const char* name, CallFlags flags) {
+  void spewCallFlagsImm(const char* name, const char* type, CallFlags flags) {
     out_.printf(
-        "%s (format %u%s%s%s)", name, flags.getArgFormat(),
-        flags.isConstructing() ? ", isConstructing" : "",
-        flags.isSameRealm() ? ", isSameRealm" : "",
-        flags.needsUninitializedThis() ? ", needsUninitializedThis" : "");
+        "[%s %s] %u%s%s%s", type, name, flags.getArgFormat(),
+        flags.isConstructing() ? "/isConstructing" : "",
+        flags.isSameRealm() ? "/isSameRealm" : "",
+        flags.needsUninitializedThis() ? "/needsUninitializedThis" : "");
   }
-  void spewJSWhyMagicImm(const char* name, JSWhyMagic magic) {
-    out_.printf("%s JSWhyMagic(%u)", name, unsigned(magic));
+  void spewJSWhyMagicImm(const char* name, const char* type, JSWhyMagic magic) {
+    out_.printf("[%s %s] %u", type, name, unsigned(magic));
   }
-  void spewScalarTypeImm(const char* name, Scalar::Type type) {
-    out_.printf("%s Scalar::Type(%u)", name, unsigned(type));
+  void spewScalarTypeImm(const char* name, const char* type,
+                         Scalar::Type scalarType) {
+    out_.printf("[%s %s] %u", type, name, unsigned(scalarType));
   }
-  void spewUnaryMathFunctionImm(const char* name, UnaryMathFunction fun) {
-    const char* funName = GetUnaryMathFunctionName(fun);
-    out_.printf("%s UnaryMathFunction::%s", name, funName);
+  void spewUnaryMathFunctionImm(const char* name, const char* type,
+                                UnaryMathFunction fun) {
+    out_.printf("[%s %s] %s", type, name, GetUnaryMathFunctionName(fun));
   }
-  void spewValueTypeImm(const char* name, ValueType type) {
-    out_.printf("%s ValueType(%u)", name, unsigned(type));
+  void spewValueTypeImm(const char* name, const char* type,
+                        ValueType valueType) {
+    out_.printf("[%s %s] %u", type, name, unsigned(valueType));
   }
-  void spewJSNativeImm(const char* name, JSNative native) {
-    out_.printf("%s %p", name, native);
+  void spewJSNativeImm(const char* name, const char* type, JSNative native) {
+    out_.printf("[%s %s] %p", type, name, native);
   }
-  void spewGuardClassKindImm(const char* name, GuardClassKind kind) {
-    out_.printf("%s GuardClassKind(%u)", name, unsigned(kind));
+  void spewGuardClassKindImm(const char* name, const char* type,
+                             GuardClassKind kind) {
+    out_.printf("[%s %s] %u", type, name, unsigned(kind));
   }
-  void spewWasmValTypeImm(const char* name, wasm::ValType::Kind kind) {
-    out_.printf("%s WasmValTypeKind(%u)", name, unsigned(kind));
+  void spewWasmValTypeImm(const char* name, const char* type,
+                          wasm::ValType::Kind kind) {
+    out_.printf("[%s %s] %u", type, name, unsigned(kind));
   }
-  void spewAllocKindImm(const char* name, gc::AllocKind kind) {
-    out_.printf("%s AllocKind(%u)", name, unsigned(kind));
+  void spewAllocKindImm(const char* name, const char* type,
+                        gc::AllocKind kind) {
+    out_.printf("[%s %s] %u", type, name, unsigned(kind));
   }
 
  public:
@@ -132,8 +140,8 @@ class MOZ_RAII CacheIROpsJitSpewer {
   }
 };
 
-void js::jit::SpewCacheIROps(GenericPrinter& out, const char* prefix,
-                             const CacheIRStubInfo* info) {
+void jit::SpewCacheIROps(GenericPrinter& out, const char* prefix,
+                         const CacheIRStubInfo* info) {
   CacheIRReader reader(info);
   CacheIROpsJitSpewer spewer(out, prefix);
   spewer.spew(reader);
@@ -146,14 +154,9 @@ void js::jit::SpewCacheIROps(GenericPrinter& out, const char* prefix,
 //      "op":"GuardToInt32",
 //      "args":[
 //        {
-//          "name":"inputId",
+//          "name":"input",
 //          "type":"Id",
 //          "value":0
-//        },
-//        {
-//          "name":"resultId",
-//          "type":"Id",
-//          "value":1
 //        }
 //      ]
 //    },
@@ -161,9 +164,9 @@ void js::jit::SpewCacheIROps(GenericPrinter& out, const char* prefix,
 //      "op":"Int32IncResult",
 //      "args":[
 //        {
-//          "name":"inputId",
+//          "name":"input",
 //          "type":"Id",
-//          "value":1
+//          "value":0
 //        }
 //      ]
 //    }
@@ -189,63 +192,72 @@ class MOZ_RAII CacheIROpsJSONSpewer {
   template <typename T>
   void spewArgImpl(const char* name, const char* type, T value) {
     j_.beginObject();
-    j_.property("name", name);
     j_.property("type", type);
+    j_.property("name", name);
     j_.property("value", value);
     j_.endObject();
   }
 
-  void spewOperandId(const char* name, OperandId id) {
-    spewRawOperandId(name, id.id());
+  void spewOperandId(const char* name, const char* type, OperandId id) {
+    spewRawOperandId(name, type, id.id());
   }
-  void spewRawOperandId(const char* name, uint32_t id) {
+  void spewRawOperandId(const char* name, const char* type, uint32_t id) {
     spewArgImpl(name, "Id", id);
   }
-  void spewField(const char* name, uint32_t offset) {
+  void spewField(const char* name, const char* type, uint32_t offset) {
     spewArgImpl(name, "Field", offset);
   }
-  void spewBoolImm(const char* name, bool b) { spewArgImpl(name, "Imm", b); }
-  void spewByteImm(const char* name, uint8_t val) {
+  void spewBoolImm(const char* name, const char* type, bool b) {
+    spewArgImpl(name, "Imm", b);
+  }
+  void spewByteImm(const char* name, const char* type, uint8_t val) {
     spewArgImpl(name, "Imm", val);
   }
-  void spewJSOpImm(const char* name, JSOp op) {
+  void spewJSOpImm(const char* name, const char* type, JSOp op) {
     spewArgImpl(name, "JSOp", CodeName(op));
   }
-  void spewStaticStringImm(const char* name, const char* str) {
+  void spewStaticStringImm(const char* name, const char* type,
+                           const char* str) {
     spewArgImpl(name, "String", str);
   }
-  void spewInt32Imm(const char* name, int32_t val) {
+  void spewInt32Imm(const char* name, const char* type, int32_t val) {
     spewArgImpl(name, "Imm", val);
   }
-  void spewUInt32Imm(const char* name, uint32_t val) {
+  void spewUInt32Imm(const char* name, const char* type, uint32_t val) {
     spewArgImpl(name, "Imm", val);
   }
-  void spewCallFlagsImm(const char* name, CallFlags flags) {
+  void spewCallFlagsImm(const char* name, const char* type, CallFlags flags) {
     spewArgImpl(name, "Imm", flags.toByte());
   }
-  void spewJSWhyMagicImm(const char* name, JSWhyMagic magic) {
+  void spewJSWhyMagicImm(const char* name, const char* type, JSWhyMagic magic) {
     spewArgImpl(name, "Imm", unsigned(magic));
   }
-  void spewScalarTypeImm(const char* name, Scalar::Type type) {
-    spewArgImpl(name, "Imm", unsigned(type));
+  void spewScalarTypeImm(const char* name, const char* type,
+                         Scalar::Type scalarType) {
+    spewArgImpl(name, "Imm", unsigned(scalarType));
   }
-  void spewUnaryMathFunctionImm(const char* name, UnaryMathFunction fun) {
+  void spewUnaryMathFunctionImm(const char* name, const char* type,
+                                UnaryMathFunction fun) {
     const char* funName = GetUnaryMathFunctionName(fun);
     spewArgImpl(name, "MathFunction", funName);
   }
-  void spewValueTypeImm(const char* name, ValueType type) {
-    spewArgImpl(name, "Imm", unsigned(type));
+  void spewValueTypeImm(const char* name, const char* type,
+                        ValueType valueType) {
+    spewArgImpl(name, "Imm", unsigned(valueType));
   }
-  void spewJSNativeImm(const char* name, JSNative native) {
+  void spewJSNativeImm(const char* name, const char* type, JSNative native) {
     spewArgImpl(name, "Word", uintptr_t(native));
   }
-  void spewGuardClassKindImm(const char* name, GuardClassKind kind) {
+  void spewGuardClassKindImm(const char* name, const char* type,
+                             GuardClassKind kind) {
     spewArgImpl(name, "Imm", unsigned(kind));
   }
-  void spewWasmValTypeImm(const char* name, wasm::ValType::Kind kind) {
+  void spewWasmValTypeImm(const char* name, const char* type,
+                          wasm::ValType::Kind kind) {
     spewArgImpl(name, "Imm", unsigned(kind));
   }
-  void spewAllocKindImm(const char* name, gc::AllocKind kind) {
+  void spewAllocKindImm(const char* name, const char* type,
+                        gc::AllocKind kind) {
     spewArgImpl(name, "Imm", unsigned(kind));
   }
 
@@ -464,5 +476,98 @@ void CacheIRSpewer::endCache() {
   MOZ_ASSERT(enabled());
   json_.ref().endObject();
 }
+
+template <typename T>
+void jit::SpewCacheIRStubFields(GenericPrinter& out, T* stub,
+                                const CacheIRStubInfo* stubInfo) {
+  uint32_t field(0);
+  size_t offset(0);
+
+  while (true) {
+    const StubField::Type fieldType(stubInfo->fieldType(field));
+    if (fieldType == StubField::Type::Limit) {
+      return;  // Done.
+    }
+
+    const char* const fieldTypeName(StubField::TypeNames[uint8_t(fieldType)]);
+    out.printf("%sField%*s %10zu, ", fieldTypeName,
+               12 - int(strlen(fieldTypeName)), "", offset);
+    switch (fieldType) {
+      case StubField::Type::RawInt32: {
+        out.printf("%i\n", int(stubInfo->getStubRawWord(stub, offset)));
+        break;
+      }
+      case StubField::Type::RawPointer: {
+        out.printf("%" PRIxPTR "\n", stubInfo->getStubRawWord(stub, offset));
+        break;
+      }
+      case StubField::Type::Shape: {
+        GCPtrShape& shapeField = stubInfo->getStubField<Shape*>(stub, offset);
+        out.printf("%p\n", shapeField.get());
+        break;
+      }
+      case StubField::Type::GetterSetter: {
+        GCPtrGetterSetter& getterSetterField =
+            stubInfo->getStubField<GetterSetter*>(stub, offset);
+        out.printf("%p\n", getterSetterField.get());
+        break;
+      }
+      case StubField::Type::JSObject: {
+        GCPtrObject& objectField =
+            stubInfo->getStubField<JSObject*>(stub, offset);
+        out.printf("%p\n", objectField.get());
+        break;
+      }
+      case StubField::Type::Symbol: {
+        GCPtr<JS::Symbol*>& symbolField =
+            stubInfo->getStubField<JS::Symbol*>(stub, offset);
+        out.printf("%p\n", symbolField.get());
+        break;
+      }
+      case StubField::Type::String: {
+        GCPtrString& stringField =
+            stubInfo->getStubField<JSString*>(stub, offset);
+        out.printf("%p\n", stringField.get());
+        break;
+      }
+      case StubField::Type::BaseScript: {
+        GCPtr<BaseScript*>& baseScriptField =
+            stubInfo->getStubField<BaseScript*>(stub, offset);
+        out.printf("%p\n", baseScriptField.get());
+        break;
+      }
+      case StubField::Type::Id: {
+        GCPtrId& idField = stubInfo->getStubField<jsid>(stub, offset);
+        out.printf("%p\n", (void*)JSID_BITS(idField.get()));
+        break;
+      }
+      case StubField::Type::AllocSite: {
+        out.printf("%p\n",
+                   stubInfo->getPtrStubField<gc::AllocSite>(stub, offset));
+        break;
+      }
+      case StubField::Type::RawInt64: {
+        out.printf("%" PRIi64 "\n", stubInfo->getStubRawInt64(stub, offset));
+        break;
+      }
+      case StubField::Type::Value: {
+        GCPtrValue& valueField =
+            stubInfo->getStubField<JS::Value>(stub, offset);
+        out.printf("%016" PRIx64 "\n", valueField.get().asRawBits());
+        break;
+      }
+      case StubField::Type::Limit: {
+        MOZ_MAKE_COMPILER_ASSUME_IS_UNREACHABLE(
+            "StubField::Type::Limit is handled before the switch");
+      }
+    }
+
+    field++;
+    offset += StubField::sizeInBytes(fieldType);
+  }
+}
+
+template void jit::SpewCacheIRStubFields(GenericPrinter& out, uint8_t* stubData,
+                                         const CacheIRStubInfo* stubInfo);
 
 #endif /* JS_CACHEIR_SPEW */

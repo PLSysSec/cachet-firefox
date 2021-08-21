@@ -8,12 +8,17 @@
 
 #include "gc/Heap.h"
 #include "gc/Zone.h"
+#include "jit/CacheIR.h"
 #include "jit/Ion.h"
 #include "jit/JitRuntime.h"
 #include "vm/Realm.h"
 
 using namespace js;
 using namespace js::jit;
+
+const JSRuntime* CompileRuntime::runtime() const {
+  return reinterpret_cast<const JSRuntime*>(this);
+}
 
 JSRuntime* CompileRuntime::runtime() {
   return reinterpret_cast<JSRuntime*>(this);
@@ -56,8 +61,9 @@ const WellKnownSymbols& CompileRuntime::wellKnownSymbols() {
   return *runtime()->wellKnownSymbols;
 }
 
-const JSClass* CompileRuntime::maybeWindowProxyClass() {
-  return runtime()->maybeWindowProxyClass();
+const JSClass* CompileRuntime::classForGuardClassKind(
+    GuardClassKind kind) const {
+  return ClassForGuardClassKind(runtime(), kind);
 }
 
 const void* CompileRuntime::mainContextPtr() {

@@ -298,8 +298,8 @@ static void StoreAllLiveRegs(MacroAssembler& masm, LiveRegisterSet liveRegs) {
 
 // Before doing any call to Cpp, you should ensure that volatile
 // registers are evicted by the register allocator.
-void CodeGenerator::callVMInternal(VMFunctionId id, LInstruction* ins,
-                                   const Register* dynStack) {
+CodeOffset CodeGenerator::callVMInternal(VMFunctionId id, LInstruction* ins,
+                                         const Register* dynStack) {
   TrampolinePtr code = gen->jitRuntime()->getVMWrapper(id);
   const VMFunctionData& fun = GetVMFunction(id);
 
@@ -374,12 +374,14 @@ void CodeGenerator::callVMInternal(VMFunctionId id, LInstruction* ins,
   masm.implicitPop(fun.explicitStackSlots() * sizeof(void*) + framePop);
   // Stack is:
   //    ... frame ...
+
+  return CodeOffset(callOffset);
 }
 
 template <typename Fn, Fn fn>
-void CodeGenerator::callVM(LInstruction* ins, const Register* dynStack) {
+CodeOffset CodeGenerator::callVM(LInstruction* ins, const Register* dynStack) {
   VMFunctionId id = VMFunctionToId<Fn, fn>::id;
-  callVMInternal(id, ins, dynStack);
+  return callVMInternal(id, ins, dynStack);
 }
 
 // ArgSeq store arguments for OutOfLineCallVM.
@@ -470,6 +472,28 @@ class StoreFloatRegisterTo {
     LiveRegisterSet set;
     set.add(out_);
     return set;
+  }
+};
+
+class StoreAnyRegisterTo {
+ private:
+  AnyRegister out_;
+
+ public:
+  explicit StoreAnyRegisterTo(AnyRegister out) : out_(out) {}
+
+  inline void generate(CodeGenerator* codegen) const {
+    if (out_.isFloat()) {
+      StoreFloatRegisterTo(out_.fpu()).generate(codegen);
+    } else {
+      StoreRegisterTo(out_.gpr()).generate(codegen);
+    }
+  }
+  inline LiveRegisterSet clobbered() const {
+    if (out_.isFloat()) {
+      return StoreFloatRegisterTo(out_.fpu()).clobbered();
+    }
+    return StoreRegisterTo(out_.gpr()).clobbered();
   }
 };
 
@@ -610,326 +634,7 @@ void CodeGenerator::visitOutOfLineICFallback(OutOfLineICFallback* ool) {
   // Register the location of the OOL path in the IC.
   ic->setFallbackOffset(CodeOffset(masm.currentOffset()));
 
-  switch (ic->kind()) {
-    case CacheKind::GetProp:
-    case CacheKind::GetElem: {
-      IonGetPropertyIC* getPropIC = ic->asGetPropertyIC();
-
-      saveLive(lir);
-
-      pushArg(getPropIC->id());
-      pushArg(getPropIC->value());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = bool (*)(JSContext*, HandleScript, IonGetPropertyIC*,
-                          HandleValue, HandleValue, MutableHandleValue);
-      callVM<Fn, IonGetPropertyIC::update>(lir);
-
-      StoreValueTo(getPropIC->output()).generate(this);
-      restoreLiveIgnore(lir, StoreValueTo(getPropIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::GetPropSuper:
-    case CacheKind::GetElemSuper: {
-      IonGetPropSuperIC* getPropSuperIC = ic->asGetPropSuperIC();
-
-      saveLive(lir);
-
-      pushArg(getPropSuperIC->id());
-      pushArg(getPropSuperIC->receiver());
-      pushArg(getPropSuperIC->object());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn =
-          bool (*)(JSContext*, HandleScript, IonGetPropSuperIC*, HandleObject,
-                   HandleValue, HandleValue, MutableHandleValue);
-      callVM<Fn, IonGetPropSuperIC::update>(lir);
-
-      StoreValueTo(getPropSuperIC->output()).generate(this);
-      restoreLiveIgnore(lir,
-                        StoreValueTo(getPropSuperIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::SetProp:
-    case CacheKind::SetElem: {
-      IonSetPropertyIC* setPropIC = ic->asSetPropertyIC();
-
-      saveLive(lir);
-
-      pushArg(setPropIC->rhs());
-      pushArg(setPropIC->id());
-      pushArg(setPropIC->object());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = bool (*)(JSContext*, HandleScript, IonSetPropertyIC*,
-                          HandleObject, HandleValue, HandleValue);
-      callVM<Fn, IonSetPropertyIC::update>(lir);
-
-      restoreLive(lir);
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::GetName: {
-      IonGetNameIC* getNameIC = ic->asGetNameIC();
-
-      saveLive(lir);
-
-      pushArg(getNameIC->environment());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = bool (*)(JSContext*, HandleScript, IonGetNameIC*, HandleObject,
-                          MutableHandleValue);
-      callVM<Fn, IonGetNameIC::update>(lir);
-
-      StoreValueTo(getNameIC->output()).generate(this);
-      restoreLiveIgnore(lir, StoreValueTo(getNameIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::BindName: {
-      IonBindNameIC* bindNameIC = ic->asBindNameIC();
-
-      saveLive(lir);
-
-      pushArg(bindNameIC->environment());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn =
-          JSObject* (*)(JSContext*, HandleScript, IonBindNameIC*, HandleObject);
-      callVM<Fn, IonBindNameIC::update>(lir);
-
-      StoreRegisterTo(bindNameIC->output()).generate(this);
-      restoreLiveIgnore(lir, StoreRegisterTo(bindNameIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::GetIterator: {
-      IonGetIteratorIC* getIteratorIC = ic->asGetIteratorIC();
-
-      saveLive(lir);
-
-      pushArg(getIteratorIC->value());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = JSObject* (*)(JSContext*, HandleScript, IonGetIteratorIC*,
-                               HandleValue);
-      callVM<Fn, IonGetIteratorIC::update>(lir);
-
-      StoreRegisterTo(getIteratorIC->output()).generate(this);
-      restoreLiveIgnore(lir,
-                        StoreRegisterTo(getIteratorIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::OptimizeSpreadCall: {
-      auto* optimizeSpreadCallIC = ic->asOptimizeSpreadCallIC();
-
-      saveLive(lir);
-
-      pushArg(optimizeSpreadCallIC->value());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = bool (*)(JSContext*, HandleScript, IonOptimizeSpreadCallIC*,
-                          HandleValue, bool*);
-      callVM<Fn, IonOptimizeSpreadCallIC::update>(lir);
-
-      StoreRegisterTo(optimizeSpreadCallIC->output()).generate(this);
-      restoreLiveIgnore(
-          lir, StoreRegisterTo(optimizeSpreadCallIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::In: {
-      IonInIC* inIC = ic->asInIC();
-
-      saveLive(lir);
-
-      pushArg(inIC->object());
-      pushArg(inIC->key());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = bool (*)(JSContext*, HandleScript, IonInIC*, HandleValue,
-                          HandleObject, bool*);
-      callVM<Fn, IonInIC::update>(lir);
-
-      StoreRegisterTo(inIC->output()).generate(this);
-      restoreLiveIgnore(lir, StoreRegisterTo(inIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::HasOwn: {
-      IonHasOwnIC* hasOwnIC = ic->asHasOwnIC();
-
-      saveLive(lir);
-
-      pushArg(hasOwnIC->id());
-      pushArg(hasOwnIC->value());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = bool (*)(JSContext*, HandleScript, IonHasOwnIC*, HandleValue,
-                          HandleValue, int32_t*);
-      callVM<Fn, IonHasOwnIC::update>(lir);
-
-      StoreRegisterTo(hasOwnIC->output()).generate(this);
-      restoreLiveIgnore(lir, StoreRegisterTo(hasOwnIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::CheckPrivateField: {
-      IonCheckPrivateFieldIC* checkPrivateFieldIC = ic->asCheckPrivateFieldIC();
-
-      saveLive(lir);
-
-      pushArg(checkPrivateFieldIC->id());
-      pushArg(checkPrivateFieldIC->value());
-
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = bool (*)(JSContext*, HandleScript, IonCheckPrivateFieldIC*,
-                          HandleValue, HandleValue, bool*);
-      callVM<Fn, IonCheckPrivateFieldIC::update>(lir);
-
-      StoreRegisterTo(checkPrivateFieldIC->output()).generate(this);
-      restoreLiveIgnore(
-          lir, StoreRegisterTo(checkPrivateFieldIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::InstanceOf: {
-      IonInstanceOfIC* hasInstanceOfIC = ic->asInstanceOfIC();
-
-      saveLive(lir);
-
-      pushArg(hasInstanceOfIC->rhs());
-      pushArg(hasInstanceOfIC->lhs());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = bool (*)(JSContext*, HandleScript, IonInstanceOfIC*,
-                          HandleValue lhs, HandleObject rhs, bool* res);
-      callVM<Fn, IonInstanceOfIC::update>(lir);
-
-      StoreRegisterTo(hasInstanceOfIC->output()).generate(this);
-      restoreLiveIgnore(lir,
-                        StoreRegisterTo(hasInstanceOfIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::UnaryArith: {
-      IonUnaryArithIC* unaryArithIC = ic->asUnaryArithIC();
-
-      saveLive(lir);
-
-      pushArg(unaryArithIC->input());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = bool (*)(JSContext * cx, HandleScript outerScript,
-                          IonUnaryArithIC * stub, HandleValue val,
-                          MutableHandleValue res);
-      callVM<Fn, IonUnaryArithIC::update>(lir);
-
-      StoreValueTo(unaryArithIC->output()).generate(this);
-      restoreLiveIgnore(lir, StoreValueTo(unaryArithIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::ToPropertyKey: {
-      IonToPropertyKeyIC* toPropertyKeyIC = ic->asToPropertyKeyIC();
-
-      saveLive(lir);
-
-      pushArg(toPropertyKeyIC->input());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = bool (*)(JSContext * cx, HandleScript outerScript,
-                          IonToPropertyKeyIC * ic, HandleValue val,
-                          MutableHandleValue res);
-      callVM<Fn, IonToPropertyKeyIC::update>(lir);
-
-      StoreValueTo(toPropertyKeyIC->output()).generate(this);
-      restoreLiveIgnore(lir,
-                        StoreValueTo(toPropertyKeyIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::BinaryArith: {
-      IonBinaryArithIC* binaryArithIC = ic->asBinaryArithIC();
-
-      saveLive(lir);
-
-      pushArg(binaryArithIC->rhs());
-      pushArg(binaryArithIC->lhs());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = bool (*)(JSContext * cx, HandleScript outerScript,
-                          IonBinaryArithIC * stub, HandleValue lhs,
-                          HandleValue rhs, MutableHandleValue res);
-      callVM<Fn, IonBinaryArithIC::update>(lir);
-
-      StoreValueTo(binaryArithIC->output()).generate(this);
-      restoreLiveIgnore(lir, StoreValueTo(binaryArithIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::Compare: {
-      IonCompareIC* compareIC = ic->asCompareIC();
-
-      saveLive(lir);
-
-      pushArg(compareIC->rhs());
-      pushArg(compareIC->lhs());
-      icInfo_[cacheInfoIndex].icOffsetForPush = pushArgWithPatch(ImmWord(-1));
-      pushArg(ImmGCPtr(gen->outerInfo().script()));
-
-      using Fn = bool (*)(JSContext * cx, HandleScript outerScript,
-                          IonCompareIC * stub, HandleValue lhs, HandleValue rhs,
-                          bool* res);
-      callVM<Fn, IonCompareIC::update>(lir);
-
-      StoreRegisterTo(compareIC->output()).generate(this);
-      restoreLiveIgnore(lir, StoreRegisterTo(compareIC->output()).clobbered());
-
-      masm.jump(ool->rejoin());
-      return;
-    }
-    case CacheKind::Call:
-    case CacheKind::TypeOf:
-    case CacheKind::ToBool:
-    case CacheKind::GetIntrinsic:
-    case CacheKind::NewArray:
-    case CacheKind::NewObject:
-      MOZ_CRASH("Unsupported IC");
-  }
-  MOZ_CRASH();
+  switch (ic->kind()) { CACHE_IR_ION_FALLBACK_CASES_GENERATED }
 }
 
 StringObject* MNewStringObject::templateObj() const {
@@ -12289,7 +11994,7 @@ void CodeGenerator::visitGetPropSuperCache(LGetPropSuperCache* ins) {
     }
   }
 
-  IonGetPropSuperIC cache(kind, liveRegs, obj, receiver, id, output);
+  IonGetPropSuperIC cache(kind, liveRegs, obj, id, receiver, output);
   addIC(ins, allocateIC(cache));
 }
 
@@ -12314,7 +12019,7 @@ void CodeGenerator::visitHasOwnCache(LHasOwnCache* ins) {
                                 .reg();
   Register output = ToRegister(ins->output());
 
-  IonHasOwnIC cache(liveRegs, value, id, output);
+  IonHasOwnIC cache(liveRegs, id, value, output);
   addIC(ins, allocateIC(cache));
 }
 
