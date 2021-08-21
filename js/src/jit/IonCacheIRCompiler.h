@@ -25,7 +25,7 @@ class MOZ_RAII IonCacheIRCompiler : public CacheIRCompiler {
   friend class AutoCallVM;
 
   IonCacheIRCompiler(JSContext* cx, const CacheIRWriter& writer, IonIC* ic,
-                     IonScript* ionScript, uint32_t stubDataOffset);
+                     IonScript* ionScript);
 
   [[nodiscard]] bool init();
   JitCode* compile(IonICStub* stub);

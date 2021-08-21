@@ -557,7 +557,7 @@ static bool CreateAllocSitesForCacheIRStub(JSScript* script,
 
     if (fieldType == StubField::Type::AllocSite) {
       gc::AllocSite* site =
-          stubInfo->getPtrStubField<ICCacheIRStub, gc::AllocSite>(stub, offset);
+          stubInfo->getPtrStubField<gc::AllocSite>(stub, offset);
       if (site->kind() == gc::AllocSite::Kind::Unknown) {
         gc::AllocSite* newSite = script->createAllocSite();
         if (!newSite) {

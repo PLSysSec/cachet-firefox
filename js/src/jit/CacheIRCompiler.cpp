@@ -1050,7 +1050,7 @@ uintptr_t CacheIRStubInfo::getStubRawWord(const uint8_t* stubData,
 
 uintptr_t CacheIRStubInfo::getStubRawWord(ICCacheIRStub* stub,
                                           uint32_t offset) const {
-  uint8_t* stubData = (uint8_t*)stub + stubDataOffset_;
+  uint8_t* stubData = (uint8_t*)stub + ICCacheIRStubDataOffset;
   return getStubRawWord(stubData, offset);
 }
 
@@ -1062,7 +1062,7 @@ int64_t CacheIRStubInfo::getStubRawInt64(const uint8_t* stubData,
 
 int64_t CacheIRStubInfo::getStubRawInt64(ICCacheIRStub* stub,
                                          uint32_t offset) const {
-  uint8_t* stubData = (uint8_t*)stub + stubDataOffset_;
+  uint8_t* stubData = (uint8_t*)stub + ICCacheIRStubDataOffset;
   return getStubRawInt64(stubData, offset);
 }
 
@@ -1075,45 +1075,89 @@ void CacheIRStubInfo::replaceStubRawWord(uint8_t* stubData, uint32_t offset,
   *addr = newWord;
 }
 
-template <class Stub, class T>
-GCPtr<T>& CacheIRStubInfo::getStubField(Stub* stub, uint32_t offset) const {
-  uint8_t* stubData = (uint8_t*)stub + stubDataOffset_;
-  MOZ_ASSERT(uintptr_t(stubData + offset) % sizeof(uintptr_t) == 0);
+// clang-format off
+#define STUB_FIELD_TYPES(_) \
+  _(Shape*)                 \
+  _(GetterSetter*)          \
+  _(JSObject*)              \
+  _(JS::Symbol*)            \
+  _(JSString*)              \
+  _(BaseScript*)            \
+  _(jsid)                   \
+  _(JS::Value)
+// clang-format on
 
+template <class T>
+GCPtr<T>& CacheIRStubInfo::getStubField(uint8_t* stubData,
+                                        uint32_t offset) const {
+  MOZ_ASSERT(uintptr_t(stubData + offset) % sizeof(uintptr_t) == 0);
   return *AsGCPtr<T>((uintptr_t*)(stubData + offset));
 }
 
-template GCPtr<Shape*>& CacheIRStubInfo::getStubField<ICCacheIRStub>(
-    ICCacheIRStub* stub, uint32_t offset) const;
-template GCPtr<GetterSetter*>& CacheIRStubInfo::getStubField<ICCacheIRStub>(
-    ICCacheIRStub* stub, uint32_t offset) const;
-template GCPtr<JSObject*>& CacheIRStubInfo::getStubField<ICCacheIRStub>(
-    ICCacheIRStub* stub, uint32_t offset) const;
-template GCPtr<JSString*>& CacheIRStubInfo::getStubField<ICCacheIRStub>(
-    ICCacheIRStub* stub, uint32_t offset) const;
-template GCPtr<JSFunction*>& CacheIRStubInfo::getStubField<ICCacheIRStub>(
-    ICCacheIRStub* stub, uint32_t offset) const;
-template GCPtr<JS::Symbol*>& CacheIRStubInfo::getStubField<ICCacheIRStub>(
-    ICCacheIRStub* stub, uint32_t offset) const;
-template GCPtr<JS::Value>& CacheIRStubInfo::getStubField<ICCacheIRStub>(
-    ICCacheIRStub* stub, uint32_t offset) const;
-template GCPtr<jsid>& CacheIRStubInfo::getStubField<ICCacheIRStub>(
-    ICCacheIRStub* stub, uint32_t offset) const;
-template GCPtr<JSClass*>& CacheIRStubInfo::getStubField<ICCacheIRStub>(
-    ICCacheIRStub* stub, uint32_t offset) const;
-template GCPtr<ArrayObject*>& CacheIRStubInfo::getStubField<ICCacheIRStub>(
-    ICCacheIRStub* stub, uint32_t offset) const;
-
-template <class Stub, class T>
-T* CacheIRStubInfo::getPtrStubField(Stub* stub, uint32_t offset) const {
-  uint8_t* stubData = (uint8_t*)stub + stubDataOffset_;
-  MOZ_ASSERT(uintptr_t(stubData + offset) % sizeof(uintptr_t) == 0);
-
-  return *reinterpret_cast<T**>(stubData + offset);
+template <class T>
+GCPtr<T>& CacheIRStubInfo::getStubField(ICCacheIRStub* stub,
+                                        uint32_t offset) const {
+  uint8_t* stubData = (uint8_t*)stub + ICCacheIRStubDataOffset;
+  return getStubField<T>(stubData, offset);
 }
 
-template gc::AllocSite* CacheIRStubInfo::getPtrStubField(ICCacheIRStub* stub,
-                                                         uint32_t offset) const;
+template <class T>
+GCPtr<T>& CacheIRStubInfo::getStubField(IonICStub* stub,
+                                        uint32_t offset) const {
+  uint8_t* stubData = (uint8_t*)stub + IonICStubDataOffset;
+  return getStubField<T>(stubData, offset);
+}
+
+#define SPECIALIZE_GET_STUB_FIELD(T)                                       \
+  template GCPtr<T>& CacheIRStubInfo::getStubField(uint8_t* stub,          \
+                                                   uint32_t offset) const; \
+  template GCPtr<T>& CacheIRStubInfo::getStubField(ICCacheIRStub* stub,    \
+                                                   uint32_t offset) const; \
+  template GCPtr<T>& CacheIRStubInfo::getStubField(IonICStub* stub,        \
+                                                   uint32_t offset) const;
+SPECIALIZE_GET_STUB_FIELD(Shape*)
+SPECIALIZE_GET_STUB_FIELD(GetterSetter*)
+SPECIALIZE_GET_STUB_FIELD(JSObject*)
+SPECIALIZE_GET_STUB_FIELD(JS::Symbol*)
+SPECIALIZE_GET_STUB_FIELD(JSString*)
+SPECIALIZE_GET_STUB_FIELD(BaseScript*)
+SPECIALIZE_GET_STUB_FIELD(jsid)
+SPECIALIZE_GET_STUB_FIELD(JS::Value)
+#undef SPECIALIZE_GET_STUB_FIELD
+
+template <class T>
+T* CacheIRStubInfo::getPtrStubField(const uint8_t* stubData,
+                                    uint32_t offset) const {
+  MOZ_ASSERT(uintptr_t(stubData + offset) % sizeof(uintptr_t) == 0);
+  return *reinterpret_cast<T* const*>(stubData + offset);
+}
+
+template <class T>
+T* CacheIRStubInfo::getPtrStubField(const ICCacheIRStub* stub,
+                                    uint32_t offset) const {
+  const uint8_t* stubData = (const uint8_t*)stub + ICCacheIRStubDataOffset;
+  return getPtrStubField<T>(stubData, offset);
+}
+
+template <class T>
+T* CacheIRStubInfo::getPtrStubField(const IonICStub* stub,
+                                    uint32_t offset) const {
+  const uint8_t* stubData = (const uint8_t*)stub + IonICStubDataOffset;
+  return getPtrStubField<T>(stubData, offset);
+}
+
+template <typename T>
+using Ptr = T*;
+
+#define SPECIALIZE_GET_PTR_STUB_FIELD(T)                                      \
+  template Ptr<T> CacheIRStubInfo::getPtrStubField(const uint8_t* stubData,   \
+                                                   uint32_t offset) const;    \
+  template Ptr<T> CacheIRStubInfo::getPtrStubField(const ICCacheIRStub* stub, \
+                                                   uint32_t offset) const;    \
+  template Ptr<T> CacheIRStubInfo::getPtrStubField(const IonICStub* stub,     \
+                                                   uint32_t offset) const;
+SPECIALIZE_GET_PTR_STUB_FIELD(gc::AllocSite)
+#undef SPECIALIZE_GET_PTR_STUB_FIELD
 
 template <typename T, typename V>
 static void InitGCPtr(uintptr_t* ptr, V val) {
@@ -1187,42 +1231,41 @@ void jit::TraceCacheIRStub(JSTracer* trc, T* stub,
         // shapes. Use TraceSameZoneCrossCompartmentEdge to not assert in the
         // GC. Note: CacheIRWriter::writeShapeField asserts we never store
         // cross-zone shapes.
-        GCPtrShape& shapeField =
-            stubInfo->getStubField<T, Shape*>(stub, offset);
+        GCPtrShape& shapeField = stubInfo->getStubField<Shape*>(stub, offset);
         TraceSameZoneCrossCompartmentEdge(trc, &shapeField, "cacheir-shape");
         break;
       }
       case StubField::Type::GetterSetter:
-        TraceEdge(trc, &stubInfo->getStubField<T, GetterSetter*>(stub, offset),
+        TraceEdge(trc, &stubInfo->getStubField<GetterSetter*>(stub, offset),
                   "cacheir-getter-setter");
         break;
       case StubField::Type::JSObject:
-        TraceEdge(trc, &stubInfo->getStubField<T, JSObject*>(stub, offset),
+        TraceEdge(trc, &stubInfo->getStubField<JSObject*>(stub, offset),
                   "cacheir-object");
         break;
       case StubField::Type::Symbol:
-        TraceEdge(trc, &stubInfo->getStubField<T, JS::Symbol*>(stub, offset),
+        TraceEdge(trc, &stubInfo->getStubField<JS::Symbol*>(stub, offset),
                   "cacheir-symbol");
         break;
       case StubField::Type::String:
-        TraceEdge(trc, &stubInfo->getStubField<T, JSString*>(stub, offset),
+        TraceEdge(trc, &stubInfo->getStubField<JSString*>(stub, offset),
                   "cacheir-string");
         break;
       case StubField::Type::BaseScript:
-        TraceEdge(trc, &stubInfo->getStubField<T, BaseScript*>(stub, offset),
+        TraceEdge(trc, &stubInfo->getStubField<BaseScript*>(stub, offset),
                   "cacheir-script");
         break;
       case StubField::Type::Id:
-        TraceEdge(trc, &stubInfo->getStubField<T, jsid>(stub, offset),
+        TraceEdge(trc, &stubInfo->getStubField<jsid>(stub, offset),
                   "cacheir-id");
         break;
       case StubField::Type::Value:
-        TraceEdge(trc, &stubInfo->getStubField<T, JS::Value>(stub, offset),
+        TraceEdge(trc, &stubInfo->getStubField<JS::Value>(stub, offset),
                   "cacheir-value");
         break;
       case StubField::Type::AllocSite: {
         gc::AllocSite* site =
-            stubInfo->getPtrStubField<T, gc::AllocSite>(stub, offset);
+            stubInfo->getPtrStubField<gc::AllocSite>(stub, offset);
         site->trace(trc);
         break;
       }
@@ -1297,7 +1340,6 @@ CacheIRReader::CacheIRReader(const CacheIRStubInfo* stubInfo)
 
 CacheIRStubInfo* CacheIRStubInfo::New(CacheKind kind, ICStubEngine engine,
                                       bool makesGCCalls,
-                                      uint32_t stubDataOffset,
                                       const CacheIRWriter& writer) {
   size_t numStubFields = writer.numStubFields();
   size_t bytesNeeded =
@@ -1322,8 +1364,8 @@ CacheIRStubInfo* CacheIRStubInfo::New(CacheKind kind, ICStubEngine engine,
   }
   fieldTypes[numStubFields] = uint8_t(StubField::Type::Limit);
 
-  return new (p) CacheIRStubInfo(kind, engine, makesGCCalls, stubDataOffset,
-                                 codeStart, writer.codeLength(), fieldTypes);
+  return new (p) CacheIRStubInfo(kind, engine, makesGCCalls, codeStart,
+                                 writer.codeLength(), fieldTypes);
 }
 
 bool OperandLocation::operator==(const OperandLocation& other) const {
@@ -1922,40 +1964,7 @@ bool CacheIRCompiler::emitGuardClass(ObjOperandId objId, GuardClassKind kind) {
     return false;
   }
 
-  const JSClass* clasp = nullptr;
-  switch (kind) {
-    case GuardClassKind::Array:
-      clasp = &ArrayObject::class_;
-      break;
-    case GuardClassKind::ArrayBuffer:
-      clasp = &ArrayBufferObject::class_;
-      break;
-    case GuardClassKind::SharedArrayBuffer:
-      clasp = &SharedArrayBufferObject::class_;
-      break;
-    case GuardClassKind::DataView:
-      clasp = &DataViewObject::class_;
-      break;
-    case GuardClassKind::MappedArguments:
-      clasp = &MappedArgumentsObject::class_;
-      break;
-    case GuardClassKind::UnmappedArguments:
-      clasp = &UnmappedArgumentsObject::class_;
-      break;
-    case GuardClassKind::WindowProxy:
-      clasp = cx_->runtime()->maybeWindowProxyClass();
-      break;
-    case GuardClassKind::JSFunction:
-      clasp = &JSFunction::class_;
-      break;
-    case GuardClassKind::Set:
-      clasp = &SetObject::class_;
-      break;
-    case GuardClassKind::Map:
-      clasp = &MapObject::class_;
-      break;
-  }
-  MOZ_ASSERT(clasp);
+  const JSClass* clasp = ClassForGuardClassKind(cx_, kind);
 
   if (objectGuardNeedsSpectreMitigations(objId)) {
     masm.branchTestObjClass(Assembler::NotEqual, obj, clasp, scratch, obj,
@@ -6813,7 +6822,7 @@ bool CacheIRCompiler::emitCallObjectHasSparseElementResult(
 void CacheIRCompiler::emitLoadStubFieldConstant(StubFieldOffset val,
                                                 Register dest) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
-  MOZ_ASSERT(mode_ == Mode::Ion);
+  MOZ_ASSERT(engine_ == ICStubEngine::IonIC);
   switch (val.getStubFieldType()) {
     case StubField::Type::Shape:
       masm.movePtr(ImmGCPtr(shapeStubField(val.getOffset())), dest);
@@ -6854,7 +6863,8 @@ void CacheIRCompiler::emitLoadStubField(StubFieldOffset val, Register dest) {
   if (stubFieldPolicy_ == StubFieldPolicy::Constant) {
     emitLoadStubFieldConstant(val, dest);
   } else {
-    Address load(ICStubReg, stubDataOffset_ + val.getOffset());
+    Address load(ICStubReg,
+                 GetICStubEngineDataOffset(engine_) + val.getOffset());
 
     switch (val.getStubFieldType()) {
       case StubField::Type::RawPointer:
@@ -6880,10 +6890,11 @@ void CacheIRCompiler::emitLoadValueStubField(StubFieldOffset val,
   MOZ_ASSERT(val.getStubFieldType() == StubField::Type::Value);
 
   if (stubFieldPolicy_ == StubFieldPolicy::Constant) {
-    MOZ_ASSERT(mode_ == Mode::Ion);
+    MOZ_ASSERT(engine_ == ICStubEngine::IonIC);
     masm.moveValue(valueStubField(val.getOffset()), dest);
   } else {
-    Address addr(ICStubReg, stubDataOffset_ + val.getOffset());
+    Address addr(ICStubReg,
+                 GetICStubEngineDataOffset(engine_) + val.getOffset());
     masm.loadValue(addr, dest);
   }
 }
@@ -8524,7 +8535,7 @@ void CacheIRCompiler::callVM(MacroAssembler& masm) {
 }
 
 void CacheIRCompiler::callVMInternal(MacroAssembler& masm, VMFunctionId id) {
-  if (mode_ == Mode::Ion) {
+  if (engine_ == ICStubEngine::IonIC) {
     MOZ_ASSERT(preparedForVMCall_);
     TrampolinePtr code = cx_->runtime()->jitRuntime()->getVMWrapper(id);
     const VMFunctionData& fun = GetVMFunction(id);
@@ -8544,7 +8555,7 @@ void CacheIRCompiler::callVMInternal(MacroAssembler& masm, VMFunctionId id) {
     return;
   }
 
-  MOZ_ASSERT(mode_ == Mode::Baseline);
+  MOZ_ASSERT(engine_ == ICStubEngine::Baseline);
 
   MOZ_ASSERT(preparedForVMCall_);
 
@@ -8554,9 +8565,9 @@ void CacheIRCompiler::callVMInternal(MacroAssembler& masm, VMFunctionId id) {
   EmitBaselineCallVM(code, masm);
 }
 
-bool CacheIRCompiler::isBaseline() { return mode_ == Mode::Baseline; }
+bool CacheIRCompiler::isBaseline() { return engine_ == ICStubEngine::Baseline; }
 
-bool CacheIRCompiler::isIon() { return mode_ == Mode::Ion; }
+bool CacheIRCompiler::isIon() { return engine_ == ICStubEngine::IonIC; }
 
 BaselineCacheIRCompiler* CacheIRCompiler::asBaseline() {
   MOZ_ASSERT(this->isBaseline());
@@ -8584,7 +8595,7 @@ AutoCallVM::AutoCallVM(MacroAssembler& masm, CacheIRCompiler* compiler,
     : masm_(masm), compiler_(compiler), allocator_(allocator) {
   // Ion needs to `prepareVMCall` before it can callVM and it also needs to
   // initialize AutoSaveLiveRegisters.
-  if (compiler_->mode_ == CacheIRCompiler::Mode::Ion) {
+  if (compiler_->engine_ == ICStubEngine::IonIC) {
     // Will need to use a downcast here as well, in order to pass the
     // stub to AutoSaveLiveRegisters
     save_.emplace(*compiler_->asIon());
@@ -8592,7 +8603,7 @@ AutoCallVM::AutoCallVM(MacroAssembler& masm, CacheIRCompiler* compiler,
 
   output_.emplace(*compiler);
 
-  if (compiler_->mode_ == CacheIRCompiler::Mode::Baseline) {
+  if (compiler_->engine_ == ICStubEngine::Baseline) {
     stubFrame_.emplace(*compiler_->asBaseline());
     scratch_.emplace(allocator_, masm_, output_.ref());
   }
@@ -8601,11 +8612,11 @@ AutoCallVM::AutoCallVM(MacroAssembler& masm, CacheIRCompiler* compiler,
 void AutoCallVM::prepare() {
   allocator_.discardStack(masm_);
   MOZ_ASSERT(compiler_ != nullptr);
-  if (compiler_->mode_ == CacheIRCompiler::Mode::Ion) {
+  if (compiler_->engine_ == ICStubEngine::IonIC) {
     compiler_->asIon()->prepareVMCall(masm_, *save_.ptr());
     return;
   }
-  MOZ_ASSERT(compiler_->mode_ == CacheIRCompiler::Mode::Baseline);
+  MOZ_ASSERT(compiler_->engine_ == ICStubEngine::Baseline);
   stubFrame_->enter(masm_, scratch_.ref());
 }
 
@@ -8627,7 +8638,7 @@ void AutoCallVM::storeResult(JSValueType returnType) {
 }
 
 void AutoCallVM::leaveBaselineStubFrame() {
-  if (compiler_->mode_ == CacheIRCompiler::Mode::Baseline) {
+  if (compiler_->engine_ == ICStubEngine::Baseline) {
     stubFrame_->leave(masm_);
   }
 }

@@ -17,9 +17,11 @@
 #include <utility>
 
 #include "gc/Barrier.h"
+#include "jit/BaselineIC.h"
 #include "jit/ExecutableAllocator.h"
 #include "jit/ICStubSpace.h"
 #include "jit/Invalidation.h"
+#include "jit/IonIC.h"
 #include "js/AllocPolicy.h"
 #include "js/GCHashTable.h"
 #include "js/HashTable.h"
@@ -47,6 +49,31 @@ enum class ICStubEngine : uint8_t {
   // Ion IC, see IonIC.h.
   IonIC
 };
+
+constexpr const char* GetICStubEngineName(const ICStubEngine engine) {
+  switch (engine) {
+    case ICStubEngine::Baseline: {
+      return "Baseline";
+    }
+    case ICStubEngine::IonIC: {
+      return "IonIC";
+    }
+  }
+  MOZ_CRASH("Unknown ICStubEngine.");
+}
+
+// Distance from the IC to the stub data for the given engine.
+constexpr size_t GetICStubEngineDataOffset(const ICStubEngine engine) {
+  switch (engine) {
+    case ICStubEngine::Baseline: {
+      return ICCacheIRStubDataOffset;
+    }
+    case ICStubEngine::IonIC: {
+      return IonICStubDataOffset;
+    }
+  }
+  MOZ_CRASH("Unknown ICStubEngine.");
+}
 
 struct CacheIRStubKey : public DefaultHasher<CacheIRStubKey> {
   struct Lookup {

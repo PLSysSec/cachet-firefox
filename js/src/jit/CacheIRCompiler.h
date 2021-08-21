@@ -30,6 +30,8 @@ class IonCacheIRCompiler;
 
 enum class ICStubEngine : uint8_t;
 
+class IonICStub;
+
 // [SMDOC] CacheIR Value Representation and Tracking
 //
 // While compiling an IC stub the CacheIR compiler needs to keep track of the
@@ -734,8 +736,6 @@ class MOZ_RAII CacheIRCompiler {
   friend class AutoScratchFloatRegister;
   friend class AutoAvailableFloatRegister;
 
-  enum class Mode { Baseline, Ion };
-
   bool preparedForVMCall_;
 
   bool isBaseline();
@@ -757,25 +757,20 @@ class MOZ_RAII CacheIRCompiler {
   LiveFloatRegisterSet liveFloatRegs_;
 
   mozilla::Maybe<TypedOrValueRegister> outputUnchecked_;
-  Mode mode_;
-
-  // Distance from the IC to the stub data; mostly will be
-  // sizeof(stubType)
-  uint32_t stubDataOffset_;
+  ICStubEngine engine_;
 
   enum class StubFieldPolicy { Address, Constant };
 
   StubFieldPolicy stubFieldPolicy_;
 
   CacheIRCompiler(JSContext* cx, const CacheIRWriter& writer,
-                  uint32_t stubDataOffset, Mode mode, StubFieldPolicy policy)
+                  ICStubEngine engine, StubFieldPolicy policy)
       : preparedForVMCall_(false),
         cx_(cx),
         writer_(writer),
         allocator(writer_),
         liveFloatRegs_(FloatRegisterSet::All()),
-        mode_(mode),
-        stubDataOffset_(stubDataOffset),
+        engine_(engine),
         stubFieldPolicy_(policy) {
     MOZ_ASSERT(!writer.failed());
   }
@@ -1086,9 +1081,9 @@ class MOZ_RAII AutoScratchRegisterMaybeOutputType {
 //   Using AutoCallVM:
 //     - The constructor initializes `AutoOutputRegister` for both compiler
 //       types. Additionally it initializes an `AutoSaveLiveRegisters` for
-//       CacheIRCompilers with the mode Ion, and initializes
+//       CacheIRCompilers targeting the IonIC engine, and initializes
 //       `AutoScratchRegisterMaybeOutput` and `AutoStubFrame` variables for
-//       compilers with mode Baseline.
+//       compilers targeting the Baseline engine.
 //     - The `prepare()` method calls the IonCacheIRCompiler method
 //       `prepareVMCall` for IonCacheIRCompilers, calls the `enter()` method of
 //       `AutoStubFrame` for BaselineCacheIRCompilers, and calls the
@@ -1178,7 +1173,7 @@ class MOZ_RAII AutoScratchFloatRegister {
 };
 
 // This class can be used to assert a certain FloatRegister is available. In
-// Baseline mode, all float registers are available. In Ion mode, only the
+// Baseline mode, all float registers are available. In IonIC mode, only the
 // registers added as fixed temps in LIRGenerator are available.
 class MOZ_RAII AutoAvailableFloatRegister {
   FloatRegister reg_;
@@ -1207,26 +1202,22 @@ class CacheIRStubInfo {
   CacheKind kind_ : 8;
   ICStubEngine engine_ : 8;
   bool makesGCCalls_ : 1;
-  uint8_t stubDataOffset_;
 
   const uint8_t* code_;
   uint32_t length_;
   const uint8_t* fieldTypes_;
 
   CacheIRStubInfo(CacheKind kind, ICStubEngine engine, bool makesGCCalls,
-                  uint32_t stubDataOffset, const uint8_t* code,
-                  uint32_t codeLength, const uint8_t* fieldTypes)
+                  const uint8_t* code, uint32_t codeLength,
+                  const uint8_t* fieldTypes)
       : kind_(kind),
         engine_(engine),
         makesGCCalls_(makesGCCalls),
-        stubDataOffset_(stubDataOffset),
         code_(code),
         length_(codeLength),
         fieldTypes_(fieldTypes) {
     MOZ_ASSERT(kind_ == kind, "Kind must fit in bitfield");
     MOZ_ASSERT(engine_ == engine, "Engine must fit in bitfield");
-    MOZ_ASSERT(stubDataOffset_ == stubDataOffset,
-               "stubDataOffset must fit in uint8_t");
   }
 
   CacheIRStubInfo(const CacheIRStubInfo&) = delete;
@@ -1239,7 +1230,6 @@ class CacheIRStubInfo {
 
   const uint8_t* code() const { return code_; }
   uint32_t codeLength() const { return length_; }
-  uint32_t stubDataOffset() const { return stubDataOffset_; }
 
   size_t stubDataSize() const;
 
@@ -1248,19 +1238,25 @@ class CacheIRStubInfo {
   }
 
   static CacheIRStubInfo* New(CacheKind kind, ICStubEngine engine,
-                              bool canMakeCalls, uint32_t stubDataOffset,
-                              const CacheIRWriter& writer);
-
-  template <class Stub, class T>
-  js::GCPtr<T>& getStubField(Stub* stub, uint32_t offset) const;
-
-  template <class Stub, class T>
-  T* getPtrStubField(Stub* stub, uint32_t offset) const;
+                              bool canMakeCalls, const CacheIRWriter& writer);
 
   template <class T>
-  js::GCPtr<T>& getStubField(ICCacheIRStub* stub, uint32_t offset) const {
-    return getStubField<ICCacheIRStub, T>(stub, offset);
-  }
+  js::GCPtr<T>& getStubField(uint8_t* stubData, uint32_t offset) const;
+
+  template <class T>
+  js::GCPtr<T>& getStubField(ICCacheIRStub* stub, uint32_t offset) const;
+
+  template <class T>
+  js::GCPtr<T>& getStubField(IonICStub* stub, uint32_t offset) const;
+
+  template <class T>
+  T* getPtrStubField(const uint8_t* stubData, uint32_t offset) const;
+
+  template <class T>
+  T* getPtrStubField(const ICCacheIRStub* stub, uint32_t offset) const;
+
+  template <class T>
+  T* getPtrStubField(const IonICStub* stub, uint32_t offset) const;
 
   uintptr_t getStubRawWord(const uint8_t* stubData, uint32_t offset) const;
   uintptr_t getStubRawWord(ICCacheIRStub* stub, uint32_t offset) const;

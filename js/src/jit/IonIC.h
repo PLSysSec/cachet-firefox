@@ -43,7 +43,11 @@ class IonICStub {
   CacheIRStubInfo* stubInfo() const { return stubInfo_; }
   IonICStub* next() const { return next_; }
 
-  uint8_t* stubDataStart();
+  const uint8_t* stubDataStart() const;
+  uint8_t* stubDataStart() {
+    return const_cast<uint8_t*>(
+        const_cast<const IonICStub*>(this)->stubDataStart());
+  }
 
   void setNext(IonICStub* next, uint8_t* nextCodeRaw) {
     MOZ_ASSERT(!next_);
@@ -60,6 +64,14 @@ class IonICStub {
     stubInfo_ = nullptr;
   }
 };
+
+inline constexpr uint32_t IonICStubDataOffset = sizeof(IonICStub);
+static_assert(IonICStubDataOffset % sizeof(uint64_t) == 0,
+              "Stub fields must be aligned");
+
+inline const uint8_t* IonICStub::stubDataStart() const {
+  return reinterpret_cast<const uint8_t*>(this) + IonICStubDataOffset;
+}
 
 class IonGetPropertyIC;
 class IonSetPropertyIC;
@@ -97,6 +109,10 @@ class IonIC {
   // update function.
   uint32_t fallbackOffset_;
 
+  // The offset of the call to the IC's update function within the OOL path in
+  // the IonScript's code.
+  uint32_t fallbackCallOffset_;
+
   CacheKind kind_;
   ICState state_;
 
@@ -108,6 +124,7 @@ class IonIC {
         pc_(nullptr),
         rejoinOffset_(0),
         fallbackOffset_(0),
+        fallbackCallOffset_(0),
         kind_(kind),
         state_() {}
 
@@ -136,6 +153,8 @@ class IonIC {
   // Discard all stubs and reset the ICState.
   void reset(Zone* zone, IonScript* ionScript);
 
+  IonICStub* firstStub() { return firstStub_; }
+
   ICState& state() { return state_; }
 
   CacheKind kind() const { return kind_; }
@@ -144,11 +163,15 @@ class IonIC {
   void setFallbackOffset(CodeOffset offset) {
     fallbackOffset_ = offset.offset();
   }
+  void setFallbackCallOffset(CodeOffset offset) {
+    fallbackCallOffset_ = offset.offset();
+  }
   void setRejoinOffset(CodeOffset offset) { rejoinOffset_ = offset.offset(); }
 
   void resetCodeRaw(IonScript* ionScript);
 
   uint8_t* fallbackAddr(IonScript* ionScript) const;
+  uint8_t* fallbackCallAddr(IonScript* ionScript) const;
   uint8_t* rejoinAddr(IonScript* ionScript) const;
 
   IonGetPropertyIC* asGetPropertyIC() {
@@ -255,30 +278,30 @@ class IonGetPropSuperIC : public IonIC {
   LiveRegisterSet liveRegs_;
 
   Register object_;
-  TypedOrValueRegister receiver_;
   ConstantOrRegister id_;
+  TypedOrValueRegister receiver_;
   ValueOperand output_;
 
  public:
   IonGetPropSuperIC(CacheKind kind, LiveRegisterSet liveRegs, Register object,
-                    TypedOrValueRegister receiver, const ConstantOrRegister& id,
+                    const ConstantOrRegister& id, TypedOrValueRegister receiver,
                     ValueOperand output)
       : IonIC(kind),
         liveRegs_(liveRegs),
         object_(object),
-        receiver_(receiver),
         id_(id),
+        receiver_(receiver),
         output_(output) {}
 
   Register object() const { return object_; }
-  TypedOrValueRegister receiver() const { return receiver_; }
   ConstantOrRegister id() const { return id_; }
+  TypedOrValueRegister receiver() const { return receiver_; }
   ValueOperand output() const { return output_; }
   LiveRegisterSet liveRegs() const { return liveRegs_; }
 
   [[nodiscard]] static bool update(JSContext* cx, HandleScript outerScript,
                                    IonGetPropSuperIC* ic, HandleObject obj,
-                                   HandleValue receiver, HandleValue idVal,
+                                   HandleValue idVal, HandleValue receiver,
                                    MutableHandleValue res);
 };
 
@@ -364,8 +387,9 @@ class IonBindNameIC : public IonIC {
   Register temp() const { return temp_; }
   LiveRegisterSet liveRegs() const { return liveRegs_; }
 
-  static JSObject* update(JSContext* cx, HandleScript outerScript,
-                          IonBindNameIC* ic, HandleObject envChain);
+  [[nodiscard]] static JSObject* update(JSContext* cx, HandleScript outerScript,
+                                        IonBindNameIC* ic,
+                                        HandleObject envChain);
 };
 
 class IonGetIteratorIC : public IonIC {
@@ -391,8 +415,9 @@ class IonGetIteratorIC : public IonIC {
   Register temp2() const { return temp2_; }
   LiveRegisterSet liveRegs() const { return liveRegs_; }
 
-  static JSObject* update(JSContext* cx, HandleScript outerScript,
-                          IonGetIteratorIC* ic, HandleValue value);
+  [[nodiscard]] static JSObject* update(JSContext* cx, HandleScript outerScript,
+                                        IonGetIteratorIC* ic,
+                                        HandleValue value);
 };
 
 class IonOptimizeSpreadCallIC : public IonIC {
@@ -415,35 +440,35 @@ class IonOptimizeSpreadCallIC : public IonIC {
   Register temp() const { return temp_; }
   LiveRegisterSet liveRegs() const { return liveRegs_; }
 
-  static bool update(JSContext* cx, HandleScript outerScript,
-                     IonOptimizeSpreadCallIC* ic, HandleValue value,
-                     bool* result);
+  [[nodiscard]] static bool update(JSContext* cx, HandleScript outerScript,
+                                   IonOptimizeSpreadCallIC* ic,
+                                   HandleValue value, bool* result);
 };
 
 class IonHasOwnIC : public IonIC {
   LiveRegisterSet liveRegs_;
 
-  TypedOrValueRegister value_;
   TypedOrValueRegister id_;
+  TypedOrValueRegister value_;
   Register output_;
 
  public:
-  IonHasOwnIC(LiveRegisterSet liveRegs, TypedOrValueRegister value,
-              TypedOrValueRegister id, Register output)
+  IonHasOwnIC(LiveRegisterSet liveRegs, TypedOrValueRegister id,
+              TypedOrValueRegister value, Register output)
       : IonIC(CacheKind::HasOwn),
         liveRegs_(liveRegs),
-        value_(value),
         id_(id),
+        value_(value),
         output_(output) {}
 
-  TypedOrValueRegister value() const { return value_; }
   TypedOrValueRegister id() const { return id_; }
+  TypedOrValueRegister value() const { return value_; }
   Register output() const { return output_; }
   LiveRegisterSet liveRegs() const { return liveRegs_; }
 
   [[nodiscard]] static bool update(JSContext* cx, HandleScript outerScript,
-                                   IonHasOwnIC* ic, HandleValue val,
-                                   HandleValue idVal, int32_t* res);
+                                   IonHasOwnIC* ic, HandleValue idVal,
+                                   HandleValue val, bool* res);
 };
 
 class IonCheckPrivateFieldIC : public IonIC {

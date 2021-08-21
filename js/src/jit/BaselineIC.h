@@ -271,7 +271,12 @@ class ICCacheIRStub final : public ICStub {
   void setNext(ICStub* stub) { next_ = stub; }
 
   const CacheIRStubInfo* stubInfo() const { return stubInfo_; }
-  uint8_t* stubDataStart();
+
+  const uint8_t* stubDataStart() const;
+  uint8_t* stubDataStart() {
+    return const_cast<uint8_t*>(
+        const_cast<const ICCacheIRStub*>(this)->stubDataStart());
+  }
 
   void trace(JSTracer* trc);
 
@@ -289,6 +294,14 @@ class ICCacheIRStub final : public ICStub {
   void setTypeData(TypeData data) { typeData_ = data; }
   TypeData typeData() const { return typeData_; }
 };
+
+inline constexpr uint32_t ICCacheIRStubDataOffset = sizeof(ICCacheIRStub);
+static_assert(ICCacheIRStubDataOffset % sizeof(uint64_t) == 0,
+              "Stub fields must be aligned");
+
+inline const uint8_t* ICCacheIRStub::stubDataStart() const {
+  return reinterpret_cast<const uint8_t*>(this) + ICCacheIRStubDataOffset;
+}
 
 // Assert stub size is what we expect to catch regressions.
 #ifdef JS_64BIT

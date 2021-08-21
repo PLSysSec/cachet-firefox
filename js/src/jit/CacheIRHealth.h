@@ -23,12 +23,11 @@ class ICFallbackStub;
 
 // [SMDOC] CacheIR Health Report
 //
-// The goal of CacheIR health report is to make the costlier
-// CacheIR stubs more apparent and easier to diagnose.
-// This is done by using the scores assigned to different CacheIROps in
-// CacheIROps.yaml (see the description of cost_estimate in the
-// aforementioned file for how these scores are determined), summing
-// the score of each op generated for a particular stub together, and displaying
+// The goal of CacheIR health report is to make the costlier CacheIR stubs more
+// apparent and easier to diagnose. This is done by using the scores assigned to
+// different CacheIROps in CacheIR.yaml (see the description of cost_estimate in
+// the aforementioned file for how these scores are determined), summing the
+// score of each op generated for a particular stub together, and displaying
 // this score for each stub in an inline cache. The higher the total stub score,
 // the more expensive the stub is.
 //

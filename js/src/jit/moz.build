@@ -239,12 +239,12 @@ GeneratedFile(
     inputs=["LIROps.yaml"],
 )
 
-# Generate jit/CacheIROpsGenerated.h from jit/CacheIROps.yaml
+# Generate jit/CacheIRGenerated.h from jit/CacheIR.yaml
 GeneratedFile(
-    "CacheIROpsGenerated.h",
+    "CacheIRGenerated.h",
     script="GenerateCacheIRFiles.py",
-    entry_point="generate_cacheirops_header",
-    inputs=["CacheIROps.yaml"],
+    entry_point="generate_cacheir_header",
+    inputs=["CacheIR.yaml"],
 )
 
 if CONFIG["FUZZING_INTERFACES"] or CONFIG["FUZZING_JS_FUZZILLI"]:

@@ -42,9 +42,8 @@ namespace jit {
 // IonCacheIRCompiler compiles CacheIR to IonIC native code.
 IonCacheIRCompiler::IonCacheIRCompiler(JSContext* cx,
                                        const CacheIRWriter& writer, IonIC* ic,
-                                       IonScript* ionScript,
-                                       uint32_t stubDataOffset)
-    : CacheIRCompiler(cx, writer, stubDataOffset, Mode::Ion,
+                                       IonScript* ionScript)
+    : CacheIRCompiler(cx, writer, ICStubEngine::IonIC,
                       StubFieldPolicy::Constant),
       writer_(writer),
       ic_(ic),
@@ -240,20 +239,6 @@ void CacheRegisterAllocator::restoreIonLiveRegisters(MacroAssembler& masm,
   availableRegsAfterSpill_.set() = GeneralRegisterSet::All();
 }
 
-static void* GetReturnAddressToIonCode(JSContext* cx) {
-  JSJitFrameIter frame(cx->activation()->asJit());
-  MOZ_ASSERT(frame.type() == FrameType::Exit,
-             "An exit frame is expected as update functions are called with a "
-             "VMFunction.");
-
-  void* returnAddr = frame.returnAddress();
-#ifdef DEBUG
-  ++frame;
-  MOZ_ASSERT(frame.isIonJS());
-#endif
-  return returnAddr;
-}
-
 // The AutoSaveLiveRegisters parameter is used to ensure registers were saved
 void IonCacheIRCompiler::prepareVMCall(MacroAssembler& masm,
                                        const AutoSaveLiveRegisters&) {
@@ -261,7 +246,7 @@ void IonCacheIRCompiler::prepareVMCall(MacroAssembler& masm,
       masm.framePushed(), FrameType::IonJS, IonICCallFrameLayout::Size());
   pushStubCodePointer();
   masm.Push(Imm32(descriptor));
-  masm.Push(ImmPtr(GetReturnAddressToIonCode(cx_)));
+  masm.Push(ImmPtr(ic_->fallbackCallAddr(ionScript_)));
 
   preparedForVMCall_ = true;
 }
@@ -276,252 +261,7 @@ bool IonCacheIRCompiler::init() {
 
   AllocatableGeneralRegisterSet available;
 
-  switch (ic_->kind()) {
-    case CacheKind::GetProp:
-    case CacheKind::GetElem: {
-      IonGetPropertyIC* ic = ic_->asGetPropertyIC();
-      ValueOperand output = ic->output();
-
-      available.add(output);
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(output);
-
-      MOZ_ASSERT(numInputs == 1 || numInputs == 2);
-
-      allocator.initInputLocation(0, ic->value());
-      if (numInputs > 1) {
-        allocator.initInputLocation(1, ic->id());
-      }
-      break;
-    }
-    case CacheKind::GetPropSuper:
-    case CacheKind::GetElemSuper: {
-      IonGetPropSuperIC* ic = ic_->asGetPropSuperIC();
-      ValueOperand output = ic->output();
-
-      available.add(output);
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(output);
-
-      MOZ_ASSERT(numInputs == 2 || numInputs == 3);
-
-      allocator.initInputLocation(0, ic->object(), JSVAL_TYPE_OBJECT);
-
-      if (ic->kind() == CacheKind::GetPropSuper) {
-        MOZ_ASSERT(numInputs == 2);
-        allocator.initInputLocation(1, ic->receiver());
-      } else {
-        MOZ_ASSERT(numInputs == 3);
-        allocator.initInputLocation(1, ic->id());
-        allocator.initInputLocation(2, ic->receiver());
-      }
-      break;
-    }
-    case CacheKind::SetProp:
-    case CacheKind::SetElem: {
-      IonSetPropertyIC* ic = ic_->asSetPropertyIC();
-
-      available.add(ic->temp());
-
-      liveRegs_.emplace(ic->liveRegs());
-
-      allocator.initInputLocation(0, ic->object(), JSVAL_TYPE_OBJECT);
-
-      if (ic->kind() == CacheKind::SetProp) {
-        MOZ_ASSERT(numInputs == 2);
-        allocator.initInputLocation(1, ic->rhs());
-      } else {
-        MOZ_ASSERT(numInputs == 3);
-        allocator.initInputLocation(1, ic->id());
-        allocator.initInputLocation(2, ic->rhs());
-      }
-      break;
-    }
-    case CacheKind::GetName: {
-      IonGetNameIC* ic = ic_->asGetNameIC();
-      ValueOperand output = ic->output();
-
-      available.add(output);
-      available.add(ic->temp());
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(output);
-
-      MOZ_ASSERT(numInputs == 1);
-      allocator.initInputLocation(0, ic->environment(), JSVAL_TYPE_OBJECT);
-      break;
-    }
-    case CacheKind::BindName: {
-      IonBindNameIC* ic = ic_->asBindNameIC();
-      Register output = ic->output();
-
-      available.add(output);
-      available.add(ic->temp());
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(
-          TypedOrValueRegister(MIRType::Object, AnyRegister(output)));
-
-      MOZ_ASSERT(numInputs == 1);
-      allocator.initInputLocation(0, ic->environment(), JSVAL_TYPE_OBJECT);
-      break;
-    }
-    case CacheKind::GetIterator: {
-      IonGetIteratorIC* ic = ic_->asGetIteratorIC();
-      Register output = ic->output();
-
-      available.add(output);
-      available.add(ic->temp1());
-      available.add(ic->temp2());
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(
-          TypedOrValueRegister(MIRType::Object, AnyRegister(output)));
-
-      MOZ_ASSERT(numInputs == 1);
-      allocator.initInputLocation(0, ic->value());
-      break;
-    }
-    case CacheKind::OptimizeSpreadCall: {
-      auto* ic = ic_->asOptimizeSpreadCallIC();
-      Register output = ic->output();
-
-      available.add(output);
-      available.add(ic->temp());
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(
-          TypedOrValueRegister(MIRType::Boolean, AnyRegister(output)));
-
-      MOZ_ASSERT(numInputs == 1);
-      allocator.initInputLocation(0, ic->value());
-      break;
-    }
-    case CacheKind::In: {
-      IonInIC* ic = ic_->asInIC();
-      Register output = ic->output();
-
-      available.add(output);
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(
-          TypedOrValueRegister(MIRType::Boolean, AnyRegister(output)));
-
-      MOZ_ASSERT(numInputs == 2);
-      allocator.initInputLocation(0, ic->key());
-      allocator.initInputLocation(
-          1, TypedOrValueRegister(MIRType::Object, AnyRegister(ic->object())));
-      break;
-    }
-    case CacheKind::HasOwn: {
-      IonHasOwnIC* ic = ic_->asHasOwnIC();
-      Register output = ic->output();
-
-      available.add(output);
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(
-          TypedOrValueRegister(MIRType::Boolean, AnyRegister(output)));
-
-      MOZ_ASSERT(numInputs == 2);
-      allocator.initInputLocation(0, ic->id());
-      allocator.initInputLocation(1, ic->value());
-      break;
-    }
-    case CacheKind::CheckPrivateField: {
-      IonCheckPrivateFieldIC* ic = ic_->asCheckPrivateFieldIC();
-      Register output = ic->output();
-
-      available.add(output);
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(
-          TypedOrValueRegister(MIRType::Boolean, AnyRegister(output)));
-
-      MOZ_ASSERT(numInputs == 2);
-      allocator.initInputLocation(0, ic->value());
-      allocator.initInputLocation(1, ic->id());
-      break;
-    }
-    case CacheKind::InstanceOf: {
-      IonInstanceOfIC* ic = ic_->asInstanceOfIC();
-      Register output = ic->output();
-      available.add(output);
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(
-          TypedOrValueRegister(MIRType::Boolean, AnyRegister(output)));
-
-      MOZ_ASSERT(numInputs == 2);
-      allocator.initInputLocation(0, ic->lhs());
-      allocator.initInputLocation(
-          1, TypedOrValueRegister(MIRType::Object, AnyRegister(ic->rhs())));
-      break;
-    }
-    case CacheKind::ToPropertyKey: {
-      IonToPropertyKeyIC* ic = ic_->asToPropertyKeyIC();
-      ValueOperand output = ic->output();
-
-      available.add(output);
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(TypedOrValueRegister(output));
-
-      MOZ_ASSERT(numInputs == 1);
-      allocator.initInputLocation(0, ic->input());
-      break;
-    }
-    case CacheKind::UnaryArith: {
-      IonUnaryArithIC* ic = ic_->asUnaryArithIC();
-      ValueOperand output = ic->output();
-
-      available.add(output);
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(TypedOrValueRegister(output));
-
-      MOZ_ASSERT(numInputs == 1);
-      allocator.initInputLocation(0, ic->input());
-      break;
-    }
-    case CacheKind::BinaryArith: {
-      IonBinaryArithIC* ic = ic_->asBinaryArithIC();
-      ValueOperand output = ic->output();
-
-      available.add(output);
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(TypedOrValueRegister(output));
-
-      MOZ_ASSERT(numInputs == 2);
-      allocator.initInputLocation(0, ic->lhs());
-      allocator.initInputLocation(1, ic->rhs());
-      break;
-    }
-    case CacheKind::Compare: {
-      IonCompareIC* ic = ic_->asCompareIC();
-      Register output = ic->output();
-
-      available.add(output);
-
-      liveRegs_.emplace(ic->liveRegs());
-      outputUnchecked_.emplace(
-          TypedOrValueRegister(MIRType::Boolean, AnyRegister(output)));
-
-      MOZ_ASSERT(numInputs == 2);
-      allocator.initInputLocation(0, ic->lhs());
-      allocator.initInputLocation(1, ic->rhs());
-      break;
-    }
-    case CacheKind::Call:
-    case CacheKind::TypeOf:
-    case CacheKind::ToBool:
-    case CacheKind::GetIntrinsic:
-    case CacheKind::NewArray:
-    case CacheKind::NewObject:
-      MOZ_CRASH("Unsupported IC");
-  }
+  switch (ic_->kind()) { CACHE_IR_ION_INIT_CASES_GENERATED }
 
   liveFloatRegs_ = LiveFloatRegisterSet(liveRegs_->fpus());
 
@@ -859,7 +599,7 @@ bool IonCacheIRCompiler::emitCallScriptedGetterResult(
       masm.framePushed(), FrameType::IonJS, IonICCallFrameLayout::Size());
   pushStubCodePointer();
   masm.Push(Imm32(descriptor));
-  masm.Push(ImmPtr(GetReturnAddressToIonCode(cx_)));
+  masm.Push(ImmPtr(ic_->fallbackCallAddr(ionScript_)));
 
   // The JitFrameLayout pushed below will be aligned to JitStackAlignment,
   // so we just have to make sure the stack is aligned after we push the
@@ -952,7 +692,7 @@ bool IonCacheIRCompiler::emitCallNativeGetterResult(
   masm.Push(argUintN);
   pushStubCodePointer();
 
-  if (!masm.icBuildOOLFakeExitFrame(GetReturnAddressToIonCode(cx_), save)) {
+  if (!masm.icBuildOOLFakeExitFrame(ic_->fallbackCallAddr(ionScript_), save)) {
     return false;
   }
   masm.enterFakeExitFrame(argJSContext, scratch, ExitFrameType::IonOOLNative);
@@ -1071,7 +811,7 @@ bool IonCacheIRCompiler::emitProxyGetResult(ObjOperandId objId,
 
   masm.loadJSContext(argJSContext);
 
-  if (!masm.icBuildOOLFakeExitFrame(GetReturnAddressToIonCode(cx_), save)) {
+  if (!masm.icBuildOOLFakeExitFrame(ic_->fallbackCallAddr(ionScript_), save)) {
     return false;
   }
   masm.enterFakeExitFrame(argJSContext, scratch, ExitFrameType::IonOOLProxy);
@@ -1447,7 +1187,7 @@ bool IonCacheIRCompiler::emitCallNativeSetter(ObjOperandId receiverId,
   masm.Push(argUintN);
   pushStubCodePointer();
 
-  if (!masm.icBuildOOLFakeExitFrame(GetReturnAddressToIonCode(cx_), save)) {
+  if (!masm.icBuildOOLFakeExitFrame(ic_->fallbackCallAddr(ionScript_), save)) {
     return false;
   }
   masm.enterFakeExitFrame(argJSContext, scratch, ExitFrameType::IonOOLNative);
@@ -1500,7 +1240,7 @@ bool IonCacheIRCompiler::emitCallScriptedSetter(ObjOperandId receiverId,
       masm.framePushed(), FrameType::IonJS, IonICCallFrameLayout::Size());
   pushStubCodePointer();
   masm.Push(Imm32(descriptor));
-  masm.Push(ImmPtr(GetReturnAddressToIonCode(cx_)));
+  masm.Push(ImmPtr(ic_->fallbackCallAddr(ionScript_)));
 
   // The JitFrameLayout pushed below will be aligned to JitStackAlignment,
   // so we just have to make sure the stack is aligned after we push the
@@ -1798,10 +1538,6 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
 
   JitZone* jitZone = cx->zone()->jitZone();
 
-  constexpr uint32_t stubDataOffset = sizeof(IonICStub);
-  static_assert(stubDataOffset % sizeof(uint64_t) == 0,
-                "Stub fields must be aligned");
-
   // Try to reuse a previously-allocated CacheIRStubInfo.
   CacheIRStubKey::Lookup lookup(kind, ICStubEngine::IonIC, writer.codeStart(),
                                 writer.codeLength());
@@ -1814,8 +1550,8 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
 
     // For Ion ICs, we don't track/use the makesGCCalls flag, so just pass true.
     bool makesGCCalls = true;
-    stubInfo = CacheIRStubInfo::New(kind, ICStubEngine::IonIC, makesGCCalls,
-                                    stubDataOffset, writer);
+    stubInfo =
+        CacheIRStubInfo::New(kind, ICStubEngine::IonIC, makesGCCalls, writer);
     if (!stubInfo) {
       return;
     }
@@ -1827,6 +1563,7 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
   }
 
   MOZ_ASSERT(stubInfo);
+  MOZ_ASSERT(stubInfo->engine() == ICStubEngine::IonIC);
 
   // Ensure we don't attach duplicate stubs. This can happen if a stub failed
   // for some reason and the IR generator doesn't check for exactly the same
@@ -1841,7 +1578,7 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
     return;
   }
 
-  size_t bytesNeeded = stubInfo->stubDataOffset() + stubInfo->stubDataSize();
+  size_t bytesNeeded = IonICStubDataOffset + stubInfo->stubDataSize();
 
   // Allocate the IonICStub in the optimized stub space. Ion stubs and
   // CacheIRStubInfo instances for Ion stubs can be purged on GC. That's okay
@@ -1859,7 +1596,7 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
   writer.copyStubData(newStub->stubDataStart());
 
   JitContext jctx(cx, nullptr);
-  IonCacheIRCompiler compiler(cx, writer, this, ionScript, stubDataOffset);
+  IonCacheIRCompiler compiler(cx, writer, this, ionScript);
   if (!compiler.init()) {
     return;
   }

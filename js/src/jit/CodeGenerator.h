@@ -82,11 +82,11 @@ class CodeGenerator final : public CodeGeneratorSpecific {
   void verifyOsiPointRegs(LSafepoint* safepoint);
 #endif
 
-  void callVMInternal(VMFunctionId id, LInstruction* ins,
-                      const Register* dynStack);
-
+  // Returns the offset of the call instruction.
   template <typename Fn, Fn fn>
-  void callVM(LInstruction* ins, const Register* dynStack = nullptr);
+  CodeOffset callVM(LInstruction* ins, const Register* dynStack = nullptr);
+  CodeOffset callVMInternal(VMFunctionId id, LInstruction* ins,
+                            const Register* dynStack);
 
   template <typename Fn, Fn fn, class ArgSeq, class StoreOutputTo>
   inline OutOfLineCode* oolCallVM(LInstruction* ins, const ArgSeq& args,

@@ -9,10 +9,14 @@
 
 #include "mozilla/Maybe.h"
 
+#include <type_traits>
+
 #include "NamespaceImports.h"
 
+#include "builtin/DataViewObject.h"
+#include "builtin/MapObject.h"
 #include "gc/Rooting.h"
-#include "jit/CacheIROpsGenerated.h"
+#include "jit/CacheIRGenerated.h"
 #include "jit/CompactBuffer.h"
 #include "jit/ICState.h"
 #include "jit/Simulator.h"
@@ -21,8 +25,10 @@
 #include "js/friend/XrayJitInfo.h"  // JS::XrayJitInfo
 #include "js/ScalarType.h"          // js::Scalar::Type
 #include "js/ValueArray.h"
+#include "vm/ArrayBufferObject.h"
 #include "vm/JSFunction.h"
 #include "vm/Shape.h"
+#include "vm/SharedArrayObject.h"
 #include "wasm/WasmConstants.h"
 #include "wasm/WasmValType.h"
 
@@ -83,6 +89,34 @@ struct Register;
 // (see IonGetPropertyIC for example) and use dynamic input/output registers,
 // so sharing stub code for Ion would be much more difficult.
 
+enum class CacheType : uint8_t {
+#define DEFINE_TYPE(Name) Name,
+  CACHE_IR_TYPES(DEFINE_TYPE)
+#undef DEFINE_TYPE
+};
+
+template <CacheType type>
+struct CacheTypesHelper;
+
+CACHE_IR_TYPES_HELPER_SPECIALIZATIONS_GENERATED
+
+template <CacheType type>
+using CacheTypes = typename CacheTypesHelper<type>::Type;
+
+extern const char* const CacheTypeNames[];
+
+constexpr const char* GetCacheTypeName(const CacheType type) {
+  return CacheTypeNames[uint8_t(type)];
+}
+
+constexpr MIRType MIRTypeFromCacheType(CacheType type) {
+  switch (type) { CACHE_IR_MIR_TYPE_CASES_GENERATED }
+}
+
+constexpr JSValueType ValueTypeFromCacheType(CacheType type) {
+  switch (type) { CACHE_IR_VALUE_TYPE_CASES_GENERATED }
+}
+
 // An OperandId represents either a cache input or a value returned by a
 // CacheIR instruction. Most code should use the ValOperandId and ObjOperandId
 // classes below. The ObjOperandId class represents an operand that's known to
@@ -92,7 +126,7 @@ class OperandId {
   static const uint16_t InvalidId = UINT16_MAX;
   uint16_t id_;
 
-  explicit OperandId(uint16_t id) : id_(id) {}
+  explicit OperandId(uint16_t id) : id_(id) { MOZ_ASSERT(valid()); }
 
  public:
   OperandId() : id_(InvalidId) {}
@@ -104,24 +138,28 @@ class ValOperandId : public OperandId {
  public:
   ValOperandId() = default;
   explicit ValOperandId(uint16_t id) : OperandId(id) {}
+  static constexpr CacheType Type = CacheType::Val;
 };
 
 class ValueTagOperandId : public OperandId {
  public:
   ValueTagOperandId() = default;
   explicit ValueTagOperandId(uint16_t id) : OperandId(id) {}
+  static constexpr CacheType Type = CacheType::ValueTag;
 };
 
 class IntPtrOperandId : public OperandId {
  public:
   IntPtrOperandId() = default;
   explicit IntPtrOperandId(uint16_t id) : OperandId(id) {}
+  static constexpr CacheType Type = CacheType::IntPtr;
 };
 
 class ObjOperandId : public OperandId {
  public:
   ObjOperandId() = default;
   explicit ObjOperandId(uint16_t id) : OperandId(id) {}
+  static constexpr CacheType Type = CacheType::Obj;
 
   bool operator==(const ObjOperandId& other) const { return id_ == other.id_; }
   bool operator!=(const ObjOperandId& other) const { return id_ != other.id_; }
@@ -137,85 +175,52 @@ class StringOperandId : public OperandId {
  public:
   StringOperandId() = default;
   explicit StringOperandId(uint16_t id) : OperandId(id) {}
+  static constexpr CacheType Type = CacheType::String;
 };
 
 class SymbolOperandId : public OperandId {
  public:
   SymbolOperandId() = default;
   explicit SymbolOperandId(uint16_t id) : OperandId(id) {}
+  static constexpr CacheType Type = CacheType::Symbol;
 };
 
 class BigIntOperandId : public OperandId {
  public:
   BigIntOperandId() = default;
   explicit BigIntOperandId(uint16_t id) : OperandId(id) {}
+  static constexpr CacheType Type = CacheType::BigInt;
 };
 
 class BooleanOperandId : public OperandId {
  public:
   BooleanOperandId() = default;
   explicit BooleanOperandId(uint16_t id) : OperandId(id) {}
+  static constexpr CacheType Type = CacheType::Boolean;
 };
 
 class Int32OperandId : public OperandId {
  public:
   Int32OperandId() = default;
   explicit Int32OperandId(uint16_t id) : OperandId(id) {}
+  static constexpr CacheType Type = CacheType::Int32;
 };
 
 class TypedOperandId : public OperandId {
   JSValueType type_;
 
  public:
-  MOZ_IMPLICIT TypedOperandId(ObjOperandId id)
-      : OperandId(id.id()), type_(JSVAL_TYPE_OBJECT) {}
-  MOZ_IMPLICIT TypedOperandId(StringOperandId id)
-      : OperandId(id.id()), type_(JSVAL_TYPE_STRING) {}
-  MOZ_IMPLICIT TypedOperandId(SymbolOperandId id)
-      : OperandId(id.id()), type_(JSVAL_TYPE_SYMBOL) {}
-  MOZ_IMPLICIT TypedOperandId(BigIntOperandId id)
-      : OperandId(id.id()), type_(JSVAL_TYPE_BIGINT) {}
-  MOZ_IMPLICIT TypedOperandId(BooleanOperandId id)
-      : OperandId(id.id()), type_(JSVAL_TYPE_BOOLEAN) {}
-  MOZ_IMPLICIT TypedOperandId(Int32OperandId id)
-      : OperandId(id.id()), type_(JSVAL_TYPE_INT32) {}
-
-  MOZ_IMPLICIT TypedOperandId(ValueTagOperandId val)
-      : OperandId(val.id()), type_(JSVAL_TYPE_UNKNOWN) {}
-  MOZ_IMPLICIT TypedOperandId(IntPtrOperandId id)
-      : OperandId(id.id()), type_(JSVAL_TYPE_UNKNOWN) {}
+  template <typename T,
+            typename = std::enable_if_t<std::is_base_of_v<OperandId, T> &&
+                                        T::Type != CacheType::Val>>
+  MOZ_IMPLICIT TypedOperandId(T id)
+      : OperandId(id.id()), type_(ValueTypeFromCacheType(T::Type)) {}
 
   TypedOperandId(ValOperandId val, JSValueType type)
       : OperandId(val.id()), type_(type) {}
 
   JSValueType type() const { return type_; }
 };
-
-#define CACHE_IR_KINDS(_) \
-  _(GetProp)              \
-  _(GetElem)              \
-  _(GetName)              \
-  _(GetPropSuper)         \
-  _(GetElemSuper)         \
-  _(GetIntrinsic)         \
-  _(SetProp)              \
-  _(SetElem)              \
-  _(BindName)             \
-  _(In)                   \
-  _(HasOwn)               \
-  _(CheckPrivateField)    \
-  _(TypeOf)               \
-  _(ToPropertyKey)        \
-  _(InstanceOf)           \
-  _(GetIterator)          \
-  _(OptimizeSpreadCall)   \
-  _(Compare)              \
-  _(ToBool)               \
-  _(Call)                 \
-  _(UnaryArith)           \
-  _(BinaryArith)          \
-  _(NewObject)            \
-  _(NewArray)
 
 enum class CacheKind : uint8_t {
 #define DEFINE_KIND(kind) kind,
@@ -225,9 +230,31 @@ enum class CacheKind : uint8_t {
 
 extern const char* const CacheKindNames[];
 
-#ifdef DEBUG
-extern size_t NumInputsForCacheKind(CacheKind kind);
-#endif
+constexpr const char* GetCacheKindName(const CacheKind kind) {
+  return CacheKindNames[uint8_t(kind)];
+}
+
+struct CacheKindSignature {
+  struct Input {
+    const char* const name;
+    const CacheType type;
+  };
+
+  const uint16_t numInputs;
+  const Input* const inputs;
+  const mozilla::Maybe<CacheType> output;
+};
+
+extern const CacheKindSignature CacheKindSignatures[];
+
+constexpr const CacheKindSignature& GetCacheKindSignature(
+    const CacheKind kind) {
+  return CacheKindSignatures[uint8_t(kind)];
+}
+
+constexpr uint16_t NumInputsForCacheKind(const CacheKind kind) {
+  return GetCacheKindSignature(kind).numInputs;
+}
 
 enum class CacheOp {
 #define DEFINE_OP(op, ...) op,
@@ -247,28 +274,34 @@ extern const CacheIROpInfo CacheIROpInfos[];
 extern const char* const CacheIROpNames[];
 extern const uint32_t CacheIROpHealth[];
 
+#define CACHE_IR_STUB_FIELD_TYPES(_)                   \
+  /* These fields take up a single word. */            \
+  _(RawInt32)                                          \
+  _(RawPointer)                                        \
+  _(Shape)                                             \
+  _(GetterSetter)                                      \
+  _(JSObject)                                          \
+  _(Symbol)                                            \
+  _(String)                                            \
+  _(BaseScript)                                        \
+  _(Id)                                                \
+  _(AllocSite)                                         \
+                                                       \
+  /* These fields take up 64 bits on all platforms. */ \
+  _(RawInt64)                                          \
+  _(Value)
+
 class StubField {
  public:
   enum class Type : uint8_t {
-    // These fields take up a single word.
-    RawInt32,
-    RawPointer,
-    Shape,
-    GetterSetter,
-    JSObject,
-    Symbol,
-    String,
-    BaseScript,
-    Id,
-    AllocSite,
-
-    // These fields take up 64 bits on all platforms.
-    RawInt64,
+#define DEFINE_TYPE(type) type,
+    CACHE_IR_STUB_FIELD_TYPES(DEFINE_TYPE)
+#undef DEFINE_TYPE
+        Limit,
     First64BitType = RawInt64,
-    Value,
-
-    Limit
   };
+
+  static const char* const TypeNames[];
 
   static bool sizeIsWord(Type type) {
     MOZ_ASSERT(type != Type::Limit);
@@ -526,6 +559,48 @@ enum class GuardClassKind : uint8_t {
   Map,
 };
 
+inline const JSClass* ClassForGuardClassKind(const JSRuntime* const runtime,
+                                             const GuardClassKind kind) {
+  switch (kind) {
+    case GuardClassKind::Array: {
+      return &ArrayObject::class_;
+    }
+    case GuardClassKind::ArrayBuffer: {
+      return &ArrayBufferObject::class_;
+    }
+    case GuardClassKind::SharedArrayBuffer: {
+      return &SharedArrayBufferObject::class_;
+    }
+    case GuardClassKind::DataView: {
+      return &DataViewObject::class_;
+    }
+    case GuardClassKind::MappedArguments: {
+      return &MappedArgumentsObject::class_;
+    }
+    case GuardClassKind::UnmappedArguments: {
+      return &UnmappedArgumentsObject::class_;
+    }
+    case GuardClassKind::WindowProxy: {
+      return runtime->maybeWindowProxyClass();
+    }
+    case GuardClassKind::JSFunction: {
+      return &JSFunction::class_;
+    }
+    case GuardClassKind::Set: {
+      return &SetObject::class_;
+    }
+    case GuardClassKind::Map: {
+      return &MapObject::class_;
+    }
+  }
+  MOZ_ASSERT_UNREACHABLE("Invalid GuardClassKind");
+}
+
+inline const JSClass* ClassForGuardClassKind(const JSContext* const cx,
+                                             const GuardClassKind kind) {
+  return ClassForGuardClassKind(cx->runtime(), kind);
+}
+
 // Some ops refer to shapes that might be in other zones. Instead of putting
 // cross-zone pointers in the caches themselves (which would complicate tracing
 // enormously), these ops instead contain wrappers for objects in the target
@@ -546,9 +621,9 @@ class MOZ_RAII CacheIRWriter : public JS::CustomAutoRooter {
 #endif
   CompactBufferWriter buffer_;
 
-  uint32_t nextOperandId_;
+  uint16_t numInputOperands_;
+  uint16_t nextOperandId_;
   uint32_t nextInstructionId_;
-  uint32_t numInputOperands_;
 
   TypeData typeData_;
 
@@ -759,7 +834,7 @@ class MOZ_RAII CacheIRWriter : public JS::CustomAutoRooter {
     buffer_.writeByte(uint8_t(kind));
   }
 
-  uint32_t newOperandId() { return nextOperandId_++; }
+  uint16_t newOperandId() { return nextOperandId_++; }
 
   CacheIRWriter(const CacheIRWriter&) = delete;
   CacheIRWriter& operator=(const CacheIRWriter&) = delete;
@@ -770,9 +845,9 @@ class MOZ_RAII CacheIRWriter : public JS::CustomAutoRooter {
 #ifdef DEBUG
         cx_(cx),
 #endif
+        numInputOperands_(0),
         nextOperandId_(0),
         nextInstructionId_(0),
-        numInputOperands_(0),
         stubDataSize_(0),
         tooLarge_(false),
         lastOffset_(0),
@@ -783,8 +858,8 @@ class MOZ_RAII CacheIRWriter : public JS::CustomAutoRooter {
 
   TrialInliningState trialInliningState() const { return trialInliningState_; }
 
-  uint32_t numInputOperands() const { return numInputOperands_; }
-  uint32_t numOperandIds() const { return nextOperandId_; }
+  uint16_t numInputOperands() const { return numInputOperands_; }
+  uint16_t numOperandIds() const { return nextOperandId_; }
   uint32_t numInstructions() const { return nextInstructionId_; }
 
   size_t numStubFields() const { return stubFields_.length(); }
@@ -792,8 +867,9 @@ class MOZ_RAII CacheIRWriter : public JS::CustomAutoRooter {
     return stubFields_[i].type();
   }
 
-  uint32_t setInputOperandId(uint32_t op) {
+  uint16_t setInputOperandId(uint16_t op) {
     MOZ_ASSERT(op == nextOperandId_);
+    MOZ_ASSERT(numInputOperands_ == nextOperandId_);
     nextOperandId_++;
     numInputOperands_++;
     return op;

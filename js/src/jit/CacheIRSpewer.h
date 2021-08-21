@@ -105,6 +105,10 @@ class CacheIRSpewer {
 extern void SpewCacheIROps(GenericPrinter& out, const char* prefix,
                            const CacheIRStubInfo* info);
 
+template <typename T>
+void SpewCacheIRStubFields(GenericPrinter& out, T* stub,
+                           const CacheIRStubInfo* stubInfo);
+
 }  // namespace jit
 }  // namespace js
 

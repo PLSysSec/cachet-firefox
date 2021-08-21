@@ -1,0 +1,3017 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# [SMDOC] CacheIR Opcodes
+# =======================
+# This section defines all CacheIR opcodes and their arguments.
+#
+# Each key in the mapping is an opcode name. Convention is to use a name ending
+# in *Result for ops that store to the IC's output register.
+#
+# Each op has the following attributes:
+#
+# shared
+# ======
+# If true, Baseline and Ion use the same CacheIRCompiler code for this op.
+# If false, the op must be implemented in both BaselineCacheIRCompiler and
+# IonCacheIRCompiler.
+#
+# transpile
+# =========
+# Whether this op can be transpiled to MIR by WarpCacheIRTranspiler.
+#
+# cost_estimate
+# =========
+# Score of an individual CacheIR Opcode's contribution to the overall score for
+# each stub. This score is based off of the cost of the masm calls made by the op's
+# implementation. The higher the score the more costly the op is.
+#
+# How to decide the cost estimate for a CacheIROp:
+# 0 points - Generates no code
+# 1 point - 1-5 simple masm ops, no callVM or callWithABI
+# 2 points - 5-20 masm ops, no callVM or callWithABI
+# 3 points - 20+ masm ops, no callVM or callWithABI
+# 4 points - callWithABI
+# 5 points - callVM
+# 6 points - more than one callWithABI or callVM
+#
+# In the case of the op not being shared, default to counting the Baseline
+# implementation.
+#
+# If the cost estimate is different based off of what branch of a conditional
+# is taken, assign the score of the branch with the highest cost.
+#
+# Note:
+# Currently, the scoring is tentative. It is in place to provide an
+# estimate for the cost of each op. The scoring will be refined.
+#
+# custom_writer (optional)
+# ========================
+# If true, the generated CacheIRWriter method will be private and has a trailing
+# '_'. This is useful for ops that need custom CacheIRWriter logic on top of the
+# generated code.
+#
+# args
+# ====
+# Mapping of arguments encoded in the bytecode stream. There are three argument
+# kinds:
+#
+# - Id (ObjId, ValId, ...): refers to either an IC input or a value defined by
+#   a previous CacheIR instruction. This is encoded as integer in the bytecode
+#   stream.
+#
+# - Field (ObjectField, StringField, ...): specific value is stored in the stub
+#   data and the bytecode stream stores the offset of this field. This means the
+#   CacheIR is not specialized for particular values and code can be shared.
+#
+# - Immediate (BoolImm, Int32Imm, JSOpImm, ...): a value baked directly into
+#   the bytecode stream. This is useful for bits of state that need to be
+#   available to all CacheIR compilers/transpilers.
+#
+# If there's an argument named 'result', the generated CacheIRWriter method will
+# return a new OperandId of this type.
+
+cache_ops:
+
+  ReturnFromIC:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+
+  GuardToObject:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    custom_writer: true
+    args:
+      input: ValId
+
+  GuardIsNullOrUndefined:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: ValId
+
+  GuardIsNull:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: ValId
+
+  GuardIsUndefined:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: ValId
+
+  GuardToBoolean:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    custom_writer: true
+    args:
+      input: ValId
+
+  GuardToString:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    custom_writer: true
+    args:
+      input: ValId
+
+  GuardToSymbol:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    custom_writer: true
+    args:
+      input: ValId
+
+  GuardToBigInt:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    custom_writer: true
+    args:
+      input: ValId
+
+  GuardIsNumber:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    custom_writer: true
+    args:
+      input: ValId
+
+  GuardToInt32:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    custom_writer: true
+    args:
+      input: ValId
+
+  GuardToNonGCThing:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: ValId
+
+  # If the Value is a boolean, convert it to int32.
+  GuardBooleanToInt32:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: ValId
+      result: Int32Id
+
+  GuardToInt32Index:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: ValId
+      result: Int32Id
+
+  Int32ToIntPtr:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: Int32Id
+      result: IntPtrId
+
+  GuardNumberToIntPtrIndex:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      input: NumberId
+      supportOOB: BoolImm
+      result: IntPtrId
+
+  GuardToInt32ModUint32:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      input: ValId
+      result: Int32Id
+
+  GuardToUint8Clamped:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      input: ValId
+      result: Int32Id
+
+  # Note: this doesn't accept doubles to avoid ambiguity about whether it includes
+  # int32 values. Use GuardIsNumber instead.
+  GuardNonDoubleType:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: ValId
+      type: ValueTypeImm
+
+  GuardShape:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      shape: ShapeField
+
+  GuardProto:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      proto: ObjectField
+
+  GuardNullProto:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  # Guard per GuardClassKind.
+  GuardClass:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      kind: GuardClassKindImm
+
+  # Guard on an arbitrary JSClass.
+  GuardAnyClass:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      clasp: RawPointerField
+
+  HasClassResult:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      clasp: RawPointerField
+
+  CallRegExpMatcherResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      regexp: ObjId
+      input: StringId
+      lastIndex: Int32Id
+
+  CallRegExpSearcherResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      regexp: ObjId
+      input: StringId
+      lastIndex: Int32Id
+
+  CallRegExpTesterResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      regexp: ObjId
+      input: StringId
+      lastIndex: Int32Id
+
+  RegExpFlagResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      regexp: ObjId
+      flagsMask: Int32Imm
+
+  CallSubstringKernelResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      str: StringId
+      begin: Int32Id
+      length: Int32Id
+
+  StringReplaceStringResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      str: StringId
+      pattern: StringId
+      replacement: StringId
+
+  StringSplitStringResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      str: StringId
+      separator: StringId
+
+  RegExpPrototypeOptimizableResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      proto: ObjId
+
+  RegExpInstanceOptimizableResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      regexp: ObjId
+      proto: ObjId
+
+  GetFirstDollarIndexResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      str: StringId
+
+  # Add a reference to a global in the compartment to keep it alive.
+  GuardCompartment:
+    shared: false
+    transpile: false
+    cost_estimate: 2
+    args:
+      obj: ObjId
+      global: ObjectField
+      compartment: RawPointerField
+
+  GuardIsExtensible:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  GuardIsNativeObject:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  GuardIsProxy:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  GuardIsNotProxy:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  GuardIsNotArrayBufferMaybeShared:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  GuardIsTypedArray:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  GuardHasProxyHandler:
+    shared: false
+    transpile: false
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      handler: RawPointerField
+
+  GuardIsNotDOMProxy:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  GuardSpecificObject:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      expected: ObjectField
+
+  GuardSpecificFunction:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    custom_writer: true
+    args:
+      fun: ObjId
+      expected: ObjectField
+      nargsAndFlags: RawInt32Field
+
+  GuardFunctionScript:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    custom_writer: true
+    args:
+      obj: ObjId
+      expected: BaseScriptField
+      nargsAndFlags: RawInt32Field
+
+  GuardSpecificAtom:
+    shared: false
+    transpile: true
+    cost_estimate: 4
+    args:
+      str: StringId
+      expected: AtomField
+
+  GuardSpecificSymbol:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+      sym: SymbolId
+      expected: SymbolField
+
+  GuardNoDenseElements:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  GuardStringToIndex:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      str: StringId
+      result: Int32Id
+
+  GuardStringToInt32:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      str: StringId
+      result: Int32Id
+
+  GuardStringToNumber:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      str: StringId
+      result: NumberId
+
+  BooleanToNumber:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      boolean: BooleanId
+      result: NumberId
+
+  GuardAndGetIterator:
+    shared: false
+    transpile: false
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      iter: ObjectField
+      enumeratorsAddr: RawPointerField
+      result: ObjId
+
+  GuardHasGetterSetter:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      id: IdField
+      getterSetter: GetterSetterField
+
+  GuardInt32IsNonNegative:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      index: Int32Id
+
+  GuardIndexIsValidUpdateOrAdd:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      index: Int32Id
+
+  GuardIndexGreaterThanDenseInitLength:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      index: Int32Id
+
+  GuardTagNotEqual:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      lhs: ValueTagId
+      rhs: ValueTagId
+
+  GuardXrayExpandoShapeAndDefaultProto:
+    shared: true
+    transpile: false
+    cost_estimate: 2
+    args:
+      obj: ObjId
+      shapeWrapper: ObjectField
+
+  GuardXrayNoExpando:
+    shared: true
+    transpile: false
+    cost_estimate: 2
+    args:
+      obj: ObjId
+
+  # Guard obj[slot] == expected.
+  GuardDynamicSlotIsSpecificObject:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      expected: ObjId
+      slot: RawInt32Field
+
+  GuardFixedSlotValue:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+      val: ValueField
+
+  GuardDynamicSlotValue:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+      val: ValueField
+
+  GuardNoAllocationMetadataBuilder:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      builderAddr: RawPointerField
+
+  GuardFunctionHasJitEntry:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      fun: ObjId
+      constructing: BoolImm
+
+  GuardFunctionHasNoJitEntry:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      fun: ObjId
+
+  GuardFunctionIsNonBuiltinCtor:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      fun: ObjId
+
+  GuardFunctionIsConstructor:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      fun: ObjId
+
+  GuardNotClassConstructor:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      fun: ObjId
+
+  GuardArrayIsPacked:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      array: ObjId
+
+  GuardArgumentsObjectFlags:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      flags: ByteImm
+
+  LoadObject:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      result: ObjId
+      obj: ObjectField
+
+  LoadProto:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      result: ObjId
+
+  LoadEnclosingEnvironment:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      result: ObjId
+
+  LoadWrapperTarget:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      result: ObjId
+
+  LoadValueTag:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      val: ValId
+      result: ValueTagId
+
+  LoadArgumentFixedSlot:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    custom_writer: true
+    args:
+      result: ValId
+      slotIndex: ByteImm
+
+  LoadArgumentDynamicSlot:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    custom_writer: true
+    args:
+      result: ValId
+      argc: Int32Id
+      slotIndex: ByteImm
+
+  TruncateDoubleToUInt32:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      input: NumberId
+      result: Int32Id
+
+  MegamorphicLoadSlotResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      name: PropertyNameField
+
+  MegamorphicLoadSlotByValueResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      id: ValId
+
+  MegamorphicStoreSlot:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      name: PropertyNameField
+      rhs: ValId
+
+  MegamorphicSetElement:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+      id: ValId
+      rhs: ValId
+      strict: BoolImm
+
+  MegamorphicHasPropResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      id: ValId
+      hasOwn: BoolImm
+
+  # See CacheIR.cpp 'DOM proxies' comment.
+  LoadDOMExpandoValue:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      result: ValId
+
+  LoadDOMExpandoValueGuardGeneration:
+    shared: false
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+      expandoAndGeneration: RawPointerField
+      generation: RawInt64Field
+      result: ValId
+
+  LoadDOMExpandoValueIgnoreGeneration:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      result: ValId
+
+  GuardDOMExpandoMissingOrGuardShape:
+    shared: false
+    transpile: true
+    cost_estimate: 2
+    args:
+      expando: ValId
+      shape: ShapeField
+
+  StoreFixedSlot:
+    shared: false
+    transpile: true
+    cost_estimate: 6
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+      rhs: ValId
+
+  StoreDynamicSlot:
+    shared: false
+    transpile: true
+    cost_estimate: 6
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+      rhs: ValId
+
+  AddAndStoreFixedSlot:
+    shared: false
+    transpile: true
+    cost_estimate: 6
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+      rhs: ValId
+      newShape: ShapeField
+
+  AddAndStoreDynamicSlot:
+    shared: false
+    transpile: true
+    cost_estimate: 6
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+      rhs: ValId
+      newShape: ShapeField
+
+  AllocateAndStoreDynamicSlot:
+    shared: false
+    transpile: true
+    cost_estimate: 6
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+      rhs: ValId
+      newShape: ShapeField
+      numNewSlots: RawInt32Field
+
+  StoreDenseElement:
+    shared: true
+    transpile: true
+    cost_estimate: 6
+    args:
+      obj: ObjId
+      index: Int32Id
+      rhs: ValId
+
+  StoreDenseElementHole:
+    shared: true
+    transpile: true
+    cost_estimate: 6
+    args:
+      obj: ObjId
+      index: Int32Id
+      rhs: ValId
+      handleAdd: BoolImm
+
+  ArrayPush:
+    shared: true
+    transpile: true
+    cost_estimate: 6
+    args:
+      obj: ObjId
+      rhs: ValId
+
+  ArrayJoinResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+      sep: StringId
+
+  PackedArrayPopResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      array: ObjId
+
+  PackedArrayShiftResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      array: ObjId
+
+  PackedArraySliceResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      templateObject: ObjectField
+      array: ObjId
+      begin: Int32Id
+      end: Int32Id
+
+  IsArrayResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      input: ValId
+
+  StoreFixedSlotUndefinedResult:
+    shared: true
+    transpile: true
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+      rhs: ValId
+
+  IsObjectResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: ValId
+
+  IsPackedArrayResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+
+  IsCallableResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      input: ValId
+
+  IsConstructorResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+
+  IsCrossRealmArrayConstructorResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+
+  IsTypedArrayResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+      isPossiblyWrapped: BoolImm
+
+  IsTypedArrayConstructorResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+
+  ArrayBufferViewByteOffsetInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  ArrayBufferViewByteOffsetDoubleResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  TypedArrayByteLengthInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+
+  TypedArrayByteLengthDoubleResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+
+  TypedArrayElementSizeResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+
+  GuardHasAttachedArrayBuffer:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+
+  FinishBoundFunctionInitResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      bound: ObjId
+      target: ObjId
+      argCount: Int32Id
+
+  NewArrayIteratorResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      templateObject: ObjectField
+
+  NewStringIteratorResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      templateObject: ObjectField
+
+  NewRegExpStringIteratorResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      templateObject: ObjectField
+
+  ObjectCreateResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      templateObject: ObjectField
+
+  NewArrayFromLengthResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      templateObject: ObjectField
+      length: Int32Id
+
+  NewTypedArrayFromLengthResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      templateObject: ObjectField
+      length: Int32Id
+
+  NewTypedArrayFromArrayBufferResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      templateObject: ObjectField
+      buffer: ObjId
+      byteOffset: ValId
+      length: ValId
+
+  NewTypedArrayFromArrayResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      templateObject: ObjectField
+      array: ObjId
+
+  NewStringObjectResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      templateObject: ObjectField
+      str: StringId
+
+  StringFromCharCodeResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      code: Int32Id
+
+  StringFromCodePointResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      code: Int32Id
+
+  StringToLowerCaseResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      str: StringId
+
+  StringToUpperCaseResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      str: StringId
+
+  MathAbsInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      input: Int32Id
+
+  MathAbsNumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: NumberId
+
+  MathClz32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: Int32Id
+
+  MathSignInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: Int32Id
+
+  MathSignNumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      input: NumberId
+
+  MathSignNumberToInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      input: NumberId
+
+  MathImulResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+
+  MathSqrtNumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: NumberId
+
+  MathFRoundNumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: NumberId
+
+  # Because Baseline stub code is shared by all realms in the Zone, this
+  # instruction loads a pointer to the RNG from a stub field.
+  MathRandomResult:
+    shared: false
+    transpile: true
+    cost_estimate: 3
+    args:
+      rng: RawPointerField
+
+  MathHypot2NumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      first: NumberId
+      second: NumberId
+
+  MathHypot3NumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      first: NumberId
+      second: NumberId
+      third: NumberId
+
+  MathHypot4NumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      first: NumberId
+      second: NumberId
+      third: NumberId
+      fourth: NumberId
+
+  MathAtan2NumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      lhs: NumberId
+      rhs: NumberId
+
+  MathFloorNumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      input: NumberId
+
+  MathCeilNumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      input: NumberId
+
+  MathTruncNumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      input: NumberId
+
+  MathFloorToInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      input: NumberId
+
+  MathCeilToInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: NumberId
+
+  MathTruncToInt32Result:
+    shared: true
+    transpile: true
+    args:
+      input: NumberId
+
+  MathRoundToInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: NumberId
+
+  Int32MinMax:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      isMax: BoolImm
+      first: Int32Id
+      second: Int32Id
+      result: Int32Id
+
+  NumberMinMax:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      isMax: BoolImm
+      first: NumberId
+      second: NumberId
+      result: NumberId
+
+  Int32MinMaxArrayResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      array: ObjId
+      isMax: BoolImm
+
+  NumberMinMaxArrayResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      array: ObjId
+      isMax: BoolImm
+
+  MathFunctionNumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      input: NumberId
+      fun: UnaryMathFunctionImm
+
+  ObjectToStringResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+
+  ReflectGetPrototypeOfResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+
+  StoreTypedArrayElement:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      obj: ObjId
+      elementType: ScalarTypeImm
+      index: IntPtrId
+      rhs: RawId
+      handleOOB: BoolImm
+
+  AtomicsCompareExchangeResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      index: IntPtrId
+      expected: RawId
+      replacement: RawId
+      elementType: ScalarTypeImm
+
+  AtomicsExchangeResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      index: IntPtrId
+      value: RawId
+      elementType: ScalarTypeImm
+
+  AtomicsAddResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      index: IntPtrId
+      value: RawId
+      elementType: ScalarTypeImm
+      forEffect: BoolImm
+
+  AtomicsSubResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      index: IntPtrId
+      value: RawId
+      elementType: ScalarTypeImm
+      forEffect: BoolImm
+
+  AtomicsAndResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      index: IntPtrId
+      value: RawId
+      elementType: ScalarTypeImm
+      forEffect: BoolImm
+
+  AtomicsOrResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      index: IntPtrId
+      value: RawId
+      elementType: ScalarTypeImm
+      forEffect: BoolImm
+
+  AtomicsXorResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      index: IntPtrId
+      value: RawId
+      elementType: ScalarTypeImm
+      forEffect: BoolImm
+
+  AtomicsLoadResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+      index: IntPtrId
+      elementType: ScalarTypeImm
+
+  AtomicsStoreResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+      index: IntPtrId
+      value: RawId
+      elementType: ScalarTypeImm
+
+  AtomicsIsLockFreeResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      value: Int32Id
+
+  CallNativeSetter:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    custom_writer: true
+    args:
+      receiver: ObjId
+      setter: ObjectField
+      rhs: ValId
+      sameRealm: BoolImm
+      nargsAndFlags: RawInt32Field
+
+  CallScriptedSetter:
+    shared: false
+    transpile: true
+    cost_estimate: 3
+    custom_writer: true
+    args:
+      receiver: ObjId
+      setter: ObjectField
+      rhs: ValId
+      sameRealm: BoolImm
+      nargsAndFlags: RawInt32Field
+
+  CallInlinedSetter:
+    shared: false
+    transpile: true
+    cost_estimate: 3
+    custom_writer: true
+    args:
+      receiver: ObjId
+      setter: ObjectField
+      rhs: ValId
+      icScript: RawPointerField
+      sameRealm: BoolImm
+      nargsAndFlags: RawInt32Field
+
+  CallDOMSetter:
+    shared: false
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      jitInfo: RawPointerField
+      rhs: ValId
+
+  CallSetArrayLength:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+      strict: BoolImm
+      rhs: ValId
+
+  ProxySet:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+      id: IdField
+      rhs: ValId
+      strict: BoolImm
+
+  ProxySetByValue:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+      id: ValId
+      rhs: ValId
+      strict: BoolImm
+
+  CallAddOrUpdateSparseElementHelper:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+      id: Int32Id
+      rhs: ValId
+      strict: BoolImm
+
+  CallInt32ToString:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      input: Int32Id
+      result: StringId
+
+  CallNumberToString:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      input: NumberId
+      result: StringId
+
+  BooleanToString:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      input: BooleanId
+      result: StringId
+
+  CallScriptedFunction:
+    shared: false
+    transpile: true
+    cost_estimate: 3
+    custom_writer: true
+    args:
+      callee: ObjId
+      argc: Int32Id
+      flags: CallFlagsImm
+
+  CallWasmFunction:
+    shared: false
+    transpile: true
+    cost_estimate: 3
+    args:
+      callee: ObjId
+      argc: Int32Id
+      flags: CallFlagsImm
+      funcExport: RawPointerField
+      instance: ObjectField
+
+  GuardWasmArg:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      arg: ValId
+      type: WasmValTypeImm
+
+  CallNativeFunction:
+    shared: false
+    transpile: true
+    cost_estimate: 4
+    custom_writer: true
+    args:
+      callee: ObjId
+      argc: Int32Id
+      flags: CallFlagsImm
+  #ifdef JS_SIMULATOR
+      target: RawPointerField
+  #else
+      ignoresReturnValue: BoolImm
+  #endif
+
+  CallDOMFunction:
+    shared: false
+    transpile: true
+    cost_estimate: 4
+    custom_writer: true
+    args:
+      callee: ObjId
+      argc: Int32Id
+      thisObj: ObjId
+      flags: CallFlagsImm
+  #ifdef JS_SIMULATOR
+      target: RawPointerField
+  #endif
+
+  CallClassHook:
+    shared: false
+    transpile: false
+    cost_estimate: 4
+    custom_writer: true
+    args:
+      callee: ObjId
+      argc: Int32Id
+      flags: CallFlagsImm
+      target: RawPointerField
+
+  CallInlinedFunction:
+    shared: false
+    transpile: true
+    cost_estimate: 4
+    custom_writer: true
+    args:
+      callee: ObjId
+      argc: Int32Id
+      icScript: RawPointerField
+      flags: CallFlagsImm
+
+
+  # Meta ops generate no code, but contain data for BaselineInspector.
+  MetaTwoByte:
+    shared: true
+    transpile: true
+    cost_estimate: 0
+    custom_writer: true
+    args:
+      functionObject: ObjectField
+      templateObject: ObjectField
+
+  LoadFixedSlotResult:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+
+  LoadFixedSlotTypedResult:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+      type: ValueTypeImm
+
+  LoadDynamicSlotResult:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+
+  LoadDenseElementResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+      index: Int32Id
+
+  LoadDenseElementHoleResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+      index: Int32Id
+
+  CallGetSparseElementResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+      index: Int32Id
+
+  LoadDenseElementExistsResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      index: Int32Id
+
+  LoadTypedArrayElementExistsResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+      index: IntPtrId
+
+  LoadDenseElementHoleExistsResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+      index: Int32Id
+
+  LoadTypedArrayElementResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      index: IntPtrId
+      elementType: ScalarTypeImm
+      handleOOB: BoolImm
+      forceDoubleForUint32: BoolImm
+
+  LoadDataViewValueResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      offset: IntPtrId
+      littleEndian: BooleanId
+      elementType: ScalarTypeImm
+      forceDoubleForUint32: BoolImm
+
+  StoreDataViewValueResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      offset: IntPtrId
+      value: RawId
+      littleEndian: BooleanId
+      elementType: ScalarTypeImm
+
+  LoadInt32ArrayLengthResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  LoadInt32ArrayLength:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      result: Int32Id
+
+  LoadArgumentsObjectArgResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+      index: Int32Id
+
+  LoadArgumentsObjectLengthResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  LoadFunctionLengthResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+
+  LoadFunctionNameResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      obj: ObjId
+
+  LoadArrayBufferByteLengthInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  LoadArrayBufferByteLengthDoubleResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  LoadArrayBufferViewLengthInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  LoadArrayBufferViewLengthDoubleResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  LoadStringCharResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      str: StringId
+      index: Int32Id
+
+  LoadStringCharCodeResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      str: StringId
+      index: Int32Id
+
+  LoadStringLengthResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      str: StringId
+
+  FrameIsConstructingResult:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+
+  LoadEnvironmentFixedSlotResult:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+
+  LoadEnvironmentDynamicSlotResult:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+      offset: RawInt32Field
+
+  LoadObjectResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      obj: ObjId
+
+  LoadStringResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      str: StringId
+
+  LoadSymbolResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      sym: SymbolId
+
+  LoadInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      val: Int32Id
+
+  LoadDoubleResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      val: NumberId
+
+  LoadBigIntResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      val: BigIntId
+
+  CallScriptedGetterResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    custom_writer: true
+    args:
+      receiver: ValId
+      getter: ObjectField
+      sameRealm: BoolImm
+      nargsAndFlags: RawInt32Field
+
+  CallInlinedGetterResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    custom_writer: true
+    args:
+      receiver: ValId
+      getter: ObjectField
+      icScript: RawPointerField
+      sameRealm: BoolImm
+      nargsAndFlags: RawInt32Field
+
+  CallNativeGetterResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    custom_writer: true
+    args:
+      receiver: ValId
+      getter: ObjectField
+      sameRealm: BoolImm
+      nargsAndFlags: RawInt32Field
+
+  CallDOMGetterResult:
+    shared: false
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      jitInfo: RawPointerField
+
+  ProxyGetResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+      id: IdField
+
+  ProxyGetByValueResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+      id: ValId
+
+  ProxyHasPropResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+      id: ValId
+      hasOwn: BoolImm
+
+  CallObjectHasSparseElementResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+      index: Int32Id
+
+  CallNativeGetElementResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      obj: ObjId
+      index: Int32Id
+
+  GetNextMapSetEntryForIteratorResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      iter: ObjId
+      resultArr: ObjId
+      isMap: BoolImm
+
+  LoadUndefinedResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+
+  LoadBooleanResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      val: BoolImm
+
+  LoadInt32Constant:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      val: RawInt32Field
+      result: Int32Id
+
+  LoadBooleanConstant:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      val: BoolImm
+      result: BooleanId
+
+  LoadUndefined:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      result: ValId
+
+  LoadConstantString:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      str: StringField
+      result: StringId
+
+  LoadConstantStringResult:
+    shared: false
+    transpile: true
+    cost_estimate: 1
+    args:
+      str: StringField
+
+  LoadInstanceOfObjectResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      lhs: ValId
+      proto: ObjId
+
+  LoadTypeOfObjectResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+
+  DoubleAddResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      lhs: NumberId
+      rhs: NumberId
+
+  DoubleSubResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      lhs: NumberId
+      rhs: NumberId
+
+  DoubleMulResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      lhs: NumberId
+      rhs: NumberId
+
+  DoubleDivResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      lhs: NumberId
+      rhs: NumberId
+
+  DoubleModResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      lhs: NumberId
+      rhs: NumberId
+
+  DoublePowResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      lhs: NumberId
+      rhs: NumberId
+
+  Int32AddResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+
+  Int32SubResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+
+  Int32MulResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+
+  Int32DivResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+
+  Int32ModResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+
+  Int32PowResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+
+  BigIntAddResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      lhs: BigIntId
+      rhs: BigIntId
+
+  BigIntSubResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      lhs: BigIntId
+      rhs: BigIntId
+
+  BigIntMulResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      lhs: BigIntId
+      rhs: BigIntId
+
+  BigIntDivResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      lhs: BigIntId
+      rhs: BigIntId
+
+  BigIntModResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      lhs: BigIntId
+      rhs: BigIntId
+
+  BigIntPowResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      lhs: BigIntId
+      rhs: BigIntId
+
+  Int32BitOrResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+
+  Int32BitXorResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+
+  Int32BitAndResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+
+  Int32LeftShiftResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+
+  Int32RightShiftResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+
+  Int32URightShiftResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      lhs: Int32Id
+      rhs: Int32Id
+      forceDouble: BoolImm
+
+  Int32NotResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: Int32Id
+
+  BigIntBitOrResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      lhs: BigIntId
+      rhs: BigIntId
+
+  BigIntBitXorResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      lhs: BigIntId
+      rhs: BigIntId
+
+  BigIntBitAndResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      lhs: BigIntId
+      rhs: BigIntId
+
+  BigIntLeftShiftResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      lhs: BigIntId
+      rhs: BigIntId
+
+  BigIntRightShiftResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      lhs: BigIntId
+      rhs: BigIntId
+
+  BigIntNotResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      input: BigIntId
+
+  Int32NegationResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: Int32Id
+
+  DoubleNegationResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: NumberId
+
+  BigIntNegationResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      input: BigIntId
+
+  Int32IncResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: Int32Id
+
+  Int32DecResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: Int32Id
+
+  DoubleIncResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: NumberId
+
+  DoubleDecResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: NumberId
+
+  BigIntIncResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      input: BigIntId
+
+  BigIntDecResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      input: BigIntId
+
+  LoadInt32TruthyResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      input: ValId
+
+  LoadDoubleTruthyResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      input: NumberId
+
+  LoadStringTruthyResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      str: StringId
+
+  LoadObjectTruthyResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      obj: ObjId
+
+  LoadBigIntTruthyResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      bigInt: BigIntId
+
+  LoadValueTruthyResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      input: ValId
+
+  LoadValueResult:
+    shared: false
+    transpile: false
+    cost_estimate: 1
+    args:
+      val: ValueField
+
+  LoadOperandResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      input: ValId
+
+  NewPlainObjectResult:
+    shared: false
+    transpile: true
+    cost_estimate: 4
+    args:
+      numFixedSlots: UInt32Imm
+      numDynamicSlots: UInt32Imm
+      allocKind: AllocKindImm
+      shape: ShapeField
+      site: AllocSiteField
+
+  NewArrayObjectResult:
+    shared: false
+    transpile: true
+    cost_estimate: 4
+    args:
+      arrayLength: UInt32Imm
+      shape: ShapeField
+      site: AllocSiteField
+
+  CallStringConcatResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      lhs: StringId
+      rhs: StringId
+
+  CallStringObjectConcatResult:
+    shared: false
+    transpile: false
+    cost_estimate: 5
+    args:
+      lhs: ValId
+      rhs: ValId
+
+  CallIsSuspendedGeneratorResult:
+    shared: true
+    transpile: false
+    cost_estimate: 2
+    args:
+      val: ValId
+
+  CompareStringResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      op: JSOpImm
+      lhs: StringId
+      rhs: StringId
+
+  CompareObjectResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      op: JSOpImm
+      lhs: ObjId
+      rhs: ObjId
+
+  CompareSymbolResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      op: JSOpImm
+      lhs: SymbolId
+      rhs: SymbolId
+
+  CompareInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      op: JSOpImm
+      lhs: Int32Id
+      rhs: Int32Id
+
+  CompareDoubleResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      op: JSOpImm
+      lhs: NumberId
+      rhs: NumberId
+
+  CompareBigIntResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      op: JSOpImm
+      lhs: BigIntId
+      rhs: BigIntId
+
+  CompareBigIntInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      op: JSOpImm
+      lhs: BigIntId
+      rhs: Int32Id
+
+  CompareBigIntNumberResult:
+    shared: true
+    transpile: true
+    cost_estimate: 4
+    args:
+      op: JSOpImm
+      lhs: BigIntId
+      rhs: NumberId
+
+  CompareBigIntStringResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      op: JSOpImm
+      lhs: BigIntId
+      rhs: StringId
+
+  CompareNullUndefinedResult:
+    shared: true
+    transpile: true
+    cost_estimate: 2
+    args:
+      op: JSOpImm
+      isUndefined: BoolImm
+      input: ValId
+
+  CompareDoubleSameValueResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      lhs: NumberId
+      rhs: NumberId
+
+  SameValueResult:
+    shared: false
+    transpile: true
+    cost_estimate: 4
+    args:
+      lhs: ValId
+      rhs: ValId
+
+  IndirectTruncateInt32Result:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      val: Int32Id
+
+  BigIntAsIntNResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      bits: Int32Id
+      bigInt: BigIntId
+
+  BigIntAsUintNResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      bits: Int32Id
+      bigInt: BigIntId
+
+  SetHasResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      set: ObjId
+      val: ValId
+
+  SetHasNonGCThingResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      set: ObjId
+      val: ValId
+
+  SetHasStringResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      set: ObjId
+      str: StringId
+
+  SetHasSymbolResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      set: ObjId
+      sym: SymbolId
+
+  SetHasBigIntResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      set: ObjId
+      bigInt: BigIntId
+
+  SetHasObjectResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      set: ObjId
+      obj: ObjId
+
+  MapHasResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      map: ObjId
+      val: ValId
+
+  MapHasNonGCThingResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      map: ObjId
+      val: ValId
+
+  MapHasStringResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      map: ObjId
+      str: StringId
+
+  MapHasSymbolResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      map: ObjId
+      sym: SymbolId
+
+  MapHasBigIntResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      map: ObjId
+      bigInt: BigIntId
+
+  MapHasObjectResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      map: ObjId
+      obj: ObjId
+
+  MapGetResult:
+    shared: true
+    transpile: true
+    cost_estimate: 5
+    args:
+      map: ObjId
+      val: ValId
+
+  MapGetNonGCThingResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      map: ObjId
+      val: ValId
+
+  MapGetStringResult:
+    shared: false
+    transpile: true
+    cost_estimate: 5
+    args:
+      map: ObjId
+      str: StringId
+
+  MapGetSymbolResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      map: ObjId
+      sym: SymbolId
+
+  MapGetBigIntResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      map: ObjId
+      bigInt: BigIntId
+
+  MapGetObjectResult:
+    shared: true
+    transpile: true
+    cost_estimate: 3
+    args:
+      map: ObjId
+      obj: ObjId
+
+  CallPrintString:
+    shared: true
+    transpile: false
+    cost_estimate: 1
+    args:
+      str: StaticStringImm
+
+  Breakpoint:
+    shared: true
+    transpile: false
+    cost_estimate: 1
+    args:
+
+  WrapResult:
+    shared: true
+    transpile: false
+    cost_estimate: 4
+    args:
+
+  Bailout:
+    shared: true
+    transpile: true
+    cost_estimate: 0
+    args:
+
+  AssertRecoveredOnBailoutResult:
+    shared: true
+    transpile: true
+    cost_estimate: 1
+    args:
+      val: ValId
+      mustBeRecovered: BoolImm
+
+# [SMDOC] CacheIR IC Kinds
+# ========================
+# This section defines all CacheIR IC kinds and their inputs and outputs.
+#
+# Each key in the mapping is the name of a CacheKind.
+#
+# Each kind has the following attributes (all optional):
+#
+# inputs
+# ======
+# Mapping of input name to input type for the inputs that IC stubs of this kind
+# expect to receive.
+#
+# output
+# ======
+# Type stored to the IC's output register, if applicable.
+#
+# ion_ic
+# ======
+# If the CacheKind is supported by the Ion engine, this attribute should specify
+# the name of the IonIC that implements it. See "[SMDOC] Ion CacheIR ICs" below.
+
+cache_kinds:
+
+  GetProp:
+    inputs:
+      value: Val
+    output: Val
+    ion_ic: GetProperty
+
+  GetElem:
+    inputs:
+      value: Val
+      id: Val
+    output: Val
+    ion_ic: GetProperty
+
+  GetName:
+    inputs:
+      environment: Obj
+    output: Val
+    ion_ic: GetName
+
+  GetPropSuper:
+    inputs:
+      object: Obj
+      receiver: Val
+    output: Val
+    ion_ic: GetPropSuper
+
+  GetElemSuper:
+    inputs:
+      object: Obj
+      id: Val
+      receiver: Val
+    output: Val
+    ion_ic: GetPropSuper
+
+  GetIntrinsic:
+    output: Val
+
+  SetProp:
+    inputs:
+      object: Obj
+      rhs: Val
+    ion_ic: SetProperty
+
+  SetElem:
+    inputs:
+      object: Obj
+      id: Val
+      rhs: Val
+    ion_ic: SetProperty
+
+  BindName:
+    inputs:
+      environment: Obj
+    output: Obj
+    ion_ic: BindName
+
+  In:
+    inputs:
+      key: Val
+      object: Obj
+    output: Boolean
+    ion_ic: In
+
+  HasOwn:
+    inputs:
+      id: Val
+      value: Val
+    output: Boolean
+    ion_ic: HasOwn
+
+  CheckPrivateField:
+    inputs:
+      value: Val
+      id: Val
+    output: Boolean
+    ion_ic: CheckPrivateField
+
+  TypeOf:
+    inputs:
+      value: Val
+    output: Val
+
+  ToPropertyKey:
+    inputs:
+      input: Val
+    output: Val
+    ion_ic: ToPropertyKey
+
+  InstanceOf:
+    inputs:
+      lhs: Val
+      rhs: Obj
+    output: Boolean
+    ion_ic: InstanceOf
+
+  GetIterator:
+    inputs:
+      value: Val
+    output: Obj
+    ion_ic: GetIterator
+
+  OptimizeSpreadCall:
+    inputs:
+      value: Val
+    output: Boolean
+    ion_ic: OptimizeSpreadCall
+
+  Compare:
+    inputs:
+      lhs: Val
+      rhs: Val
+    output: Boolean
+    ion_ic: Compare
+
+  ToBool:
+    inputs:
+      value: Val
+    output: Val
+
+  Call:
+    inputs:
+      callee: Val
+    output: Val
+
+  UnaryArith:
+    inputs:
+      input: Val
+    output: Val
+    ion_ic: UnaryArith
+
+  BinaryArith:
+    inputs:
+      lhs: Val
+      rhs: Val
+    output: Val
+    ion_ic: BinaryArith
+
+  NewObject:
+    output: Val
+
+  NewArray:
+    output: Val
+
+# [SMDOC] Ion CacheIR ICs
+# =======================
+# This section defines metadata for the Ion implementations of supported
+# CacheKinds. They correspond to the 'ion_ic' attributes in the table above.
+# Only IonICs with non-default attributes (e.g., IonICs requiring temp
+# registers) need to be defined here. IonICs referenced by CacheKinds and not
+# defined here will be automatically instantiated with values inferred from the
+# CacheKind definitions.
+#
+# Each key in the mapping is the name of an IonIC. An IonIC named 'GetProperty'
+# implies a corresponding C++ class named 'IonGetPropertyIC'.
+#
+# Each IonIC definition has the following attributes (all optional):
+#
+# inputs
+# ======
+# Mapping of input name to input type for the inputs that IC stubs backed by
+# this IonIC expect to receive. Can be expressed as just a list of input names,
+# in which case input types are inferred from the CacheKind definitions that
+# reference this IonIC.
+#
+# This only needs to be explicitly defined when one or more inputs expected by
+# this IonIC are elided by a CacheKind that refers to it. For example,
+# the 'GetProperty' IonIC implements the 'GetElem' CacheKind for the Ion engine,
+# which expects a 'value' to read a property from and the 'id' of the property
+# to read. However, 'GetProperty' is also responsible for 'GetProp', which
+# takes just a 'value' input at runtime and holds the 'id' constant. Because
+# these input lists differ, the inputs to the 'GetProperty' IonIC cannot be
+# automatically inferred.
+#
+# temps
+# ======
+# The number of temp registers required by stubs generated by this IonIC. This
+# only needs to be explicitly defined when non-zero.
+
+ion_ics:
+
+  GetProperty:
+    inputs: [value, id]
+
+  GetName:
+    temps: 1
+
+  GetPropSuper:
+    inputs: [object, id, receiver]
+
+  SetProperty:
+    inputs: [object, id, rhs]
+    temps: 1
+
+  BindName:
+    temps: 1
+
+  GetIterator:
+    temps: 2
+
+  OptimizeSpreadCall:
+    temps: 1
