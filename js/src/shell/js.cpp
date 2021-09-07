@@ -4906,7 +4906,9 @@ class ICStubObject : public NativeObject {
     }
     if (stubInfo.hasStubFields()) {
       sprinter.putChar('\n');
-      SpewCacheIRStubFields(sprinter, stubData, &stubInfo);
+      if (!SpewCacheIRStubFields(cx, sprinter, stubData, &stubInfo)) {
+        return false;
+      }
     }
 
     const JS::ConstUTF8CharsZ utf8(sprinter.string(),

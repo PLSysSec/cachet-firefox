@@ -110,8 +110,10 @@ extern void SpewCacheIROps(GenericPrinter& out, const char* prefix,
 #endif /* JS_CACHEIR_SPEW || !JS_DISABLE_SHELL */
 
 #ifndef JS_DISABLE_SHELL
-void SpewCacheIRStubFields(GenericPrinter& out, uint8_t* stubData,
-                           const CacheIRStubInfo* stubInfo);
+
+bool SpewCacheIRStubFields(JSContext* cx, GenericPrinter& out,
+                           uint8_t* stubData, const CacheIRStubInfo* stubInfo);
+
 #endif /* !JS_DISABLE_SHELL */
 
 }  // namespace jit

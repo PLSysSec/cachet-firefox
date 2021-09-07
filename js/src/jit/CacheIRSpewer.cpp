@@ -14,7 +14,9 @@
 
 #include "jsmath.h"
 
+#include "gc/GC.h"  // js::gc::AutoSuppressGC
 #include "jit/CacheIRCompiler.h"
+#include "js/HashTable.h"
 #include "js/ScalarType.h"  // js::Scalar::Type
 #include "util/GetPidProvider.h"
 #include "util/Text.h"
@@ -485,15 +487,20 @@ void CacheIRSpewer::endCache() {
 
 #ifndef JS_DISABLE_SHELL
 
-void jit::SpewCacheIRStubFields(GenericPrinter& out, uint8_t* stubData,
+bool jit::SpewCacheIRStubFields(JSContext* cx, GenericPrinter& out,
+                                uint8_t* stubData,
                                 const CacheIRStubInfo* stubInfo) {
+  gc::AutoSuppressGC nogc(cx);
+
   uint32_t field(0);
   size_t offset(0);
+
+  HashSet<Shape*> shapes(cx);
 
   while (true) {
     const StubField::Type fieldType(stubInfo->fieldType(field));
     if (fieldType == StubField::Type::Limit) {
-      return;  // Done.
+      break;  // Done.
     }
 
     const char* const fieldTypeName(StubField::TypeNames[uint8_t(fieldType)]);
@@ -512,7 +519,14 @@ void jit::SpewCacheIRStubFields(GenericPrinter& out, uint8_t* stubData,
       case StubField::Type::Shape: {
         GCPtrShape& shapeField =
             stubInfo->getStubField<Shape*>(stubData, offset);
-        out.printf("%p\n", shapeField.get());
+        Shape* const shape(shapeField.get());
+        out.printf("%p\n", shape);
+        auto ptr = shapes.lookupForAdd(shape);
+        if (!ptr) {
+          if (!shapes.add(ptr, shape)) {
+            return false;
+          }
+        }
         break;
       }
       case StubField::Type::GetterSetter: {
@@ -575,6 +589,17 @@ void jit::SpewCacheIRStubFields(GenericPrinter& out, uint8_t* stubData,
     field++;
     offset += StubField::sizeInBytes(fieldType);
   }
+
+  for (auto iter = shapes.iter(); !iter.done(); iter.next()) {
+    Shape* const shape(iter.get());
+    out.putChar('\n');
+    out.printf("ShapeNumFixedSlots            %p, %" PRIu32 "\n", shape,
+               shape->numFixedSlots());
+    out.printf("ShapeSlotSpan                 %p, %" PRIu32 "\n", shape,
+               shape->slotSpan());
+  }
+
+  return true;
 }
 
 #endif /* !JS_DISABLE_SHELL */
