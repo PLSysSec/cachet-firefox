@@ -7,18 +7,18 @@
 #ifndef jit_CacheIRSpewer_h
 #define jit_CacheIRSpewer_h
 
-#ifdef JS_CACHEIR_SPEW
+#include "mozilla/Maybe.h"
 
-#  include "mozilla/Maybe.h"
-
-#  include "jit/CacheIR.h"
-#  include "js/TypeDecls.h"
-#  include "threading/LockGuard.h"
-#  include "vm/JSONPrinter.h"
-#  include "vm/MutexIDs.h"
+#include "jit/CacheIR.h"
+#include "js/TypeDecls.h"
+#include "threading/LockGuard.h"
+#include "vm/JSONPrinter.h"
+#include "vm/MutexIDs.h"
 
 namespace js {
 namespace jit {
+
+#ifdef JS_CACHEIR_SPEW
 
 class CacheIRSpewer {
   Mutex outputLock_;
@@ -102,16 +102,19 @@ class CacheIRSpewer {
   };
 };
 
+#endif /* JS_CACHEIR_SPEW */
+
+#if defined(JS_CACHEIR_SPEW) || !defined(JS_DISABLE_SHELL)
 extern void SpewCacheIROps(GenericPrinter& out, const char* prefix,
                            const CacheIRStubInfo* info);
+#endif /* JS_CACHEIR_SPEW || !JS_DISABLE_SHELL */
 
-template <typename T>
-void SpewCacheIRStubFields(GenericPrinter& out, T* stub,
+#ifndef JS_DISABLE_SHELL
+void SpewCacheIRStubFields(GenericPrinter& out, uint8_t* stubData,
                            const CacheIRStubInfo* stubInfo);
+#endif /* !JS_DISABLE_SHELL */
 
 }  // namespace jit
 }  // namespace js
-
-#endif /* JS_CACHEIR_SPEW */
 
 #endif /* jit_CacheIRSpewer_h */

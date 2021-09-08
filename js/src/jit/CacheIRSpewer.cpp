@@ -4,31 +4,31 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifdef JS_CACHEIR_SPEW
+#include "jit/CacheIRSpewer.h"
 
-#  include "jit/CacheIRSpewer.h"
+#include "mozilla/Sprintf.h"
+#include "mozilla/TextUtils.h"
 
-#  include "mozilla/Sprintf.h"
-#  include "mozilla/TextUtils.h"
+#include <algorithm>
+#include <stdarg.h>
 
-#  include <algorithm>
-#  include <stdarg.h>
+#include "jsmath.h"
 
-#  include "jsmath.h"
+#include "jit/CacheIRCompiler.h"
+#include "js/ScalarType.h"  // js::Scalar::Type
+#include "util/GetPidProvider.h"
+#include "util/Text.h"
+#include "vm/JSFunction.h"
+#include "vm/JSObject.h"
+#include "vm/JSScript.h"
 
-#  include "jit/CacheIRCompiler.h"
-#  include "js/ScalarType.h"  // js::Scalar::Type
-#  include "util/GetPidProvider.h"
-#  include "util/Text.h"
-#  include "vm/JSFunction.h"
-#  include "vm/JSObject.h"
-#  include "vm/JSScript.h"
-
-#  include "vm/JSObject-inl.h"
-#  include "vm/Realm-inl.h"
+#include "vm/JSObject-inl.h"
+#include "vm/Realm-inl.h"
 
 using namespace js;
 using namespace js::jit;
+
+#if defined(JS_CACHEIR_SPEW) || !defined(JS_DISABLE_SHELL)
 
 // Text spewer for CacheIR ops that can be used with JitSpew.
 // Output looks like this:
@@ -47,7 +47,7 @@ class MOZ_RAII CacheIROpsJitSpewer {
 
   void spewOp(CacheOp op) {
     const char* opName = CacheIROpNames[size_t(op)];
-    out_.printf("%s%-30s", prefix_, opName);
+    out_.printf("%s%-29s ", prefix_, opName);
   }
   void spewOpEnd() { out_.printf("\n"); }
 
@@ -146,6 +146,10 @@ void jit::SpewCacheIROps(GenericPrinter& out, const char* prefix,
   CacheIROpsJitSpewer spewer(out, prefix);
   spewer.spew(reader);
 }
+
+#endif /* JS_CACHEIR_SPEW || !JS_DISABLE_SHELL */
+
+#ifdef JS_CACHEIR_SPEW
 
 // JSON spewer for CacheIR ops. Output looks like this:
 //
@@ -477,8 +481,11 @@ void CacheIRSpewer::endCache() {
   json_.ref().endObject();
 }
 
-template <typename T>
-void jit::SpewCacheIRStubFields(GenericPrinter& out, T* stub,
+#endif /* JS_CACHEIR_SPEW */
+
+#ifndef JS_DISABLE_SHELL
+
+void jit::SpewCacheIRStubFields(GenericPrinter& out, uint8_t* stubData,
                                 const CacheIRStubInfo* stubInfo) {
   uint32_t field(0);
   size_t offset(0);
@@ -494,65 +501,68 @@ void jit::SpewCacheIRStubFields(GenericPrinter& out, T* stub,
                12 - int(strlen(fieldTypeName)), "", offset);
     switch (fieldType) {
       case StubField::Type::RawInt32: {
-        out.printf("%i\n", int(stubInfo->getStubRawWord(stub, offset)));
+        out.printf("%i\n", int(stubInfo->getStubRawWord(stubData, offset)));
         break;
       }
       case StubField::Type::RawPointer: {
-        out.printf("%" PRIxPTR "\n", stubInfo->getStubRawWord(stub, offset));
+        out.printf("%" PRIxPTR "\n",
+                   stubInfo->getStubRawWord(stubData, offset));
         break;
       }
       case StubField::Type::Shape: {
-        GCPtrShape& shapeField = stubInfo->getStubField<Shape*>(stub, offset);
+        GCPtrShape& shapeField =
+            stubInfo->getStubField<Shape*>(stubData, offset);
         out.printf("%p\n", shapeField.get());
         break;
       }
       case StubField::Type::GetterSetter: {
         GCPtrGetterSetter& getterSetterField =
-            stubInfo->getStubField<GetterSetter*>(stub, offset);
+            stubInfo->getStubField<GetterSetter*>(stubData, offset);
         out.printf("%p\n", getterSetterField.get());
         break;
       }
       case StubField::Type::JSObject: {
         GCPtrObject& objectField =
-            stubInfo->getStubField<JSObject*>(stub, offset);
+            stubInfo->getStubField<JSObject*>(stubData, offset);
         out.printf("%p\n", objectField.get());
         break;
       }
       case StubField::Type::Symbol: {
         GCPtr<JS::Symbol*>& symbolField =
-            stubInfo->getStubField<JS::Symbol*>(stub, offset);
+            stubInfo->getStubField<JS::Symbol*>(stubData, offset);
         out.printf("%p\n", symbolField.get());
         break;
       }
       case StubField::Type::String: {
         GCPtrString& stringField =
-            stubInfo->getStubField<JSString*>(stub, offset);
+            stubInfo->getStubField<JSString*>(stubData, offset);
         out.printf("%p\n", stringField.get());
         break;
       }
       case StubField::Type::BaseScript: {
         GCPtr<BaseScript*>& baseScriptField =
-            stubInfo->getStubField<BaseScript*>(stub, offset);
+            stubInfo->getStubField<BaseScript*>(stubData, offset);
         out.printf("%p\n", baseScriptField.get());
         break;
       }
       case StubField::Type::Id: {
-        GCPtrId& idField = stubInfo->getStubField<jsid>(stub, offset);
+        GCPtrId& idField = stubInfo->getStubField<jsid>(stubData, offset);
         out.printf("%p\n", (void*)JSID_BITS(idField.get()));
         break;
       }
       case StubField::Type::AllocSite: {
         out.printf("%p\n",
-                   stubInfo->getPtrStubField<gc::AllocSite>(stub, offset));
+                   stubInfo->getPtrStubField<gc::AllocSite>(stubData, offset));
         break;
       }
       case StubField::Type::RawInt64: {
-        out.printf("%" PRIi64 "\n", stubInfo->getStubRawInt64(stub, offset));
+        out.printf("%" PRIi64 "\n",
+                   stubInfo->getStubRawInt64(stubData, offset));
         break;
       }
       case StubField::Type::Value: {
         GCPtrValue& valueField =
-            stubInfo->getStubField<JS::Value>(stub, offset);
+            stubInfo->getStubField<JS::Value>(stubData, offset);
         out.printf("%016" PRIx64 "\n", valueField.get().asRawBits());
         break;
       }
@@ -567,7 +577,4 @@ void jit::SpewCacheIRStubFields(GenericPrinter& out, T* stub,
   }
 }
 
-template void jit::SpewCacheIRStubFields(GenericPrinter& out, uint8_t* stubData,
-                                         const CacheIRStubInfo* stubInfo);
-
-#endif /* JS_CACHEIR_SPEW */
+#endif /* !JS_DISABLE_SHELL */

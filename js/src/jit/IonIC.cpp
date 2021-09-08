@@ -16,10 +16,6 @@
 using namespace js;
 using namespace js::jit;
 
-void IonIC::resetCodeRaw(IonScript* ionScript) {
-  codeRaw_ = fallbackAddr(ionScript);
-}
-
 uint8_t* IonIC::fallbackAddr(IonScript* ionScript) const {
   return ionScript->method()->raw() + fallbackOffset_;
 }
@@ -95,14 +91,18 @@ void IonIC::discardStubs(Zone* zone, IonScript* ionScript) {
   }
 #endif
 
+  reinit(ionScript);
+}
+
+void IonIC::reinit(IonScript* ionScript) {
   firstStub_ = nullptr;
-  resetCodeRaw(ionScript);
+  codeRaw_ = fallbackAddr(ionScript);
   state_.trackUnlinkedAllStubs();
 }
 
-void IonIC::reset(Zone* zone, IonScript* ionScript) {
+void IonIC::reset(Zone* zone, IonScript* ionScript, ICState::Mode mode) {
   discardStubs(zone, ionScript);
-  state_.reset();
+  state_.reset(mode);
 }
 
 void IonIC::trace(JSTracer* trc, IonScript* ionScript) {

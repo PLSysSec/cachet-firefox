@@ -812,27 +812,38 @@ void IonScript::preWriteBarrier(Zone* zone, IonScript* ionScript) {
   PreWriteBarrier(zone, ionScript);
 }
 
+void IonScript::copySnapshots(const uint8_t* snapshots,
+                              const uint8_t* snapshotsRVATable) {
+  memcpy(offsetToPointer<uint8_t>(snapshotsOffset()), snapshots,
+         snapshotsListSize());
+  memcpy(offsetToPointer<uint8_t>(rvaTableOffset()), snapshotsRVATable,
+         snapshotsRVATableSize());
+}
+
 void IonScript::copySnapshots(const SnapshotWriter* writer) {
   MOZ_ASSERT(writer->listSize() == snapshotsListSize());
-  memcpy(offsetToPointer<uint8_t>(snapshotsOffset()), writer->listBuffer(),
-         snapshotsListSize());
-
   MOZ_ASSERT(snapshotsRVATableSize());
   MOZ_ASSERT(writer->RVATableSize() == snapshotsRVATableSize());
-  memcpy(offsetToPointer<uint8_t>(rvaTableOffset()), writer->RVATableBuffer(),
-         snapshotsRVATableSize());
+  copySnapshots(writer->listBuffer(), writer->RVATableBuffer());
+}
+
+void IonScript::copyRecovers(const uint8_t* recovers) {
+  memcpy(offsetToPointer<uint8_t>(recoversOffset()), recovers, recoversSize());
 }
 
 void IonScript::copyRecovers(const RecoverWriter* writer) {
   MOZ_ASSERT(writer->size() == recoversSize());
-  memcpy(offsetToPointer<uint8_t>(recoversOffset()), writer->buffer(),
-         recoversSize());
+  copyRecovers(writer->buffer());
+}
+
+void IonScript::copySafepoints(const uint8_t* safepoints) {
+  memcpy(offsetToPointer<uint8_t>(safepointsOffset()), safepoints,
+         safepointsSize());
 }
 
 void IonScript::copySafepoints(const SafepointWriter* writer) {
   MOZ_ASSERT(writer->size() == safepointsSize());
-  memcpy(offsetToPointer<uint8_t>(safepointsOffset()), writer->buffer(),
-         safepointsSize());
+  copySafepoints(writer->buffer());
 }
 
 void IonScript::copyBailoutTable(const SnapshotOffset* table) {
@@ -843,6 +854,11 @@ void IonScript::copyConstants(const Value* vp) {
   for (size_t i = 0; i < numConstants(); i++) {
     constants()[i].init(vp[i]);
   }
+}
+
+void IonScript::copySafepointIndices(const SafepointIndex* si) {
+  memcpy(safepointIndices(), si,
+         numSafepointIndices() * sizeof(SafepointIndex));
 }
 
 void IonScript::copySafepointIndices(const CodegenSafepointIndex* si) {
@@ -864,9 +880,9 @@ void IonScript::copyRuntimeData(const uint8_t* data) {
 void IonScript::copyICEntries(const uint32_t* icEntries) {
   memcpy(icIndex(), icEntries, numICs() * sizeof(uint32_t));
 
-  // Update the codeRaw_ field in the ICs now that we know the code address.
+  // Reinitialize the ICs now that they're attached to this IonScript.
   for (size_t i = 0; i < numICs(); i++) {
-    getICFromIndex(i).resetCodeRaw(this);
+    getICFromIndex(i).reinit(this);
   }
 }
 

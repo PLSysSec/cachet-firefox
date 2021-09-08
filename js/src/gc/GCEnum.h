@@ -143,6 +143,8 @@ enum class GCAbortReason {
   _(ZoneAllocPolicy)                       \
   _(SharedArrayRawBuffer)                  \
   _(XDRBufferElements)                     \
+  _(CacheIRStubInfo)                       \
+  _(CacheIRStubData)                       \
   _(GlobalObjectData)
 
 #define JS_FOR_EACH_MEMORY_USE(_)  \

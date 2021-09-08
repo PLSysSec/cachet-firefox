@@ -151,7 +151,8 @@ class IonIC {
   void discardStubs(Zone* zone, IonScript* ionScript);
 
   // Discard all stubs and reset the ICState.
-  void reset(Zone* zone, IonScript* ionScript);
+  void reset(Zone* zone, IonScript* ionScript,
+             ICState::Mode mode = ICState::Mode::Specialized);
 
   IonICStub* firstStub() { return firstStub_; }
 
@@ -168,7 +169,7 @@ class IonIC {
   }
   void setRejoinOffset(CodeOffset offset) { rejoinOffset_ = offset.offset(); }
 
-  void resetCodeRaw(IonScript* ionScript);
+  void reinit(IonScript* ionScript);
 
   uint8_t* fallbackAddr(IonScript* ionScript) const;
   uint8_t* fallbackCallAddr(IonScript* ionScript) const;

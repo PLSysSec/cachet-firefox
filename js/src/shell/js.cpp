@@ -46,6 +46,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <type_traits>
 #include <utility>
 #ifdef XP_UNIX
 #  ifndef __wasi__
@@ -99,13 +100,19 @@
 #ifdef JS_SIMULATOR_MIPS64
 #  include "jit/mips64/Simulator-mips64.h"
 #endif
+#include "jit/CacheIRCompiler.h"
+#include "jit/CacheIRGenerated.h"
 #include "jit/CacheIRHealth.h"
+#include "jit/CacheIRSpewer.h"
+#include "jit/ICState.h"
 #include "jit/InlinableNatives.h"
 #include "jit/Ion.h"
+#include "jit/IonIC.h"
 #include "jit/JitcodeMap.h"
 #include "jit/shared/CodeGenerator-shared.h"
 #include "js/Array.h"        // JS::NewArrayObject
 #include "js/ArrayBuffer.h"  // JS::{CreateMappedArrayBufferContents,NewMappedArrayBufferWithContents,IsArrayBufferObject,GetArrayBufferLengthAndData}
+#include "js/BigInt.h"       // JS::ToBigInt
 #include "js/BuildId.h"      // JS::BuildIdCharVector, JS::SetProcessBuildIdOp
 #include "js/CallAndConstruct.h"  // JS::Call, JS::IsCallable, JS_CallFunction, JS_CallFunctionValue
 #include "js/CharacterEncoding.h"  // JS::StringIsASCII
@@ -144,6 +151,7 @@
 #include "js/StableStringChars.h"
 #include "js/StructuredClone.h"
 #include "js/SweepingAPI.h"
+#include "js/Symbol.h"       // JS::SymbolCode
 #include "js/Transcoding.h"  // JS::TranscodeBuffer, JS::TranscodeRange
 #include "js/Warnings.h"     // JS::SetWarningReporter
 #include "js/WasmModule.h"   // JS::WasmModule
@@ -180,12 +188,14 @@
 #include "vm/Shape.h"
 #include "vm/SharedArrayObject.h"
 #include "vm/StencilObject.h"  // js::StencilObject
+#include "vm/StringType.h"
 #include "vm/Time.h"
 #include "vm/ToSource.h"  // js::ValueToSource
 #include "vm/TypedArrayObject.h"
 #include "vm/WrapperObject.h"
 #include "wasm/WasmJS.h"
 
+#include "jit/JitScript-inl.h"
 #include "vm/Compartment-inl.h"
 #include "vm/ErrorObject-inl.h"
 #include "vm/Interpreter-inl.h"
@@ -195,6 +205,7 @@
 
 using namespace js;
 using namespace js::cli;
+using namespace js::jit;
 using namespace js::shell;
 
 using JS::AutoStableStringChars;
@@ -4055,12 +4066,1184 @@ static bool CacheIRHealthReport(JSContext* cx, unsigned argc, Value* vp) {
 }
 #endif /* JS_CACHEIR_SPEW */
 
-/* Pretend we can always preserve wrappers for dummy DOM objects. */
-static bool DummyPreserveWrapperCallback(JSContext* cx, HandleObject obj) {
+[[nodiscard]] bool ThrowingConstructor(JSContext* const cx, const unsigned argc,
+                                       Value* const vp) {
+  const CallArgs args(CallArgsFromVp(argc, vp));
+
+  const RootedFunction func(cx, ReportIfNotFunction(cx, args.calleev()));
+  if (!func) {
+    return false;
+  }
+
+  const RootedString funcName(cx, func->displayAtom());
+  MOZ_ASSERT(funcName);
+
+  const UniqueChars funcNameStr(EncodeAscii(cx, funcName));
+  if (!funcNameStr) {
+    return false;
+  }
+
+  JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
+                            JSMSG_BOGUS_CONSTRUCTOR, funcNameStr.get());
+  return false;
+}
+
+template <typename T>
+void ReportIncompatibleProto(
+    JSContext* const cx, JSObject* const obj, const char* memberName,
+    const unsigned errorNumber = JSMSG_INCOMPATIBLE_PROTO) {
+  MOZ_ASSERT(js_ErrorFormatString[errorNumber].argCount == 3);
+  JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr, errorNumber,
+                            T::class_.name, memberName, obj->getClass()->name);
+}
+
+JSObject* RequireThisObject(JSContext* const cx, const CallArgs& args) {
+  return RequireObject(cx, args.thisv());
+}
+
+template <typename T>
+[[nodiscard]] T* UnwrapThisObject(
+    JSContext* const cx, JSObject* const obj, const char* memberName,
+    const unsigned errorNumber = JSMSG_INCOMPATIBLE_PROTO) {
+  if (!obj->is<T>()) {
+    ReportIncompatibleProto<T>(cx, obj, memberName, errorNumber);
+    return nullptr;
+  }
+  return &obj->as<T>();
+}
+
+template <typename T>
+[[nodiscard]] T* UnwrapThisObject(
+    JSContext* const cx, const CallArgs& args, const char* memberName,
+    const unsigned errorNumber = JSMSG_INCOMPATIBLE_PROTO) {
+  JSObject* const obj(RequireThisObject(cx, args));
+  if (!obj) {
+    return nullptr;
+  }
+  return UnwrapThisObject<T>(cx, obj, memberName, errorNumber);
+}
+
+[[nodiscard]] bool ValueToCacheIRValueTag(JSContext* const cx,
+                                          const HandleValue value,
+                                          JSValueTag* res) {
+  int32_t i;
+  if (!JS::ToInt32(cx, value, &i)) {
+    return false;
+  }
+  *res = JSValueTag(i);
   return true;
 }
 
-static bool DummyHasReleasedWrapperCallback(HandleObject obj) { return true; }
+[[nodiscard]] bool ValueToCacheIRIntPtr(JSContext* const cx,
+                                        const HandleValue value,
+                                        intptr_t* res) {
+  constexpr bool is32Bit = std::is_same_v<intptr_t, int32_t>;
+  constexpr bool is64Bit = std::is_same_v<intptr_t, int64_t>;
+  static_assert(is32Bit || is64Bit);
+  if constexpr (is32Bit) {
+    return JS::ToInt32(cx, value, (int32_t*)res);
+  } else {
+    return JS::ToInt64(cx, value, (int64_t*)res);
+  }
+}
+
+[[nodiscard]] bool ValueToCacheIRBoolean(JSContext* const cx,
+                                         const HandleValue value, bool* res) {
+  *res = JS::ToBoolean(value);
+  return true;
+}
+
+[[nodiscard]] bool ValueToCacheIRInt32(JSContext* const cx,
+                                       const HandleValue value, int32_t* res) {
+  return JS::ToInt32(cx, value, res);
+}
+
+[[nodiscard]] bool ValueToCacheIRVal(JSContext* const cx,
+                                     const HandleValue value, Value* res) {
+  *res = value;
+  return true;
+}
+
+[[nodiscard]] bool ValueToCacheIRObj(JSContext* const cx,
+                                     const HandleValue value, JSObject** res) {
+  JSObject* const obj(JS::ToObject(cx, value));
+  if (obj) {
+    *res = obj;
+  }
+  return obj;
+}
+
+[[nodiscard]] bool ValueToCacheIRString(JSContext* const cx,
+                                        const HandleValue value,
+                                        JSString** res) {
+  JSString* const str(JS::ToString(cx, value));
+  if (str) {
+    *res = str;
+  }
+  return str;
+}
+
+[[nodiscard]] bool ValueToCacheIRSymbol(JSContext* const cx,
+                                        const HandleValue value,
+                                        JS::Symbol** res) {
+  if (value.isSymbol()) {
+    *res = value.toSymbol();
+    return true;
+  }
+  ReportValueError(cx, JSMSG_NOT_SYMBOL, JSDVG_SEARCH_STACK, value, nullptr);
+  return false;
+}
+
+[[nodiscard]] bool ValueToCacheIRBigInt(JSContext* const cx,
+                                        const HandleValue value, BigInt** res) {
+  BigInt* const bi(JS::ToBigInt(cx, value));
+  if (bi) {
+    *res = bi;
+  }
+  return bi;
+}
+
+#define DEFINE_GC_TYPE_OVERLOAD(Name)                      \
+  [[nodiscard]] bool ValueToCacheIR##Name(                 \
+      JSContext* const cx, const HandleValue value,        \
+      MutableHandle<CacheTypes<CacheType::Name>> res) {    \
+    return ValueToCacheIR##Name(cx, value, res.address()); \
+  }
+CACHE_IR_TYPES(DEFINE_GC_TYPE_OVERLOAD)
+#undef DEFINE_GC_TYPE_OVERLOAD
+
+JSAtom* GetCacheTypeAtom(JSContext* const cx, const CacheType type) {
+  const char* const typeName(GetCacheTypeName(type));
+  return Atomize(cx, typeName, strlen(typeName), PinAtom);
+}
+
+JSAtom* GetCacheKindAtom(JSContext* const cx, const CacheKind kind) {
+  const char* const kindName(GetCacheKindName(kind));
+  return Atomize(cx, kindName, strlen(kindName), PinAtom);
+}
+
+class GlobalCacheIRObject : public NativeObject {
+  enum : unsigned {
+    ION_IC_PROTOTYPE_SLOT,
+    IC_STUB_PROTOTYPE_SLOT,
+#define DEFINE_CACHE_KIND_SLOT(Kind) Kind##_CACHE_KIND_SLOT,
+    CACHE_IR_KINDS(DEFINE_CACHE_KIND_SLOT)
+#undef DEFINE_CACHE_KIND_SLOT
+        RESERVED_SLOT_LIMIT
+  };
+
+#define FIND_FIRST_CACHE_KIND_SLOT(Kind) Kind##_CACHE_KIND_SLOT + 0 *
+  static constexpr unsigned FIRST_CACHE_KIND_SLOT =
+      CACHE_IR_KINDS(FIND_FIRST_CACHE_KIND_SLOT) RESERVED_SLOT_LIMIT;
+#undef FIND_FIRST_CACHE_KIND_SLOT
+
+ protected:
+  static constexpr unsigned RESERVED_SLOTS = RESERVED_SLOT_LIMIT;
+
+ public:
+  JSObject& ionICProto() const {
+    return getReservedSlot(ION_IC_PROTOTYPE_SLOT).toObject();
+  }
+
+  JSObject& icStubProto() const {
+    return getReservedSlot(IC_STUB_PROTOTYPE_SLOT).toObject();
+  }
+
+  JSObject& cacheKindObj(CacheKind kind) const {
+    const unsigned slot(FIRST_CACHE_KIND_SLOT + uint8_t(kind));
+    MOZ_ASSERT(slot >= FIRST_CACHE_KIND_SLOT && slot < RESERVED_SLOT_LIMIT);
+    return getReservedSlot(slot).toObject();
+  }
+
+  [[nodiscard]] static GlobalCacheIRObject* create(JSContext* const cx,
+                                                   const HandleObject global);
+
+  static constexpr JSClass class_ = {
+      "GlobalCacheIR", JSCLASS_HAS_RESERVED_SLOTS(RESERVED_SLOTS)};
+};
+
+[[nodiscard]] static GlobalCacheIRObject* GetGlobalCacheIRObject(
+    JSContext* cx, JSObject* global);
+
+class CacheKindObject : public NativeObject {
+  enum : unsigned {
+    NAME_SLOT,
+    INPUTS_SLOT,
+    OUTPUT_SLOT,
+    TO_STRING_TAG_SLOT,
+    RESERVED_SLOT_LIMIT
+  };
+
+ protected:
+  static constexpr unsigned RESERVED_SLOTS = RESERVED_SLOT_LIMIT;
+
+ public:
+  const Value& nameValue() const { return getReservedSlot(NAME_SLOT); }
+  JSAtom& name() const { return nameValue().toString()->asAtom(); }
+
+  const Value& inputsValue() const { return getReservedSlot(INPUTS_SLOT); }
+  JSObject& inputs() const { return inputsValue().toObject(); }
+
+  const Value& outputValue() const { return getReservedSlot(OUTPUT_SLOT); }
+  JSAtom* output() const {
+    const Value& value = outputValue();
+    if (value.isString()) {
+      return &value.toString()->asAtom();
+    }
+    MOZ_ASSERT(value.isNull());
+    return nullptr;
+  }
+
+  const Value& toStringTagValue() const {
+    return getReservedSlot(TO_STRING_TAG_SLOT);
+  }
+  JSString* toStringTag() const { return toStringTagValue().toString(); }
+
+ private:
+  [[nodiscard]] static bool nameGetter(JSContext* const cx, const unsigned argc,
+                                       Value* const vp) {
+    const CallArgs args(CallArgsFromVp(argc, vp));
+
+    const Rooted<CacheKindObject*> kindObj(
+        cx, UnwrapThisObject<CacheKindObject>(cx, args, "name"));
+    if (!kindObj) {
+      return false;
+    }
+
+    args.rval().set(kindObj->nameValue());
+    return true;
+  }
+
+  [[nodiscard]] static bool inputsGetter(JSContext* const cx,
+                                         const unsigned argc, Value* const vp) {
+    const CallArgs args(CallArgsFromVp(argc, vp));
+
+    const Rooted<CacheKindObject*> kindObj(
+        cx, UnwrapThisObject<CacheKindObject>(cx, args, "inputs"));
+    if (!kindObj) {
+      return false;
+    }
+
+    args.rval().set(kindObj->inputsValue());
+    return true;
+  }
+
+  [[nodiscard]] static bool outputGetter(JSContext* const cx,
+                                         const unsigned argc, Value* const vp) {
+    const CallArgs args(CallArgsFromVp(argc, vp));
+
+    const Rooted<CacheKindObject*> kindObj(
+        cx, UnwrapThisObject<CacheKindObject>(cx, args, "output"));
+    if (!kindObj) {
+      return false;
+    }
+
+    args.rval().set(kindObj->outputValue());
+    return true;
+  }
+
+  [[nodiscard]] static bool toStringTagGetter(JSContext* const cx,
+                                              const unsigned argc,
+                                              Value* const vp) {
+    const CallArgs args(CallArgsFromVp(argc, vp));
+
+    const RootedObject obj(cx, RequireThisObject(cx, args));
+    if (!obj) {
+      return false;
+    }
+
+    if (!obj->is<CacheKindObject>()) {
+      args.rval().setUndefined();
+      return true;
+    }
+
+    args.rval().set(obj.as<CacheKindObject>()->toStringTagValue());
+    return true;
+  }
+
+  static constexpr JSPropertySpec properties[] = {
+      JS_PSG("name", nameGetter, JSPROP_ENUMERATE),
+      JS_PSG("inputs", inputsGetter, JSPROP_ENUMERATE),
+      JS_PSG("output", outputGetter, JSPROP_ENUMERATE),
+      JS_SYM_GET(toStringTag, toStringTagGetter, 0), JS_PS_END};
+
+  static constexpr JSClass protoClass = {"CacheKindPrototype", 0};
+
+ public:
+  static constexpr JSClass class_ = {
+      "CacheKind", JSCLASS_HAS_RESERVED_SLOTS(RESERVED_SLOTS)};
+
+  [[nodiscard]] static JSObject* initClass(JSContext* const cx,
+                                           const HandleObject global,
+                                           NativeObject** ctorp = nullptr) {
+    return InitClass(cx, global, &class_, nullptr, &protoClass,
+                     &ThrowingConstructor, 0, properties, nullptr, nullptr,
+                     nullptr, ctorp);
+  }
+
+  [[nodiscard]] static CacheKindObject* create(
+      JSContext* const cx, const HandleObject proto,
+      const HandleString toStringTagPrefix, const CacheKind kind) {
+    const Rooted<CacheKindObject*> kindObj(
+        cx, NewObjectWithGivenProto<CacheKindObject>(cx, proto));
+    if (!kindObj) {
+      return nullptr;
+    }
+
+    const RootedAtom nameAtom(cx, GetCacheKindAtom(cx, kind));
+    if (!nameAtom) {
+      return nullptr;
+    }
+    kindObj->initReservedSlot(NAME_SLOT, StringValue(nameAtom));
+
+    const CacheKindSignature& sig(GetCacheKindSignature(kind));
+
+    const RootedObject inputsObj(cx, JS_NewObject(cx, nullptr));
+    if (!inputsObj) {
+      return nullptr;
+    }
+
+    for (uint16_t inputIndex = 0; inputIndex < sig.numInputs; ++inputIndex) {
+      const CacheKindSignature::Input input(sig.inputs[inputIndex]);
+      const RootedValue inputType(
+          cx, StringValue(GetCacheTypeAtom(cx, input.type)));
+      if (!JS_DefineProperty(
+              cx, inputsObj, input.name, inputType,
+              JSPROP_ENUMERATE | JSPROP_READONLY | JSPROP_PERMANENT)) {
+        return nullptr;
+      }
+    }
+
+    kindObj->initReservedSlot(INPUTS_SLOT, ObjectValue(*inputsObj));
+
+    if (sig.output) {
+      JSAtom* const outputAtom(GetCacheTypeAtom(cx, *sig.output));
+      if (!outputAtom) {
+        return nullptr;
+      }
+      kindObj->initReservedSlot(OUTPUT_SLOT, StringValue(outputAtom));
+    } else {
+      kindObj->initReservedSlot(OUTPUT_SLOT, NullValue());
+    }
+
+    JSString* const toStringTag(
+        JS_ConcatStrings(cx, toStringTagPrefix, nameAtom));
+    if (!toStringTag) {
+      return nullptr;
+    }
+    kindObj->initReservedSlot(TO_STRING_TAG_SLOT, StringValue(toStringTag));
+
+    return kindObj;
+  }
+};
+
+class ICObject : public NativeObject {
+  enum : unsigned { KIND_SLOT, RESERVED_SLOT_LIMIT };
+
+ protected:
+  static constexpr unsigned RESERVED_SLOTS = RESERVED_SLOT_LIMIT;
+
+ public:
+  const Value& kindValue() const { return getReservedSlot(KIND_SLOT); }
+  CacheKindObject& kind() const {
+    return kindValue().toObject().as<CacheKindObject>();
+  }
+
+ protected:
+  void init(const Handle<GlobalCacheIRObject*> globalCacheIRObj,
+            const CacheKind kind) {
+    initReservedSlot(KIND_SLOT,
+                     ObjectValue(globalCacheIRObj->cacheKindObj(kind)));
+  }
+
+ public:
+  static constexpr JSClass class_ = {
+      "IC", JSCLASS_HAS_RESERVED_SLOTS(RESERVED_SLOTS)};
+
+ private:
+  static constexpr JSClass protoClass = {"ICPrototype", 0};
+
+  [[nodiscard]] static bool kindGetter(JSContext* const cx, const unsigned argc,
+                                       Value* const vp) {
+    const CallArgs args(CallArgsFromVp(argc, vp));
+
+    const Rooted<ICObject*> icObj(cx,
+                                  UnwrapThisObject<ICObject>(cx, args, "kind"));
+    if (!icObj) {
+      return false;
+    }
+
+    args.rval().set(icObj->kindValue());
+    return true;
+  }
+
+  static constexpr JSPropertySpec properties[] = {
+      JS_PSG("kind", kindGetter, JSPROP_ENUMERATE), JS_PS_END};
+
+  [[nodiscard]] static bool generateStubMethod(JSContext* const cx,
+                                               const unsigned argc,
+                                               Value* const vp);
+
+  [[nodiscard]] static bool generateMegamorphicStubMethod(JSContext* const cx,
+                                                          const unsigned argc,
+                                                          Value* const vp);
+
+  static constexpr JSFunctionSpec methods[] = {
+      JS_FN("generateStub", generateStubMethod, 0, JSPROP_ENUMERATE),
+      JS_FN("generateMegamorphicStub", generateMegamorphicStubMethod, 0,
+            JSPROP_ENUMERATE),
+      JS_FS_END};
+
+ public:
+  [[nodiscard]] static JSObject* initClass(JSContext* const cx,
+                                           const HandleObject global,
+                                           NativeObject** ctorp = nullptr) {
+    return InitClass(cx, global, &class_, nullptr, &protoClass,
+                     &ThrowingConstructor, 0, properties, methods, nullptr,
+                     nullptr, ctorp);
+  }
+};
+
+[[nodiscard]] IonScript* EnsureIonCompiled(JSContext* cx, HandleScript script) {
+  if (!script->hasIonScript()) {
+    const RootedObject globalLexical(cx, &cx->global()->lexicalEnvironment());
+    cx->check(globalLexical, script);
+
+    RootedValue rval(cx);
+    ExecuteState state(cx, script, NullHandleValue, globalLexical,
+                       NullFramePtr(), &rval);
+
+    script->resetWarmUpCounterToForceIonCompilation();
+
+    MethodStatus status;
+
+    if (!script->hasBaselineScript()) {
+      status = CanEnterBaselineMethod<BaselineTier::Compiler>(cx, state);
+      if (status != Method_Compiled) {
+        JS_ReportErrorASCII(cx, "Can't Baseline-compile script");
+        return nullptr;
+      }
+      MOZ_ASSERT(script->hasBaselineScript());
+    }
+
+    const bool couldUseOffthreadIonCompilation(
+        cx->runtime()->canUseOffthreadIonCompilation());
+    if (couldUseOffthreadIonCompilation) {
+      cx->runtime()->setOffthreadIonCompilationEnabled(false);
+    }
+    const bool wereInlineCachesForced(JitOptions.forceInlineCaches);
+    JitOptions.forceInlineCaches = true;
+
+    status = CanEnterIon(cx, state);
+
+    JitOptions.forceInlineCaches = wereInlineCachesForced;
+    if (couldUseOffthreadIonCompilation) {
+      cx->runtime()->setOffthreadIonCompilationEnabled(true);
+    }
+
+    if (status != Method_Compiled) {
+      JS_ReportErrorASCII(cx, "Can't Ion-compile script");
+      return nullptr;
+    }
+    MOZ_ASSERT(script->hasIonScript());
+  }
+
+  return script->ionScript();
+}
+
+class IonScriptObject : public NativeObject {
+  enum : unsigned { ION_SCRIPT_SLOT, RESERVED_SLOT_LIMIT };
+
+ protected:
+  static constexpr unsigned RESERVED_SLOTS = RESERVED_SLOT_LIMIT;
+
+ private:
+  // If we hit OOM in initialization, we may not have populated our slots yet.
+  // Only code paths that could be hit during the initializer need to use
+  // this; otherwise, the infallible ionScript() accessor should be used
+  // instead.
+  IonScript* maybeIonScript() const {
+    const Value value(getReservedSlot(ION_SCRIPT_SLOT));
+    return value.isUndefined() ? nullptr
+                               : static_cast<IonScript*>(value.toPrivate());
+  }
+
+ public:
+  IonScript& ionScript() const {
+    return *static_cast<IonScript*>(
+        getReservedSlot(ION_SCRIPT_SLOT).toPrivate());
+  }
+
+  [[nodiscard]] static IonScriptObject* create(
+      JSContext* const cx, const IonScript* const ionScript) {
+    const Rooted<IonScriptObject*> ionScriptObj(
+        cx, NewObjectWithGivenProto<IonScriptObject>(cx, nullptr));
+    if (!ionScriptObj) {
+      return nullptr;
+    }
+
+    const JS::AutoAssertNoGC noGC(cx);
+
+    IonScript* const clonedIonScript(IonScript::New(
+        cx, ionScript->compilationId(), ionScript->frameSlots(),
+        ionScript->argumentSlots(), ionScript->frameSize(),
+        ionScript->snapshotsListSize(), ionScript->snapshotsRVATableSize(),
+        ionScript->recoversSize(), ionScript->numBailoutEntries(),
+        ionScript->numConstants(), ionScript->numNurseryObjects(),
+        ionScript->numSafepointIndices(), ionScript->numOsiIndices(),
+        ionScript->numICs(), ionScript->runtimeSize(),
+        ionScript->safepointsSize()));
+    if (!clonedIonScript) {
+      return nullptr;
+    }
+
+#ifdef DEBUG
+    clonedIonScript->setICHash(ionScript->icHash());
+#endif
+
+    clonedIonScript->setMethod(ionScript->method());
+
+    if (ionScript->hasProfilingInstrumentation()) {
+      clonedIonScript->setHasProfilingInstrumentation();
+    }
+
+    if (ionScript->runtimeSize()) {
+      clonedIonScript->copyRuntimeData(ionScript->runtimeData());
+    }
+    if (ionScript->numICs()) {
+      clonedIonScript->copyICEntries(ionScript->icIndex());
+
+      // ICs must be reinitialized after being copied from one IonScript to
+      // another. In particular, the original stub chains must be detached.
+      for (size_t ionICIndex(0); ionICIndex < clonedIonScript->numICs();
+           ++ionICIndex) {
+        clonedIonScript->getICFromIndex(ionICIndex).reinit(clonedIonScript);
+      }
+    }
+
+    clonedIonScript->setInvalidationEpilogueDataOffset(
+        ionScript->invalidateEpilogueDataOffset());
+    if (ionScript->osrPc()) {
+      clonedIonScript->setOsrPc(ionScript->osrPc());
+      clonedIonScript->setOsrEntryOffset(ionScript->osrEntryOffset());
+    }
+    clonedIonScript->setInvalidationEpilogueOffset(
+        ionScript->invalidateEpilogueOffset());
+
+    if (ionScript->numSafepointIndices()) {
+      clonedIonScript->copySafepointIndices(ionScript->safepointIndices());
+    }
+    if (ionScript->safepointsSize()) {
+      clonedIonScript->copySafepoints(ionScript->safepoints());
+    }
+
+    if (ionScript->numBailoutEntries()) {
+      clonedIonScript->copyBailoutTable(ionScript->bailoutTable());
+    }
+    if (ionScript->numOsiIndices()) {
+      clonedIonScript->copyOsiIndices(ionScript->osiIndices());
+    }
+    if (ionScript->snapshotsListSize()) {
+      clonedIonScript->copySnapshots(ionScript->snapshots(),
+                                     ionScript->snapshotsRVATable());
+    }
+    if (ionScript->recoversSize()) {
+      clonedIonScript->copyRecovers(ionScript->recovers());
+    }
+
+    for (size_t constantIndex = 0; constantIndex < ionScript->numConstants();
+         ++constantIndex) {
+      const PreBarrieredValue& value(ionScript->getConstant(constantIndex));
+      clonedIonScript->getConstant(constantIndex).init(value);
+      if (value.isGCThing()) {
+        gc::StoreBuffer* const storeBuffer(value.toGCThing()->storeBuffer());
+        if (storeBuffer) {
+          storeBuffer->putWholeCell(ionScriptObj);
+        }
+      }
+    }
+
+    for (size_t nurseryObjectIndex = 0;
+         nurseryObjectIndex < ionScript->numNurseryObjects();
+         ++nurseryObjectIndex) {
+      clonedIonScript->nurseryObjects()[nurseryObjectIndex].init(
+          ionScript->nurseryObjects()[nurseryObjectIndex]);
+    }
+
+    InitReservedSlot(ionScriptObj, ION_SCRIPT_SLOT, clonedIonScript,
+                     clonedIonScript->allocBytes(), MemoryUse::IonScript);
+
+    return ionScriptObj;
+  }
+
+  static void finalize(JSFreeOp* fop, JSObject* obj) {
+    IonScriptObject& ionScriptObj(obj->as<IonScriptObject>());
+    IonScript* const maybeIonScript(ionScriptObj.maybeIonScript());
+    if (maybeIonScript) {
+      fop->removeCellMemory(obj, maybeIonScript->allocBytes(),
+                            MemoryUse::IonScript);
+      IonScript::Destroy(fop, maybeIonScript);
+    }
+  }
+
+  static void trace(JSTracer* trc, JSObject* obj) {
+    IonScriptObject& ionScriptObj(obj->as<IonScriptObject>());
+    IonScript* const maybeIonScript(ionScriptObj.maybeIonScript());
+    if (maybeIonScript) {
+      maybeIonScript->trace(trc);
+    }
+  }
+
+ private:
+  static constexpr JSClassOps classOps = {
+      nullptr,  /* addProperty */
+      nullptr,  /* delProperty */
+      nullptr,  /* enumerate */
+      nullptr,  /* newEnumerate */
+      nullptr,  /* resolve */
+      nullptr,  /* mayResolve */
+      finalize, /* finalize */
+      nullptr,  /* call */
+      nullptr,  /* hasInstance */
+      nullptr,  /* construct */
+      trace,    /* trace */
+  };
+
+ public:
+  static constexpr JSClass class_ = {
+      "IonScript",
+      JSCLASS_HAS_RESERVED_SLOTS(RESERVED_SLOTS) | JSCLASS_BACKGROUND_FINALIZE,
+      &classOps};
+};
+
+class ICStubObject : public NativeObject {
+  enum : unsigned {
+    KIND_SLOT,
+    STUB_INFO_SLOT,
+    STUB_DATA_SLOT,
+    RESERVED_SLOT_LIMIT
+  };
+
+ protected:
+  static constexpr unsigned RESERVED_SLOTS = RESERVED_SLOT_LIMIT;
+
+ private:
+  // If we hit OOM in initialization, we may not have populated our slots yet.
+  // Only code paths that could be hit during the initializer need to use
+  // these; otherwise, the infallible accessor methods should be used instead.
+
+  CacheIRStubInfo* maybeStubInfo() const {
+    const Value value(getReservedSlot(STUB_INFO_SLOT));
+    return value.isUndefined()
+               ? nullptr
+               : static_cast<CacheIRStubInfo*>(value.toPrivate());
+  }
+
+  uint8_t* maybeStubData() const {
+    const Value value(getReservedSlot(STUB_DATA_SLOT));
+    return value.isUndefined() ? nullptr
+                               : static_cast<uint8_t*>(value.toPrivate());
+  }
+
+ public:
+  const Value& kindValue() const { return getReservedSlot(KIND_SLOT); }
+  CacheKindObject& kind() const {
+    return kindValue().toObject().as<CacheKindObject>();
+  }
+
+  CacheIRStubInfo& stubInfo() const {
+    return *static_cast<CacheIRStubInfo*>(
+        getReservedSlot(STUB_INFO_SLOT).toPrivate());
+  }
+
+  uint8_t* stubData() const {
+    return static_cast<uint8_t*>(getReservedSlot(STUB_DATA_SLOT).toPrivate());
+  }
+
+  [[nodiscard]] static ICStubObject* create(JSContext* const cx,
+                                            const CacheIRStubInfo& stubInfo,
+                                            const uint8_t* const stubData) {
+    UniquePtr<CacheIRStubInfo, JS::FreePolicy> clonedStubInfo(stubInfo.clone());
+    if (!clonedStubInfo) {
+      return nullptr;
+    }
+
+    const size_t stubInfoSize(clonedStubInfo->totalSize());
+    const size_t stubDataSize(clonedStubInfo->stubDataSize());
+
+    auto clonedStubData(cx->make_pod_array<uint8_t>(stubDataSize));
+    if (!clonedStubData) {
+      return nullptr;
+    }
+    mozilla::PodCopy(clonedStubData.get(), stubData, stubDataSize);
+
+    const Rooted<GlobalCacheIRObject*> globalCacheIRObj(
+        cx, GetGlobalCacheIRObject(cx, cx->global()));
+    if (!globalCacheIRObj) {
+      return nullptr;
+    }
+
+    const RootedObject icStubProto(cx, &globalCacheIRObj->icStubProto());
+    const Rooted<ICStubObject*> icStubObj(
+        cx, NewObjectWithGivenProto<ICStubObject>(cx, icStubProto));
+    if (!icStubObj) {
+      return nullptr;
+    }
+
+    icStubObj->initReservedSlot(
+        KIND_SLOT,
+        ObjectValue(globalCacheIRObj->cacheKindObj(stubInfo.kind())));
+    InitReservedSlot(icStubObj, STUB_INFO_SLOT, clonedStubInfo.release(),
+                     stubInfoSize, MemoryUse::CacheIRStubInfo);
+    InitReservedSlot(icStubObj, STUB_DATA_SLOT, clonedStubData.release(),
+                     stubDataSize, MemoryUse::CacheIRStubData);
+
+    return icStubObj;
+  }
+
+  [[nodiscard]] static ICStubObject* create(JSContext* const cx,
+                                            const IonICStub& stub) {
+    return create(cx, *stub.stubInfo(), stub.stubDataStart());
+  }
+
+  static void finalize(JSFreeOp* fop, JSObject* obj) {
+    ICStubObject& icStubObj(obj->as<ICStubObject>());
+    CacheIRStubInfo* const maybeStubInfo(icStubObj.maybeStubInfo());
+    uint8_t* const maybeStubData(icStubObj.maybeStubData());
+    if (maybeStubInfo) {
+      if (maybeStubData) {
+        fop->free_(obj, maybeStubData, maybeStubInfo->stubDataSize(),
+                   MemoryUse::CacheIRStubData);
+      }
+      fop->free_(obj, maybeStubInfo, maybeStubInfo->totalSize(),
+                 MemoryUse::CacheIRStubInfo);
+    } else {
+      MOZ_ASSERT(!maybeStubData);
+    }
+  }
+
+  static void trace(JSTracer* trc, JSObject* obj) {
+    ICStubObject& icStubObj(obj->as<ICStubObject>());
+    CacheIRStubInfo* const maybeStubInfo(icStubObj.maybeStubInfo());
+    uint8_t* const maybeStubData(icStubObj.maybeStubData());
+    if (maybeStubInfo) {
+      if (maybeStubData) {
+        TraceCacheIRStub(trc, maybeStubData, maybeStubInfo);
+      }
+    } else {
+      MOZ_ASSERT(!maybeStubData);
+    }
+  }
+
+ private:
+  static constexpr JSClassOps classOps = {
+      nullptr,  /* addProperty */
+      nullptr,  /* delProperty */
+      nullptr,  /* enumerate */
+      nullptr,  /* newEnumerate */
+      nullptr,  /* resolve */
+      nullptr,  /* mayResolve */
+      finalize, /* finalize */
+      nullptr,  /* call */
+      nullptr,  /* hasInstance */
+      nullptr,  /* construct */
+      trace,    /* trace */
+  };
+
+ public:
+  static constexpr JSClass class_ = {
+      "ICStub",
+      JSCLASS_HAS_RESERVED_SLOTS(RESERVED_SLOTS) | JSCLASS_BACKGROUND_FINALIZE,
+      &classOps};
+
+ private:
+  static constexpr JSClass protoClass = {"ICStubPrototype", 0};
+
+  [[nodiscard]] static bool kindGetter(JSContext* const cx, const unsigned argc,
+                                       Value* const vp) {
+    const CallArgs args(CallArgsFromVp(argc, vp));
+
+    const Rooted<ICStubObject*> icStubObj(
+        cx, UnwrapThisObject<ICStubObject>(cx, args, "kind"));
+    if (!icStubObj) {
+      return false;
+    }
+
+    args.rval().set(icStubObj->kindValue());
+    return true;
+  }
+
+  static constexpr JSPropertySpec properties[] = {
+      JS_PSG("kind", kindGetter, JSPROP_ENUMERATE), JS_PS_END};
+
+  [[nodiscard]] static bool toStringMethod(JSContext* const cx,
+                                           const unsigned argc,
+                                           Value* const vp) {
+    const CallArgs args(CallArgsFromVp(argc, vp));
+
+    const Rooted<ICStubObject*> icStubObj(
+        cx, UnwrapThisObject<ICStubObject>(cx, args, "toString"));
+    if (!icStubObj) {
+      return false;
+    }
+
+    CacheIRStubInfo& stubInfo(icStubObj->stubInfo());
+    uint8_t* const stubData(icStubObj->stubData());
+
+    Sprinter sprinter(cx);
+    if (!sprinter.init()) {
+      return false;
+    }
+
+    sprinter.printf("%s %s\n", GetCacheKindName(stubInfo.kind()),
+                    GetICStubEngineName(stubInfo.engine()));
+    if (stubInfo.codeLength()) {
+      sprinter.putChar('\n');
+      SpewCacheIROps(sprinter, "", &stubInfo);
+    }
+    if (stubInfo.hasStubFields()) {
+      sprinter.putChar('\n');
+      SpewCacheIRStubFields(sprinter, stubData, &stubInfo);
+    }
+
+    const JS::ConstUTF8CharsZ utf8(sprinter.string(),
+                                   strlen(sprinter.string()));
+    JSString* const str(JS_NewStringCopyUTF8Z(cx, utf8));
+    if (!str) {
+      return false;
+    }
+    args.rval().setString(str);
+    return true;
+  }
+
+  static constexpr JSFunctionSpec methods[] = {
+      JS_FN("toString", toStringMethod, 0, JSPROP_ENUMERATE), JS_FS_END};
+
+ public:
+  [[nodiscard]] static JSObject* initClass(JSContext* const cx,
+                                           const HandleObject global,
+                                           NativeObject** ctorp = nullptr) {
+    return InitClass(cx, global, &class_, nullptr, &protoClass,
+                     &ThrowingConstructor, 0, properties, methods, nullptr,
+                     nullptr, ctorp);
+  }
+};
+
+class IonICObject : public ICObject {
+  friend class ICObject;
+
+  enum : unsigned {
+    ION_SCRIPT_SLOT = ICObject::RESERVED_SLOTS,
+    ION_IC_OFFSET_SLOT,
+    RESERVED_SLOT_LIMIT,
+  };
+
+ protected:
+  static constexpr unsigned RESERVED_SLOTS = RESERVED_SLOT_LIMIT;
+
+ public:
+  IonScript& ionScript() const {
+    return static_cast<IonScriptObject&>(
+               getReservedSlot(ION_SCRIPT_SLOT).toObject())
+        .ionScript();
+  }
+
+  IonIC& ionIC() const {
+    const uint32_t ionICOffset(
+        getReservedSlot(ION_IC_OFFSET_SLOT).toPrivateUint32());
+    return ionScript().getIC(ionICOffset);
+  }
+
+  [[nodiscard]] static IonICObject* create(
+      JSContext* const cx, const Handle<IonScriptObject*> ionScriptObj,
+      const size_t ionICIndex) {
+    const Rooted<GlobalCacheIRObject*> globalCacheIRObj(
+        cx, GetGlobalCacheIRObject(cx, cx->global()));
+    if (!globalCacheIRObj) {
+      return nullptr;
+    }
+
+    const RootedObject ionICProto(cx, &globalCacheIRObj->ionICProto());
+    const Rooted<IonICObject*> ionICObj(
+        cx, NewObjectWithGivenProto<IonICObject>(cx, ionICProto));
+    if (!ionICObj) {
+      return nullptr;
+    }
+
+    const IonScript& ionScript(ionScriptObj->ionScript());
+    const uint32_t ionICOffset(ionScript.getICOffsetFromIndex(ionICIndex));
+    const IonIC& ionIC(ionScript.getIC(ionICOffset));
+
+    ionICObj->ICObject::init(globalCacheIRObj, ionIC.kind());
+    ionICObj->initReservedSlot(ION_SCRIPT_SLOT, ObjectValue(*ionScriptObj));
+    ionICObj->initReservedSlot(ION_IC_OFFSET_SLOT,
+                               PrivateUint32Value(ionICOffset));
+
+    return ionICObj;
+  }
+
+ public:
+  static constexpr JSClass class_ = {
+      "IonIC", JSCLASS_HAS_RESERVED_SLOTS(RESERVED_SLOTS)};
+
+ private:
+  static constexpr JSClass protoClass = {"IonICPrototype", 0};
+
+  [[nodiscard]] static bool generateStubMethod(
+      JSContext* const cx, const Handle<IonICObject*> ionICObj,
+      const CallArgs& args,
+      const ICState::Mode mode = ICState::Mode::Specialized,
+      const char* functionName = "IonIC.prototype.generateStub") {
+    IonIC& ionIC(ionICObj->ionIC());
+    IonScript& ionScript(ionICObj->ionScript());
+
+    const uint16_t numInputOperands(NumInputsForCacheKind(ionIC.kind()));
+    if (!args.requireAtLeast(cx, functionName, numInputOperands)) {
+      return false;
+    }
+
+    const RootedScript script(cx, ionIC.script());
+    ionIC.reset(script->zone(), &ionScript, mode);
+    MOZ_ASSERT(!ionIC.firstStub());
+    MOZ_ASSERT(ionIC.state().mode() == mode);
+
+    switch (ionIC.kind()) { CACHE_IR_SHELL_GENERATE_ION_STUB_CASES_GENERATED }
+
+    const IonICStub* const ionICStub(ionIC.firstStub());
+    if (ionICStub) {
+      ICStubObject* const icStubObj(ICStubObject::create(cx, *ionICStub));
+      if (!icStubObj) {
+        return false;
+      }
+      args.rval().setObject(*icStubObj);
+    } else {
+      args.rval().setNull();
+    }
+
+    return true;
+  }
+
+  [[nodiscard]] static bool generateStubMethod(JSContext* const cx,
+                                               const unsigned argc,
+                                               Value* const vp) {
+    const CallArgs args(CallArgsFromVp(argc, vp));
+
+    const Rooted<IonICObject*> ionICObj(
+        cx, UnwrapThisObject<IonICObject>(cx, args, "generateStub"));
+    if (!ionICObj) {
+      return false;
+    }
+
+    return generateStubMethod(cx, ionICObj, args);
+  }
+
+  [[nodiscard]] static bool generateMegamorphicStubMethod(
+      JSContext* const cx, const Handle<IonICObject*> ionICObj,
+      const CallArgs& args) {
+    return generateStubMethod(cx, ionICObj, args, ICState::Mode::Megamorphic,
+                              "IonIC.prototype.generateMegamorphicStub");
+  }
+
+  [[nodiscard]] static bool generateMegamorphicStubMethod(JSContext* const cx,
+                                                          const unsigned argc,
+                                                          Value* const vp) {
+    const CallArgs args(CallArgsFromVp(argc, vp));
+
+    const Rooted<IonICObject*> ionICObj(
+        cx, UnwrapThisObject<IonICObject>(cx, args, "generateMegamorphicStub"));
+    if (!ionICObj) {
+      return false;
+    }
+
+    return generateMegamorphicStubMethod(cx, ionICObj, args);
+  }
+
+  static constexpr JSFunctionSpec methods[] = {
+      JS_FN("generateStub", generateStubMethod, 0, JSPROP_ENUMERATE),
+      JS_FN("generateMegamorphicStub", generateMegamorphicStubMethod, 0,
+            JSPROP_ENUMERATE),
+      JS_FS_END};
+
+  [[nodiscard]] static bool extractAllStaticMethod(JSContext* const cx,
+                                                   const unsigned argc,
+                                                   Value* const vp) {
+    const CallArgs args(CallArgsFromVp(argc, vp));
+
+    if (!args.requireAtLeast(cx, "IonIC.extractAll", 1)) {
+      return false;
+    }
+
+    const RootedValue value(cx, args[0]);
+    RootedFunction fun(cx);
+    const RootedScript script(
+        cx, TestingFunctionArgumentToScript(cx, value, fun.address()));
+    if (!script) {
+      return false;
+    }
+
+    if (!cx->realm()->ensureJitRealmExists(cx)) {
+      return false;
+    }
+    const AutoKeepJitScripts keepJitScripts(cx);
+
+    IonScript* const ionScript(EnsureIonCompiled(cx, script));
+    if (!ionScript) {
+      return false;
+    }
+
+    RootedValueVector elems(cx);
+    const size_t numIonICs(ionScript->numICs());
+    if (numIonICs) {
+      const Rooted<IonScriptObject*> ionScriptObj(
+          cx, IonScriptObject::create(cx, ionScript));
+      if (!ionScriptObj) {
+        return false;
+      }
+      MOZ_ASSERT(numIonICs == ionScriptObj->ionScript().numICs());
+
+      for (size_t ionICIndex = 0; ionICIndex < numIonICs; ++ionICIndex) {
+        IonICObject* const ionICObj(
+            IonICObject::create(cx, ionScriptObj, ionICIndex));
+        if (!ionICObj) {
+          return false;
+        }
+
+        if (!elems.append(ObjectValue(*ionICObj))) {
+          return false;
+        }
+      }
+    }
+
+    JSObject* const array(JS::NewArrayObject(cx, elems));
+    if (!array) {
+      return false;
+    }
+
+    args.rval().setObject(*array);
+    return true;
+  }
+
+  static constexpr JSFunctionSpec staticMethods[] = {
+      JS_FN("extractAll", extractAllStaticMethod, 1, JSPROP_ENUMERATE),
+      JS_FS_END};
+
+ public:
+  [[nodiscard]] static JSObject* initClass(JSContext* const cx,
+                                           const HandleObject global,
+                                           const HandleObject icProto,
+                                           NativeObject** ctorp = nullptr) {
+    return InitClass(cx, global, &class_, icProto, &protoClass,
+                     &ThrowingConstructor, 0, nullptr, methods, nullptr,
+                     staticMethods, ctorp);
+  }
+};
+
+template <>
+bool JSObject::is<ICObject>() const {
+  return is<IonICObject>();
+}
+
+[[nodiscard]] bool ICObject::generateStubMethod(JSContext* const cx,
+                                                const unsigned argc,
+                                                Value* const vp) {
+  const CallArgs args(CallArgsFromVp(argc, vp));
+
+  const RootedObject obj(cx, RequireThisObject(cx, args));
+  if (!obj) {
+    return false;
+  }
+
+  if (obj->is<IonICObject>()) {
+    return IonICObject::generateStubMethod(cx, obj.as<IonICObject>(), args);
+  }
+
+  ReportIncompatibleProto<ICObject>(cx, obj, "generateStub");
+  return false;
+}
+
+[[nodiscard]] bool ICObject::generateMegamorphicStubMethod(JSContext* const cx,
+                                                           const unsigned argc,
+                                                           Value* const vp) {
+  const CallArgs args(CallArgsFromVp(argc, vp));
+
+  const RootedObject obj(cx, RequireThisObject(cx, args));
+  if (!obj) {
+    return false;
+  }
+
+  if (obj->is<IonICObject>()) {
+    return IonICObject::generateMegamorphicStubMethod(cx, obj.as<IonICObject>(),
+                                                      args);
+  }
+
+  ReportIncompatibleProto<ICObject>(cx, obj, "generateMegamorphicStub");
+  return false;
+}
+
+[[nodiscard]] GlobalCacheIRObject* GlobalCacheIRObject::create(
+    JSContext* const cx, const HandleObject global) {
+  const Rooted<GlobalCacheIRObject*> globalCacheIRObj(
+      cx, NewObjectWithGivenProto<GlobalCacheIRObject>(cx, nullptr));
+  if (!globalCacheIRObj) {
+    return nullptr;
+  }
+
+  const RootedObject icProto(cx, ICObject::initClass(cx, global));
+  if (!icProto) {
+    return nullptr;
+  }
+
+  JSObject* const ionICProto(IonICObject::initClass(cx, global, icProto));
+  if (!ionICProto) {
+    return nullptr;
+  }
+  globalCacheIRObj->initReservedSlot(ION_IC_PROTOTYPE_SLOT,
+                                     ObjectValue(*ionICProto));
+
+  JSObject* const icStubProto(ICStubObject::initClass(cx, global));
+  if (!icStubProto) {
+    return nullptr;
+  }
+  globalCacheIRObj->initReservedSlot(IC_STUB_PROTOTYPE_SLOT,
+                                     ObjectValue(*icStubProto));
+
+  RootedNativeObject cacheKindCtor(cx);
+  const RootedObject cacheKindProto(
+      cx, CacheKindObject::initClass(cx, global, cacheKindCtor.address()));
+  if (!cacheKindProto || !cacheKindCtor) {
+    return nullptr;
+  }
+
+  const RootedString cacheKindToStringTagPrefix(
+      cx, JS_NewStringCopyZ(cx, "CacheKind."));
+  if (!cacheKindToStringTagPrefix) {
+    return nullptr;
+  }
+
+#define CREATE_CACHE_KIND_OBJ(Kind)                                            \
+  {                                                                            \
+    const Rooted<CacheKindObject*> kindObj(                                    \
+        cx,                                                                    \
+        CacheKindObject::create(cx, cacheKindProto,                            \
+                                cacheKindToStringTagPrefix, CacheKind::Kind)); \
+    if (!kindObj) {                                                            \
+      return nullptr;                                                          \
+    }                                                                          \
+                                                                               \
+    const RootedId kindId(cx, AtomToId(&kindObj->name()));                     \
+    const RootedValue kindValue(cx, ObjectValue(*kindObj));                    \
+    globalCacheIRObj->initReservedSlot(Kind##_CACHE_KIND_SLOT, kindValue);     \
+    if (!DefineDataProperty(                                                   \
+            cx, cacheKindCtor, kindId, kindValue,                              \
+            JSPROP_ENUMERATE | JSPROP_READONLY | JSPROP_PERMANENT)) {          \
+      return nullptr;                                                          \
+    }                                                                          \
+  }
+  CACHE_IR_KINDS(CREATE_CACHE_KIND_OBJ)
+#undef CREATE_CACHE_KIND_OBJ
+
+  return globalCacheIRObj;
+}
 
 #ifdef FUZZING_JS_FUZZILLI
 // We have to assume that the fuzzer will be able to call this function e.g. by
@@ -4334,6 +5517,13 @@ static bool CreateErrorReport(JSContext* cx, unsigned argc, Value* vp) {
   args.rval().setObject(*obj);
   return true;
 }
+
+/* Pretend we can always preserve wrappers for dummy DOM objects. */
+static bool DummyPreserveWrapperCallback(JSContext* cx, HandleObject obj) {
+  return true;
+}
+
+static bool DummyHasReleasedWrapperCallback(HandleObject obj) { return true; }
 
 #define LAZY_STANDARD_CLASSES
 
@@ -10518,13 +11708,44 @@ static const JSClassOps global_classOps = {
     JS_GlobalObjectTraceHook,  // trace
 };
 
-static constexpr uint32_t DOM_PROTOTYPE_SLOT = JSCLASS_GLOBAL_SLOT_COUNT;
-static constexpr uint32_t DOM_GLOBAL_SLOTS = 1;
+enum : uint32_t {
+  DOM_PROTOTYPE_SLOT = JSCLASS_GLOBAL_SLOT_COUNT,
+  GLOBAL_CACHE_IR_OBJECT_SLOT,
+  GLOBAL_SLOT_LIMIT
+};
+static constexpr uint32_t GLOBAL_SLOTS =
+    GLOBAL_SLOT_LIMIT - JSCLASS_GLOBAL_SLOT_COUNT;
 
 static const JSClass global_class = {
     "global",
-    JSCLASS_GLOBAL_FLAGS | JSCLASS_GLOBAL_FLAGS_WITH_SLOTS(DOM_GLOBAL_SLOTS),
+    JSCLASS_GLOBAL_FLAGS | JSCLASS_GLOBAL_FLAGS_WITH_SLOTS(GLOBAL_SLOTS),
     &global_classOps};
+
+static JSObject* GetDOMPrototype(JSContext* cx, JSObject* global) {
+  MOZ_ASSERT(JS_IsGlobalObject(global));
+  if (JS::GetClass(global) != &global_class) {
+    JS_ReportErrorASCII(cx, "Can't get FakeDOMObject prototype in sandbox");
+    return nullptr;
+  }
+
+  const JS::Value& slot = JS::GetReservedSlot(global, DOM_PROTOTYPE_SLOT);
+  MOZ_ASSERT(slot.isObject());
+  return &slot.toObject();
+}
+
+[[nodiscard]] static GlobalCacheIRObject* GetGlobalCacheIRObject(
+    JSContext* cx, JSObject* global) {
+  MOZ_ASSERT(JS_IsGlobalObject(global));
+  if (JS::GetClass(global) != &global_class) {
+    JS_ReportErrorASCII(cx, "Can't get global CacheIR object in sandbox");
+    return nullptr;
+  }
+
+  const JS::Value& slot =
+      JS::GetReservedSlot(global, GLOBAL_CACHE_IR_OBJECT_SLOT);
+  MOZ_ASSERT(slot.isObject());
+  return &slot.toObject().as<GlobalCacheIRObject>();
+}
 
 /*
  * Define a FakeDOMObject constructor. It returns an object with a getter,
@@ -10802,18 +12023,6 @@ static void InitDOMObject(HandleObject obj) {
   JS::SetReservedSlot(obj, DOM_OBJECT_SLOT2, Int32Value(42));
 }
 
-static JSObject* GetDOMPrototype(JSContext* cx, JSObject* global) {
-  MOZ_ASSERT(JS_IsGlobalObject(global));
-  if (JS::GetClass(global) != &global_class) {
-    JS_ReportErrorASCII(cx, "Can't get FakeDOMObject prototype in sandbox");
-    return nullptr;
-  }
-
-  const JS::Value& slot = JS::GetReservedSlot(global, DOM_PROTOTYPE_SLOT);
-  MOZ_ASSERT(slot.isObject());
-  return &slot.toObject();
-}
-
 static bool dom_constructor(JSContext* cx, unsigned argc, JS::Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -10989,6 +12198,38 @@ static JSObject* NewGlobalObject(JSContext* cx, JS::RealmOptions& options,
 
     /* Initialize FakeDOMObject.prototype */
     InitDOMObject(domProto);
+
+    const RootedObject cacheTypeObj(cx, JS_NewObject(cx, nullptr));
+    if (!cacheTypeObj) {
+      return nullptr;
+    }
+
+#define DEFINE_CACHE_TYPE_PROPERTY(Name)                                       \
+  {                                                                            \
+    const RootedAtom cacheTypeAtom(cx, GetCacheTypeAtom(cx, CacheType::Name)); \
+    const RootedId cacheTypeId(cx, AtomToId(cacheTypeAtom));                   \
+    const RootedValue cacheTypeValue(cx, StringValue(cacheTypeAtom));          \
+    if (!JS_DefinePropertyById(                                                \
+            cx, cacheTypeObj, cacheTypeId, cacheTypeValue,                     \
+            JSPROP_ENUMERATE | JSPROP_READONLY | JSPROP_PERMANENT)) {          \
+      return nullptr;                                                          \
+    }                                                                          \
+  }
+    CACHE_IR_TYPES(DEFINE_CACHE_TYPE_PROPERTY)
+#undef DEFINE_CACHE_TYPE_PROPERTY
+
+    if (!JS_DefineProperty(cx, glob, "CacheType", cacheTypeObj,
+                           JSPROP_ENUMERATE)) {
+      return nullptr;
+    }
+
+    const Rooted<GlobalCacheIRObject*> globalCacheIRObj(
+        cx, GlobalCacheIRObject::create(cx, glob));
+    if (!globalCacheIRObj) {
+      return nullptr;
+    }
+    JS::SetReservedSlot(glob, GLOBAL_CACHE_IR_OBJECT_SLOT,
+                        ObjectValue(*globalCacheIRObj));
 
     if (!DefineToStringTag(cx, glob, cx->names().global)) {
       return nullptr;
@@ -11813,7 +13054,7 @@ static void SetWorkerContextOptions(JSContext* cx) {
   return true;
 }
 
-static int Shell(JSContext* cx, OptionParser* op) {
+static int RunShell(JSContext* cx, OptionParser* op) {
   if (JS::TraceLoggerSupported()) {
     JS::StartTraceLogger(cx);
   }
@@ -12897,7 +14138,7 @@ int main(int argc, char** argv) {
   }
 #endif  // __wasi__
 
-  result = Shell(cx, &op);
+  result = RunShell(cx, &op);
 
 #ifdef DEBUG
   if (OOM_printAllocationCount) {
