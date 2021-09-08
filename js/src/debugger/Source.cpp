@@ -71,8 +71,8 @@ const JSClass DebuggerSource::class_ = {
 NativeObject* DebuggerSource::initClass(JSContext* cx,
                                         Handle<GlobalObject*> global,
                                         HandleObject debugCtor) {
-  return InitClass(cx, debugCtor, nullptr, &class_, construct, 0, properties_,
-                   methods_, nullptr, nullptr);
+  return InitClass(cx, debugCtor, &class_, nullptr, &class_, construct, 0,
+                   properties_, methods_, nullptr, nullptr);
 }
 
 /* static */

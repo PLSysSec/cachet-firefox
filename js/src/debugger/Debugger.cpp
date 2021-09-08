@@ -6684,10 +6684,10 @@ extern JS_PUBLIC_API bool JS_DefineDebuggerObject(JSContext* cx,
   RootedValue debuggeeWouldRunCtor(cx);
   Handle<GlobalObject*> global = obj.as<GlobalObject>();
 
-  debugProto =
-      InitClass(cx, global, nullptr, &DebuggerInstanceObject::class_,
-                Debugger::construct, 1, Debugger::properties, Debugger::methods,
-                nullptr, Debugger::static_methods, debugCtor.address());
+  debugProto = InitClass(cx, global, &DebuggerInstanceObject::class_, nullptr,
+                         &DebuggerInstanceObject::class_, Debugger::construct,
+                         1, Debugger::properties, Debugger::methods, nullptr,
+                         Debugger::static_methods, debugCtor.address());
   if (!debugProto) {
     return false;
   }
@@ -6717,10 +6717,10 @@ extern JS_PUBLIC_API bool JS_DefineDebuggerObject(JSContext* cx,
     return false;
   }
 
-  memoryProto =
-      InitClass(cx, debugCtor, nullptr, &DebuggerMemory::class_,
-                DebuggerMemory::construct, 0, DebuggerMemory::properties,
-                DebuggerMemory::methods, nullptr, nullptr);
+  memoryProto = InitClass(cx, debugCtor, &DebuggerMemory::class_, nullptr,
+                          &DebuggerMemory::class_, DebuggerMemory::construct, 0,
+                          DebuggerMemory::properties, DebuggerMemory::methods,
+                          nullptr, nullptr);
   if (!memoryProto) {
     return false;
   }

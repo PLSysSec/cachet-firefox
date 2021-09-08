@@ -10975,8 +10975,9 @@ static JSObject* NewGlobalObject(JSContext* cx, JS::RealmOptions& options,
     SetDOMCallbacks(cx, &DOMcallbacks);
 
     RootedObject domProto(
-        cx, JS_InitClass(cx, glob, nullptr, &dom_class, dom_constructor, 0,
-                         dom_props, dom_methods, nullptr, nullptr));
+        cx,
+        JS_InitClass(cx, glob, &dom_class, nullptr, &dom_class, dom_constructor,
+                     0, dom_props, dom_methods, nullptr, nullptr));
     if (!domProto) {
       return nullptr;
     }

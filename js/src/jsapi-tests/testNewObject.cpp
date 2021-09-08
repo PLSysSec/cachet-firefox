@@ -173,8 +173,8 @@ static const JSClass Base_class = {"Base",
 
 BEGIN_TEST(testNewObject_Subclassing) {
   JSObject* proto =
-      JS_InitClass(cx, global, nullptr, &Base_class, Base_constructor, 0,
-                   nullptr, nullptr, nullptr, nullptr);
+      JS_InitClass(cx, global, &Base_class, nullptr, &Base_class,
+                   Base_constructor, 0, nullptr, nullptr, nullptr, nullptr);
   if (!proto) {
     return false;
   }
