@@ -33,8 +33,28 @@
 
 namespace js {
 
+inline uint32_t NativeObject::slotSpanMaybeForwarded() const {
+  Shape* const shape(gc::MaybeForwarded(this->shape()));
+  if (shape->isDictionary()) {
+    return dictionaryModeSlotSpan();
+  }
+  MOZ_ASSERT(getSlotsHeader()->dictionarySlotSpan() == 0);
+  return shape->slotSpan();
+}
+
 inline uint32_t NativeObject::numFixedSlotsMaybeForwarded() const {
   return gc::MaybeForwarded(shape())->numFixedSlots();
+}
+
+inline uint32_t js::NativeObject::numDynamicSlotsMaybeForwarded() const {
+  uint32_t slots = getSlotsHeader()->capacity();
+  MOZ_ASSERT(slots == calculateDynamicSlots(
+                          numFixedSlotsMaybeForwarded(),
+                          slotSpanMaybeForwarded(),
+                          gc::MaybeForwarded(shape())->getObjectClass()));
+  MOZ_ASSERT_IF(hasDynamicSlots(), slots != 0);
+
+  return slots;
 }
 
 inline uint8_t* NativeObject::fixedData(size_t nslots) const {

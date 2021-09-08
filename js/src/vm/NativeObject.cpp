@@ -190,24 +190,21 @@ void js::NativeObject::checkShapeConsistency() {
 
 bool js::NativeObject::slotInRange(uint32_t slot,
                                    SentinelAllowed sentinel) const {
-  MOZ_ASSERT(!gc::IsForwarded(shape()));
-  uint32_t capacity = numFixedSlots() + numDynamicSlots();
+  // We call MaybeForwarded variants of these functions to allow reading slots
+  // of associated objects in trace hooks that may be called during a moving GC.
+  const uint32_t limit = slotSpanMaybeForwarded();
+  MOZ_ASSERT(limit <=
+             numFixedSlotsMaybeForwarded() + numDynamicSlotsMaybeForwarded());
   if (sentinel == SENTINEL_ALLOWED) {
-    return slot <= capacity;
+    return slot <= limit;
   }
-  return slot < capacity;
+  return slot < limit;
 }
 
 bool js::NativeObject::slotIsFixed(uint32_t slot) const {
   // We call numFixedSlotsMaybeForwarded() to allow reading slots of
   // associated objects in trace hooks that may be called during a moving GC.
   return slot < numFixedSlotsMaybeForwarded();
-}
-
-bool js::NativeObject::isNumFixedSlots(uint32_t nfixed) const {
-  // We call numFixedSlotsMaybeForwarded() to allow reading slots of
-  // associated objects in trace hooks that may be called during a moving GC.
-  return nfixed == numFixedSlotsMaybeForwarded();
 }
 
 #endif /* DEBUG */

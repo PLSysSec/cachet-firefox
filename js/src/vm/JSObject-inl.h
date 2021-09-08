@@ -33,14 +33,11 @@ static inline gc::AllocKind NewObjectGCKind() { return gc::AllocKind::OBJECT4; }
 
 MOZ_ALWAYS_INLINE uint32_t js::NativeObject::numDynamicSlots() const {
   uint32_t slots = getSlotsHeader()->capacity();
-  MOZ_ASSERT(slots == calculateDynamicSlots());
+  MOZ_ASSERT(slots ==
+             calculateDynamicSlots(numFixedSlots(), slotSpan(), getClass()));
   MOZ_ASSERT_IF(hasDynamicSlots(), slots != 0);
 
   return slots;
-}
-
-MOZ_ALWAYS_INLINE uint32_t js::NativeObject::calculateDynamicSlots() const {
-  return calculateDynamicSlots(numFixedSlots(), slotSpan(), getClass());
 }
 
 /* static */ MOZ_ALWAYS_INLINE uint32_t js::NativeObject::calculateDynamicSlots(

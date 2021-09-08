@@ -728,11 +728,6 @@ class NativeObject : public JSObject {
    * Check whether a slot is a fixed slot.
    */
   bool slotIsFixed(uint32_t slot) const;
-
-  /*
-   * Check whether the supplied number of fixed slots is correct.
-   */
-  bool isNumFixedSlots(uint32_t nfixed) const;
 #endif
 
   /*
@@ -793,6 +788,9 @@ class NativeObject : public JSObject {
     MOZ_ASSERT(getSlotsHeader()->dictionarySlotSpan() == 0);
     return shape()->slotSpan();
   }
+
+  /* Like numFixedSlotsMaybeForwarded(), but for slotSpan(). */
+  uint32_t slotSpanMaybeForwarded() const;
 
   uint32_t dictionaryModeSlotSpan() const {
     MOZ_ASSERT(inDictionaryMode());
@@ -856,10 +854,10 @@ class NativeObject : public JSObject {
 
   bool hasDynamicSlots() const { return getSlotsHeader()->capacity(); }
 
-  /* Compute the number of dynamic slots required for this object. */
-  MOZ_ALWAYS_INLINE uint32_t calculateDynamicSlots() const;
-
   MOZ_ALWAYS_INLINE uint32_t numDynamicSlots() const;
+
+  /* Like numFixedSlotsMaybeForwarded(), but for numDynamicSlots(). */
+  inline uint32_t numDynamicSlotsMaybeForwarded() const;
 
   bool empty() const { return shape()->propMapLength() == 0; }
 
@@ -1131,6 +1129,7 @@ class NativeObject : public JSObject {
   // and these shouldn't end up here (asserted below).
   MOZ_ALWAYS_INLINE HeapSlot& getReservedSlotRef(uint32_t index) {
     MOZ_ASSERT(index < JSSLOT_FREE(getClass()));
+    MOZ_ASSERT(slotInRange(index));
     MOZ_ASSERT(slotIsFixed(index) == (index < MAX_FIXED_SLOTS));
     MOZ_ASSERT(!ObjectMayBeSwapped(this));
     return index < MAX_FIXED_SLOTS ? fixedSlots()[index]
@@ -1138,6 +1137,7 @@ class NativeObject : public JSObject {
   }
   MOZ_ALWAYS_INLINE const HeapSlot& getReservedSlotRef(uint32_t index) const {
     MOZ_ASSERT(index < JSSLOT_FREE(getClass()));
+    MOZ_ASSERT(slotInRange(index));
     MOZ_ASSERT(slotIsFixed(index) == (index < MAX_FIXED_SLOTS));
     MOZ_ASSERT(!ObjectMayBeSwapped(this));
     return index < MAX_FIXED_SLOTS ? fixedSlots()[index]
@@ -1162,22 +1162,26 @@ class NativeObject : public JSObject {
   // allocated.
 
   HeapSlot& getFixedSlotRef(uint32_t slot) {
+    MOZ_ASSERT(slotInRange(slot));
     MOZ_ASSERT(slotIsFixed(slot));
     return fixedSlots()[slot];
   }
 
   const Value& getFixedSlot(uint32_t slot) const {
+    MOZ_ASSERT(slotInRange(slot));
     MOZ_ASSERT(slotIsFixed(slot));
     return fixedSlots()[slot];
   }
 
   void setFixedSlot(uint32_t slot, const Value& value) {
+    MOZ_ASSERT(slotInRange(slot));
     MOZ_ASSERT(slotIsFixed(slot));
     checkStoredValue(value);
     fixedSlots()[slot].set(this, HeapSlot::Slot, slot, value);
   }
 
   void initFixedSlot(uint32_t slot, const Value& value) {
+    MOZ_ASSERT(slotInRange(slot));
     MOZ_ASSERT(slotIsFixed(slot));
     checkStoredValue(value);
     fixedSlots()[slot].init(this, HeapSlot::Slot, slot, value);
