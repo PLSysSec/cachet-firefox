@@ -19,43 +19,45 @@ struct Cachet_Bail {};
 template <typename T>
 struct PrimitiveType {
   using Val = T;
-  using Local = T;
-  using Ref = const T&;
-  using OutRef = T&;
+  using Local = Val;
+  using Ref = Val;
+  using MutRef = Val&;
 
-  static inline bool CompareEq(Val lhs, Val rhs) { return lhs == rhs; }
+  template <typename U>
+  static U&& ToVal(U&& x) {
+    return std::forward<U>(x);
+  }
 
-  static inline bool CompareNeq(Val lhs, Val rhs) { return lhs != rhs; }
-
-  static inline Val ToVal(Ref ref) { return ref; }
-
-  template <typename Cachet_Context>
-  static inline Local EmptyLocal(Cachet_Context cx) {
+  template <typename C>
+  static Local EmptyLocal(C cx) {
     return T();
   }
 
-  template <typename Cachet_Context>
-  static inline Local ToLocal(Cachet_Context cx, Val&& val) {
-    return std::move(val);
+  template <typename C, typename U>
+  static U&& ToLocal(C cx, U&& x) {
+    return std::forward<U>(x);
   }
 
-  template <typename Cachet_Context>
-  static inline Local ToLocal(Cachet_Context cx, Ref ref) {
-    return ref;
+  template <typename U>
+  static U&& ToRef(U&& x) {
+    return std::forward<U>(x);
   }
 
-  static inline Ref ToRef(const Val& val) { return val; }
-
-  static inline OutRef ToOutRef(Local& local) { return local; }
-
-  static inline Val SetOutRef(OutRef out, Val&& in) {
-    out = std::move(in);
-    return out;
+  static MutRef ToMutRef(Local& local) {
+    return local;
   }
 
-  static inline Val SetOutRef(OutRef out, Ref in) {
-    out = in;
-    return out;
+  template <typename U>
+  static void SetMutRef(MutRef lhs, U&& rhs) {
+    lhs = std::forward<U>(rhs);
+  }
+
+  static bool CompareEq(Ref lhs, Ref rhs) {
+    return lhs == rhs;
+  }
+
+  static bool CompareNeq(Ref lhs, Ref rhs) {
+    return lhs != rhs;
   }
 };
 
@@ -64,15 +66,23 @@ struct NumericType : public PrimitiveType<T> {
   using Val = typename PrimitiveType<T>::Val;
   using Local = typename PrimitiveType<T>::Local;
   using Ref = typename PrimitiveType<T>::Ref;
-  using OutRef = typename PrimitiveType<T>::OutRef;
+  using MutRef = typename PrimitiveType<T>::MutRef;
 
-  static inline bool CompareLte(Val lhs, Val rhs) { return lhs <= rhs; }
+  static bool CompareLte(Ref lhs, Ref rhs) {
+    return lhs <= rhs;
+  }
 
-  static inline bool CompareGte(Val lhs, Val rhs) { return lhs >= rhs; }
+  static bool CompareGte(Ref lhs, Ref rhs) {
+    return lhs >= rhs;
+  }
 
-  static inline bool CompareLt(Val lhs, Val rhs) { return lhs < rhs; }
+  static bool CompareLt(Ref lhs, Ref rhs) {
+    return lhs < rhs;
+  }
 
-  static inline bool CompareGt(Val lhs, Val rhs) { return lhs > rhs; }
+  static bool CompareGt(Ref lhs, Ref rhs) {
+    return lhs > rhs;
+  }
 };
 
 using Type_Unit = PrimitiveType<std::monostate>;
@@ -80,10 +90,17 @@ using Type_Bool = NumericType<bool>;
 using Type_Int32 = NumericType<int32_t>;
 using Type_Double = NumericType<double>;
 
-inline constexpr Type_Unit::Val Const_unit = std::monostate();
+inline Type_Unit::Ref Var_unit() {
+  return std::monostate();
+}
 
-inline constexpr Type_Bool::Val Const_true = true;
-inline constexpr Type_Bool::Val Const_false = false;
+inline Type_Bool::Ref Var_true() {
+  return true;
+}
+
+inline Type_Bool::Ref Const_false() {
+  return false;
+}
 
 };  // namespace prelude
 

@@ -23,6 +23,9 @@
 #include "gc/Allocator.h"
 #include "jit/BaselineCacheIRCompiler.h"
 #include "jit/BaselineIC.h"
+#ifdef JS_CACHET
+#  include "jit/CachetCompiler.h"
+#endif
 #include "jit/IonCacheIRCompiler.h"
 #include "jit/IonIC.h"
 #include "jit/JitFrames.h"
@@ -1560,7 +1563,11 @@ bool CacheIRCompiler::emitGuardToObject(ValOperandId inputId) {
   if (!addFailurePath(&failure)) {
     return false;
   }
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_GuardToObject(cx_, this, inputId, failure->label());
+#else
   masm.branchTestObject(Assembler::NotEqual, input, failure->label());
+#endif
   return true;
 }
 

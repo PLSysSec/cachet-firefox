@@ -257,8 +257,9 @@ GeneratedFile(
 
 if CONFIG["JS_CACHET"]:
     UNIFIED_SOURCES += [
-        "CacheIRInterpreter.cpp",
-        "CachetInterpreter.cpp",
+        "CachetCompiler.cpp",
+        #"CacheIRInterpreter.cpp",
+        #"CachetInterpreter.cpp",
     ]
 
 if CONFIG["FUZZING_INTERFACES"] or CONFIG["FUZZING_JS_FUZZILLI"]:

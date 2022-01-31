@@ -104,7 +104,9 @@
 #include "jit/CacheIRGenerated.h"
 #include "jit/CacheIRHealth.h"
 #ifdef JS_CACHET
+/*
 #  include "jit/CacheIRInterpreter.h"
+*/
 #endif
 #include "jit/CacheIRSpewer.h"
 #include "jit/ICState.h"
@@ -4922,6 +4924,7 @@ class ICStubObject : public NativeObject {
   }
 
 #ifdef JS_CACHET
+/*
   [[nodiscard]] static bool runInterpretedMethod(JSContext* const cx,
                                                  const unsigned argc,
                                                  Value* const vp) {
@@ -5031,12 +5034,15 @@ class ICStubObject : public NativeObject {
       return false;
     }
   }
+*/
 #endif /* JS_CACHET */
 
   static constexpr JSFunctionSpec methods[] = {
       JS_FN("toString", toStringMethod, 0, JSPROP_ENUMERATE),
 #ifdef JS_CACHET
+/*
       JS_FN("runInterpreted", runInterpretedMethod, 0, JSPROP_ENUMERATE),
+*/
 #endif /* JS_CACHET */
       JS_FS_END};
 

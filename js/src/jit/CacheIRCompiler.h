@@ -726,6 +726,52 @@ class StubFieldOffset {
 
 class AutoOutputRegister;
 
+#ifdef JS_CACHET
+
+class CacheIRCompiler;
+
+namespace cachet {
+
+namespace IR_CacheIR {
+
+inline MacroAssembler& GetOutput(CacheIRCompiler* compiler);
+
+};  // namespace IR_CacheIR;
+
+namespace Impl_CacheIR {
+
+inline ValueOperand Var_outputReg(JSContext* cx, CacheIRCompiler* compiler);
+
+ValueOperand Fn_allocateValueReg(JSContext* cx, CacheIRCompiler* compiler);
+
+void Fn_releaseValueReg(JSContext* cx, CacheIRCompiler* compiler, ValueOperand param_valueReg);
+
+Register Fn_allocateReg(JSContext* cx, CacheIRCompiler* compiler);
+
+void Fn_releaseReg(JSContext* cx, CacheIRCompiler* compiler, Register param_reg);
+
+ValueOperand Fn_useValueReg(JSContext* cx, CacheIRCompiler* compiler,
+                            ValOperandId param_valueId);
+
+Register Fn_useObjectReg(JSContext* cx, CacheIRCompiler* compiler,
+                         ObjOperandId param_objectId);
+
+int32_t Fn_readInt32Field(JSContext* cx, CacheIRCompiler* compiler,
+                          uint32_t param_int32Field);
+
+Shape* Fn_readShapeField(JSContext* cx, CacheIRCompiler* compiler,
+                         uint32_t param_shapeField);
+
+bool Fn_objectGuardNeedsSpectreMitigations(JSContext* cx,
+                                           CacheIRCompiler* compiler,
+                                           ObjOperandId param_objectId);
+
+};  // namespace IR_CacheIR;
+
+};  // namespace cachet
+
+#endif  // JS_CACHET
+
 // Base class for BaselineCacheIRCompiler and IonCacheIRCompiler.
 class MOZ_RAII CacheIRCompiler {
  protected:
@@ -735,6 +781,20 @@ class MOZ_RAII CacheIRCompiler {
   friend class AutoCallVM;
   friend class AutoScratchFloatRegister;
   friend class AutoAvailableFloatRegister;
+
+#ifdef JS_CACHET
+  friend inline MacroAssembler& cachet::IR_CacheIR::GetOutput(CacheIRCompiler* compiler);
+  friend inline ValueOperand cachet::Impl_CacheIR::Var_outputReg(JSContext* cx, CacheIRCompiler* compiler);
+  friend ValueOperand cachet::Impl_CacheIR::Fn_allocateValueReg(JSContext* cx, CacheIRCompiler* compiler);
+  friend void cachet::Impl_CacheIR::Fn_releaseValueReg(JSContext* cx, CacheIRCompiler* compiler, ValueOperand param_valueReg);
+  friend Register cachet::Impl_CacheIR::Fn_allocateReg(JSContext* cx, CacheIRCompiler* compiler);
+  friend void cachet::Impl_CacheIR::Fn_releaseReg(JSContext* cx, CacheIRCompiler* compiler, Register param_reg);
+  friend ValueOperand cachet::Impl_CacheIR::Fn_useValueReg(JSContext* cx, CacheIRCompiler* compiler, ValOperandId param_valueId);
+  friend Register cachet::Impl_CacheIR::Fn_useObjectReg(JSContext* cx, CacheIRCompiler* compiler, ObjOperandId param_objectId);
+  friend int32_t cachet::Impl_CacheIR::Fn_readInt32Field(JSContext* cx, CacheIRCompiler* compiler, uint32_t param_int32Field);
+  friend Shape* cachet::Impl_CacheIR::Fn_readShapeField(JSContext* cx, CacheIRCompiler* compiler, uint32_t param_shapeField);
+  friend bool cachet::Impl_CacheIR::Fn_objectGuardNeedsSpectreMitigations(JSContext* cx, CacheIRCompiler* compiler, ObjOperandId param_objectId);
+#endif  // JS_CACHET
 
   bool preparedForVMCall_;
 
