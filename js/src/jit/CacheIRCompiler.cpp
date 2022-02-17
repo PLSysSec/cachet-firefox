@@ -1559,12 +1559,14 @@ bool CacheIRCompiler::emitGuardToObject(ValOperandId inputId) {
   }
 
   ValueOperand input = allocator.useValueRegister(masm, inputId);
+
   FailurePath* failure;
   if (!addFailurePath(&failure)) {
     return false;
   }
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardToObject(cx_, this, inputId, failure->label());
+  cachet::Impl_CacheIR::Op_GuardToObject(cachet::CachetContext {this, cx_}, inputId, ObjOperandId(inputId.id()), failure->label());
+  // input.setPayloadReg(reg, JSVAL_TYPE_OBJECT);
 #else
   masm.branchTestObject(Assembler::NotEqual, input, failure->label());
 #endif
