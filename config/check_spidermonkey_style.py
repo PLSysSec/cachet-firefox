@@ -67,6 +67,8 @@ included_inclnames_to_ignore = set(
         "gc/StatsPhasesGenerated.inc",  # generated in $OBJDIR
         "jit/CacheIRGenerated.h",  # generated in $OBJDIR
         "jit/CacheIROpsGenerated.h",  # generated in $OBJDIR
+        "jit/CachetGenerated.h",  # generated in $OBJDIR
+        "jit/CachetGenerated.inc",  # generated in $OBJDIR
         "jit/LIROpsGenerated.h",  # generated in $OBJDIR
         "jit/MIROpsGenerated.h",  # generated in $OBJDIR
         "js/ProfilingCategoryList.h",  # comes from mozglue/baseprofiler
@@ -142,6 +144,7 @@ oddly_ordered_inclnames = set(
         "gc/StatsPhasesGenerated.h",  # Included in the body of gc/Statistics.h
         "gc/StatsPhasesGenerated.inc",  # Included in the body of gc/Statistics.cpp
         "jit/CachetGenerated.h",  # Included in the body of jit/CachetInterpreter.h
+        "jit/CachetGenerated.inc",  # Included in the body of jit/CachetInterpreter.cpp
         "psapi.h",  # Must be included after "util/Windows.h" on Windows
         "machine/endian.h",  # Must be included after <sys/types.h> on BSD
         "winbase.h",  # Must precede other system headers(?)
