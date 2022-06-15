@@ -107,6 +107,7 @@ class CacheIRSpewer {
 #if defined(JS_CACHEIR_SPEW) || !defined(JS_DISABLE_SHELL)
 extern void SpewCacheIROps(GenericPrinter& out, const char* prefix,
                            const CacheIRStubInfo* info);
+extern void SpewCacheIRToFile(const CacheIRStubInfo* info, JSScript* script, JSContext* ctx);
 #endif /* JS_CACHEIR_SPEW || !JS_DISABLE_SHELL */
 
 #ifndef JS_DISABLE_SHELL

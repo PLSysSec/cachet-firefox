@@ -10,7 +10,12 @@
 #include "mozilla/TextUtils.h"
 
 #include <algorithm>
+#include <dirent.h>
+#include <fstream>
 #include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
 
 #include "jsmath.h"
 
@@ -29,6 +34,7 @@
 
 using namespace js;
 using namespace js::jit;
+using namespace mozilla;
 
 #if defined(JS_CACHEIR_SPEW) || !defined(JS_DISABLE_SHELL)
 
@@ -147,6 +153,67 @@ void jit::SpewCacheIROps(GenericPrinter& out, const char* prefix,
   CacheIRReader reader(info);
   CacheIROpsJitSpewer spewer(out, prefix);
   spewer.spew(reader);
+}
+
+void jit::SpewCacheIRToFile(const CacheIRStubInfo* info, JSScript* script, JSContext* ctx) {
+  const char* baseOutPath = "stub_dump/";
+  // Get the js file this cache stub came from
+  const char* filename = script->filename();
+  uint32_t lineno = script->lineno();
+  // check if the base output path exists
+  struct stat buf;
+  if (stat(baseOutPath, &buf) != 0) {
+    mkdir(baseOutPath, 0775);
+  }
+  char* stubDirPath = nullptr;
+  sprintf(stubDirPath, "%s%s/", baseOutPath, filename);
+  if (stat(stubDirPath, &buf) != 0) {
+    mkdir(stubDirPath, 0775);
+  }
+
+  // If the source javascript file already exists, we don't have to worry about
+  // saving the new one
+  ScriptSource* source = script->scriptSource();
+  char* sourcePath = nullptr;
+  sprintf(sourcePath, "%ssource.js", stubDirPath);
+  if (stat(sourcePath, &buf) != 0) {
+    // Not all script sources will have a source text (not sure all the conditions,
+    // but things like `eval` might elide sources, and functions can also be
+    // constructed directly from bytecode)
+    if (source->hasSourceText()) {
+        size_t srcLen = source->length();
+        JSLinearString* srcStr = source->substring(ctx, 0, srcLen - 1);
+        std::ofstream sourceFile(sourcePath);
+        JS::AutoCheckCannotGC nogc;
+        sourceFile << srcStr->twoByteChars(nogc);
+        sourceFile.close();
+      }
+  }
+
+  // Save our CacheIR stub
+
+  // Count the number of files in the output directory
+  // Surely there must be a better way to do this
+  int numFiles = 0;
+  DIR* dirPath = opendir(stubDirPath);
+  struct dirent *entry;
+  if (dirPath != NULL) {
+      while ((entry = readdir(dirPath))) {
+        numFiles++;
+      }
+      closedir(dirPath);
+  }
+
+  char* stubPath = nullptr;
+  sprintf(stubPath, "%sstub%05d.cacheir", stubDirPath, numFiles);
+  FILE* printerFile = fopen(stubPath, "w");
+  if (printerFile != nullptr) {
+    Fprinter printer = Fprinter(printerFile);
+    char* prefix = nullptr;
+    sprintf(prefix, "// filename: %s\n//lineno: %d\n", filename, lineno);
+    SpewCacheIROps(printer, prefix, info);
+  }
+  fclose(printerFile);
 }
 
 #endif /* JS_CACHEIR_SPEW || !JS_DISABLE_SHELL */

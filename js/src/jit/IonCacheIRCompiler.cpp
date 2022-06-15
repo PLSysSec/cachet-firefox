@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include "jit/CacheIRCompiler.h"
+#include "jit/CacheIRSpewer.h"
 #include "jit/IonIC.h"
 #include "jit/JitFrames.h"
 #include "jit/JitZone.h"
@@ -1561,6 +1562,9 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
       return;
     }
   }
+
+  JSScript* script = this->script();
+  SpewCacheIRToFile(stubInfo, script, cx);
 
   MOZ_ASSERT(stubInfo);
   MOZ_ASSERT(stubInfo->engine() == ICStubEngine::IonIC);
