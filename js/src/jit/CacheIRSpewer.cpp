@@ -157,39 +157,77 @@ void jit::SpewCacheIROps(GenericPrinter& out, const char* prefix,
   spewer.spew(reader);
 }
 
+template <typename CharT>
+static void QuoteString(GenericPrinter& out, const CharT* s, size_t length) {
+  const CharT* end = s + length;
+  for (const CharT* t = s; t < end; s = ++t) {
+    // This quote implementation is probably correct,
+    // but uses \u even when not strictly necessary.
+    char16_t c = *t;
+    if (c == '"' || c == '\\') {
+      out.printf("\\");
+      out.printf("%c", char(c));
+    } else if (!IsAsciiPrintable(c)) {
+      out.printf("\\u%04x", c);
+    } else {
+      out.printf("%c", char(c));
+    }
+  }
+}
+
+static void QuoteString(GenericPrinter& out, JSLinearString* str) {
+  JS::AutoCheckCannotGC nogc;
+
+  // Limit the string length to reduce the JSON file size.
+  size_t length = std::min(str->length(), size_t(128));
+  if (str->hasLatin1Chars()) {
+    QuoteString(out, str->latin1Chars(nogc), length);
+  } else {
+    QuoteString(out, str->twoByteChars(nogc), length);
+  }
+}
+
 void jit::SpewCacheIRToFile(const CacheIRStubInfo* info, JSScript* script, JSContext* ctx) {
-  const char* baseOutPath = "stub_dump/";
+  std::string baseOutPath = "stub_dump/";
   // Get the js file this cache stub came from
   const char* filename = script->filename();
   uint32_t lineno = script->lineno();
   // check if the base output path exists
   struct stat buf;
-  if (stat(baseOutPath, &buf) != 0) {
-    mkdir(baseOutPath, 0775);
+  if (stat(baseOutPath.c_str(), &buf) != 0) {
+    mkdir(baseOutPath.c_str(), 0775);
   }
-  char* stubDirPath = nullptr;
-  sprintf(stubDirPath, "%s%s/", baseOutPath, filename);
-  if (stat(stubDirPath, &buf) != 0) {
-    mkdir(stubDirPath, 0775);
+  std::string stubDirPath = baseOutPath + filename + std::string("/");
+  if (stat(stubDirPath.c_str(), &buf) != 0) {
+    mkdir(stubDirPath.c_str(), 0775);
   }
 
   // If the source javascript file already exists, we don't have to worry about
   // saving the new one
+  // TODO: Saving the source crashes in the browser for some reason
   ScriptSource* source = script->scriptSource();
-  char* sourcePath = nullptr;
-  sprintf(sourcePath, "%ssource.js", stubDirPath);
-  if (stat(sourcePath, &buf) != 0) {
+  std::string sourcePath = stubDirPath + std::string("source.js");
+  if (stat(sourcePath.c_str(), &buf) != 0) {
     // Not all script sources will have a source text (not sure all the conditions,
     // but things like `eval` might elide sources, and functions can also be
     // constructed directly from bytecode)
     if (source->hasSourceText()) {
-        size_t srcLen = source->length();
-        JSLinearString* srcStr = source->substring(ctx, 0, srcLen - 1);
-        std::ofstream sourceFile(sourcePath);
-        JS::AutoCheckCannotGC nogc;
-        sourceFile << srcStr->twoByteChars(nogc);
-        sourceFile.close();
+      size_t srcLen = source->length();
+      if (srcLen != 0) {
+        size_t start = script->toStringStart();
+        size_t end = (start + script->length());
+        if (source->isFunctionBody()) {
+          JSLinearString* srcStr = source->functionBodyString(ctx);
+            FILE* printerFile = fopen(sourcePath.c_str(), "w");
+          if (printerFile != nullptr) {
+            Fprinter printer = Fprinter(printerFile);
+            JS::AutoCheckCannotGC nogc;
+            QuoteString(printer, srcStr);
+            fclose(printerFile);
+          }
+        }
       }
+    }
   }
 
   // Save our CacheIR stub
@@ -197,7 +235,7 @@ void jit::SpewCacheIRToFile(const CacheIRStubInfo* info, JSScript* script, JSCon
   // Count the number of files in the output directory
   // Surely there must be a better way to do this
   int numFiles = 0;
-  DIR* dirPath = opendir(stubDirPath);
+  DIR* dirPath = opendir(stubDirPath.c_str());
   struct dirent *entry;
   if (dirPath != NULL) {
       while ((entry = readdir(dirPath))) {
@@ -206,16 +244,16 @@ void jit::SpewCacheIRToFile(const CacheIRStubInfo* info, JSScript* script, JSCon
       closedir(dirPath);
   }
 
-  char* stubPath = nullptr;
-  sprintf(stubPath, "%sstub%05d.cacheir", stubDirPath, numFiles);
-  FILE* printerFile = fopen(stubPath, "w");
+  std::string stubPath = stubDirPath + std::string("stub") + std::to_string(numFiles) + std::string(".cacheir");
+  FILE* printerFile = fopen(stubPath.c_str(), "w");
   if (printerFile != nullptr) {
     Fprinter printer = Fprinter(printerFile);
-    char* prefix = nullptr;
-    sprintf(prefix, "// filename: %s\n//lineno: %d\n", filename, lineno);
+    std::string header = std::string("// filename: ") + std::string(filename) + std::string("\n//lineno: ") + std::to_string(lineno) + std::string("\n");
+    printer.put(header.c_str(), header.length());
+    const char* prefix = "";
     SpewCacheIROps(printer, prefix, info);
+    fclose(printerFile);
   }
-  fclose(printerFile);
 }
 
 #endif /* JS_CACHEIR_SPEW || !JS_DISABLE_SHELL */
@@ -424,36 +462,6 @@ void CacheIRSpewer::beginCache(const IRGenerator& gen) {
     j.property("line", PCToLineNumber(gen.script_, pc, &column));
     j.property("column", column);
     j.formatProperty("pc", "%p", pc);
-  }
-}
-
-template <typename CharT>
-static void QuoteString(GenericPrinter& out, const CharT* s, size_t length) {
-  const CharT* end = s + length;
-  for (const CharT* t = s; t < end; s = ++t) {
-    // This quote implementation is probably correct,
-    // but uses \u even when not strictly necessary.
-    char16_t c = *t;
-    if (c == '"' || c == '\\') {
-      out.printf("\\");
-      out.printf("%c", char(c));
-    } else if (!IsAsciiPrintable(c)) {
-      out.printf("\\u%04x", c);
-    } else {
-      out.printf("%c", char(c));
-    }
-  }
-}
-
-static void QuoteString(GenericPrinter& out, JSLinearString* str) {
-  JS::AutoCheckCannotGC nogc;
-
-  // Limit the string length to reduce the JSON file size.
-  size_t length = std::min(str->length(), size_t(128));
-  if (str->hasLatin1Chars()) {
-    QuoteString(out, str->latin1Chars(nogc), length);
-  } else {
-    QuoteString(out, str->twoByteChars(nogc), length);
   }
 }
 
