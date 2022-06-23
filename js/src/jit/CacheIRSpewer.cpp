@@ -12,9 +12,11 @@
 #include <algorithm>
 #include <dirent.h>
 #include <fstream>
+#include <iostream>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
 #include <sys/stat.h>
 
 #include "jsmath.h"

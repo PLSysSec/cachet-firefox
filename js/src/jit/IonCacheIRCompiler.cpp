@@ -8,6 +8,7 @@
 #include "mozilla/Maybe.h"
 
 #include <algorithm>
+#include <iostream>
 
 #include "jit/CacheIRCompiler.h"
 #include "jit/CacheIRSpewer.h"
@@ -1563,8 +1564,10 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
     }
   }
 
+#ifdef JS_CACHEIR_SPEW
   JSScript* script = this->script();
   SpewCacheIRToFile(stubInfo, script, cx);
+#endif // JS_CACHEIR_SPEW
 
   MOZ_ASSERT(stubInfo);
   MOZ_ASSERT(stubInfo->engine() == ICStubEngine::IonIC);

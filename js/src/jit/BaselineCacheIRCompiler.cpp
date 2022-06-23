@@ -7,6 +7,7 @@
 #include "jit/BaselineCacheIRCompiler.h"
 
 #include "jit/CacheIR.h"
+#include "jit/CacheIRSpewer.h"
 #include "jit/JitFrames.h"
 #include "jit/JitRuntime.h"
 #include "jit/JitZone.h"
@@ -2099,6 +2100,10 @@ ICCacheIRStub* js::jit::AttachBaselineCacheIRStub(
       return nullptr;
     }
   }
+
+#ifdef JS_CACHEIR_SPEW
+  SpewCacheIRToFile(stubInfo, outerScript, cx);
+#endif // JS_CACHEIR_SPEW
 
   MOZ_ASSERT(code);
   MOZ_ASSERT(stubInfo);
