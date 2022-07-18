@@ -193,6 +193,7 @@ Type_Shape::Val Impl_Object::Fn_shapeOfUnchecked(Cachet_ContextRef cx,
   return param_object->shape();
 }
 
+
 Type_Value::Val Impl_NativeObject::Fn_getFixedSlotUnchecked(
     Cachet_ContextRef cx, Type_Heap::Ref param_heap, Type_NativeObject::Ref param_nativeObject,
     Type_Int32::Ref param_slot) {
@@ -211,11 +212,6 @@ Type_Bool::Val Impl_Shape::Fn_hasFixedSlot(Cachet_ContextRef cx,
   param_slot = NativeObject::getFixedSlotIndexFromOffset(param_slot);
   return param_slot >= 0 &&
          param_slot < Type_Int32::Val(param_shape->numFixedSlots());
-}
-
-Type_Bool::Val Impl_Class::Fn_isNativeObject(Cachet_ContextRef cx,
-                                             Type_Class::Ref param_class) {
-  return param_class->isNativeObject();
 }
 
 Type_ValueReg::Val Impl_CacheIR::Fn_allocateValueReg(Cachet_ContextRef cx) {
@@ -272,6 +268,10 @@ Type_Bool::Val Impl_CacheIR::Fn_objectGuardNeedsSpectreMitigations(
     Type_ObjectId::Ref param_objectId) {
   return cx.compiler->objectGuardNeedsSpectreMitigations(param_objectId);
 }
+
+Type_Bool::Val Impl_Class::Fn_isNativeObject(Cachet_ContextRef cx, Type_Class::Ref klass) {
+    return klass->isNativeObject();
+  }
 
 #define CACHET_CacheIR_COMPILER
 #define CACHET_MASM_EMIT

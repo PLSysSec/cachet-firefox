@@ -25,8 +25,6 @@ class CacheIRCompiler;
 
 namespace cachet {
 
-using namespace ::cachet::prelude;
-
 struct CachetContext {
   CacheIRCompiler* compiler;
   JSContext* js_ctx;
@@ -101,11 +99,11 @@ struct GCType {
     lhs.set(rhs);
   }
 
-  static bool CompareEq(Ref lhs, Ref rhs) {
+  static bool Eq(Ref lhs, Ref rhs) {
     return lhs == rhs;
   }
 
-  static bool CompareNeq(Ref lhs, Ref rhs) {
+  static bool Neq(Ref lhs, Ref rhs) {
     return lhs != rhs;
   }
 };
@@ -139,12 +137,20 @@ namespace IR_MASM {
   using OpsRef = MacroAssembler&;
 }
 
-
-
 #define CACHET_CacheIR_COMPILER
 #define CACHET_MASM_EMIT
 
 #include "jit/CachetGenerated.h"
+
+namespace Impl_Object {
+inline Type_NativeObject::Val To_NativeObject(Type_Object::Val obj) {
+  return static_cast<Type_NativeObject::Val>(obj);
+}
+
+inline Type_NativeObject::Ref To_NativeObject(Type_Object::Ref obj) {
+  return obj.as<js::NativeObject>();
+}
+}
 
 #undef CACHET_CacheIR_COMPILER
 #undef CACHET_MASM_EMIT
