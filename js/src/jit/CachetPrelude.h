@@ -100,6 +100,10 @@ struct NumericType : public PrimitiveType<T> {
   static Val Sub(Ref lhs, Ref rhs) {
     return lhs - rhs;
   }
+
+  static Val Negate(Ref val) {
+    return -val;
+  }
 };
 
 template <typename T>
