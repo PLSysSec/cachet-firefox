@@ -387,6 +387,7 @@ class PackageFrontend(MachCommandBase):
 
             tasks = toolchain_task_definitions()
 
+            print(from_build)
             for b in from_build:
                 user_value = b
 
@@ -427,44 +428,64 @@ class PackageFrontend(MachCommandBase):
                     "Searching for {name} in {index}",
                 )
                 deadline = None
+                print(task.optimization.get("index-search", []))
                 task_id = IndexSearch().should_replace_task(
                     task, {}, deadline, task.optimization.get("index-search", [])
                 )
+                print(task_id)
+                print(artifact_name)
                 if task_id in (True, False) or not artifact_name:
-                    command_context.log(
-                        logging.ERROR,
-                        "artifact",
-                        {"build": user_value},
-                        _COULD_NOT_FIND_ARTIFACTS_TEMPLATE,
-                    )
-                    # Get and print some helpful info for diagnosis.
-                    repo = mozversioncontrol.get_repository_object(
-                        command_context.topsrcdir
-                    )
-                    changed_files = set(repo.get_outgoing_files()) | set(
-                        repo.get_changed_files()
-                    )
-                    if changed_files:
-                        command_context.log(
-                            logging.ERROR,
-                            "artifact",
-                            {},
-                            "Hint: consider reverting your local changes "
-                            "to the following files: %s" % sorted(changed_files),
-                        )
-                    if "TASKCLUSTER_ROOT_URL" in os.environ:
+                    if artifact_name == 'public/build/fix-stacks.tar.xz':
+                        task_id = 'WSln4u0AThCb2KAnQdAvCA'
+                    elif artifact_name == 'public/build/minidump_stackwalk.tar.xz':
+                        task_id = 'MgdoH-BtRz60U4FOsT2vWQ'
+                    elif artifact_name == 'public/build/clang.tar.zst':
+                        task_id = 'ChnJJ1E6Qnaqgid14lKulw'
+                    elif artifact_name == 'public/build/cbindgen.tar.xz':
+                        task_id = 'fa_DvaXLRIy4dYFo04DqTA'
+                    elif artifact_name == 'public/build/clang-tidy.tar.zst':
+                        task_id = 'Hm7j9LRfT46fMdmP3A1Dfw'
+                    elif artifact_name == 'public/build/nasm.tar.bz2':
+                        task_id = 'YDVA3iqKT4GkagjRlKm5zg'
+                    elif artifact_name == 'public/build/sccache.tar.xz':
+                        task_id = 'GBk67bDATtWL90RmhuzJGg'
+                    elif artifact_name == 'public/build/dump_syms.tar.xz':
+                        task_id = 'DppxAs9VTvutcSCLHs4lUQ'
+                    else:
                         command_context.log(
                             logging.ERROR,
                             "artifact",
                             {"build": user_value},
-                            "Due to the environment variable TASKCLUSTER_ROOT_URL "
-                            "being set, the artifacts were expected to be found "
-                            "on {}. If this was unintended, unset "
-                            "TASKCLUSTER_ROOT_URL and try again.".format(
-                                os.environ["TASKCLUSTER_ROOT_URL"]
-                            ),
+                            _COULD_NOT_FIND_ARTIFACTS_TEMPLATE,
                         )
-                    return 1
+                        # Get and print some helpful info for diagnosis.
+                        repo = mozversioncontrol.get_repository_object(
+                            command_context.topsrcdir
+                        )
+                        changed_files = set(repo.get_outgoing_files()) | set(
+                            repo.get_changed_files()
+                        )
+                        if changed_files:
+                            command_context.log(
+                                logging.ERROR,
+                                "artifact",
+                                {},
+                                "Hint: consider reverting your local changes "
+                                "to the following files: %s" % sorted(changed_files),
+                            )
+                        if "TASKCLUSTER_ROOT_URL" in os.environ:
+                            command_context.log(
+                                logging.ERROR,
+                                "artifact",
+                                {"build": user_value},
+                                "Due to the environment variable TASKCLUSTER_ROOT_URL "
+                                "being set, the artifacts were expected to be found "
+                                "on {}. If this was unintended, unset "
+                                "TASKCLUSTER_ROOT_URL and try again.".format(
+                                    os.environ["TASKCLUSTER_ROOT_URL"]
+                                ),
+                            )
+                        return 1
 
                 command_context.log(
                     logging.DEBUG,
