@@ -10,6 +10,8 @@
 #include "mozilla/Maybe.h"
 
 #include "jit/CacheIR.h"
+#include "jit/JitZone.h"
+#include "js/HashTable.h"
 #include "js/TypeDecls.h"
 #include "threading/LockGuard.h"
 #include "vm/JSONPrinter.h"
@@ -18,7 +20,25 @@
 namespace js {
 namespace jit {
 
+#if defined(JS_CACHEIR_SPEW) || !defined(JS_DISABLE_SHELL)
+
+void SpewCacheIROps(GenericPrinter& out, const char* prefix,
+                    const CacheIRStubInfo* stubInfo);
+
+bool SpewCacheIRStubFields(JSContext* cx, GenericPrinter& out,
+                           const CacheIRStubInfo* stubInfo, uint8_t* stubData);
+
+bool SpewCacheIRStub(JSContext* cx, GenericPrinter& out,
+                     const CacheIRStubInfo* stubInfo, uint8_t* stubData);
+
+#endif
+
 #ifdef JS_CACHEIR_SPEW
+
+void SpewCacheIRStubToFile(JSContext* cx, JSScript* script,
+                           const CacheIRStubInfo* stubInfo,
+                           const CacheIRStubKey::Lookup& lookup,
+                           uint8_t* stubData);
 
 class CacheIRSpewer {
   Mutex outputLock_;
@@ -103,19 +123,6 @@ class CacheIRSpewer {
 };
 
 #endif /* JS_CACHEIR_SPEW */
-
-#if defined(JS_CACHEIR_SPEW) || !defined(JS_DISABLE_SHELL)
-extern void SpewCacheIROps(GenericPrinter& out, const char* prefix,
-                           const CacheIRStubInfo* info);
-extern void SpewCacheIRToFile(const CacheIRStubInfo* info, JSScript* script, JSContext* ctx);
-#endif /* JS_CACHEIR_SPEW || !JS_DISABLE_SHELL */
-
-#ifndef JS_DISABLE_SHELL
-
-bool SpewCacheIRStubFields(JSContext* cx, GenericPrinter& out,
-                           uint8_t* stubData, const CacheIRStubInfo* stubInfo);
-
-#endif /* !JS_DISABLE_SHELL */
 
 }  // namespace jit
 }  // namespace js

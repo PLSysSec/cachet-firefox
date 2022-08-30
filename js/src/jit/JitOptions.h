@@ -9,6 +9,8 @@
 
 #include "mozilla/Maybe.h"
 
+#include <experimental/filesystem>
+
 #include "jit/IonTypes.h"
 #include "js/TypeDecls.h"
 
@@ -107,6 +109,9 @@ struct DefaultJitOptions {
   uint32_t wasmBatchIonThreshold;
   uint32_t wasmBatchCraneliftThreshold;
   mozilla::Maybe<IonRegisterAllocator> forcedRegisterAllocator;
+#if defined(JS_CACHEIR_SPEW)
+  std::experimental::filesystem::path cacheIrSpewDirPath;
+#endif
 
   // Spectre mitigation flags. Each mitigation has its own flag in order to
   // measure the effectiveness of each mitigation with various proof of

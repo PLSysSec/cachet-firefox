@@ -101,11 +101,11 @@ struct GCType {
     lhs.set(rhs);
   }
 
-  static bool CompareEq(Ref lhs, Ref rhs) {
+  static bool Eq(Ref lhs, Ref rhs) {
     return lhs == rhs;
   }
 
-  static bool CompareNeq(Ref lhs, Ref rhs) {
+  static bool Neq(Ref lhs, Ref rhs) {
     return lhs != rhs;
   }
 };

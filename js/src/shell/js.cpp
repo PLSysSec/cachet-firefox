@@ -4899,18 +4899,8 @@ class ICStubObject : public NativeObject {
     if (!sprinter.init()) {
       return false;
     }
-
-    sprinter.printf("%s %s\n", GetCacheKindName(stubInfo.kind()),
-                    GetICStubEngineName(stubInfo.engine()));
-    if (stubInfo.codeLength()) {
-      sprinter.putChar('\n');
-      SpewCacheIROps(sprinter, "", &stubInfo);
-    }
-    if (stubInfo.hasStubFields()) {
-      sprinter.putChar('\n');
-      if (!SpewCacheIRStubFields(cx, sprinter, stubData, &stubInfo)) {
-        return false;
-      }
+    if (!SpewCacheIRStub(cx, sprinter, &stubInfo, stubData)) {
+      return false;
     }
 
     const JS::ConstUTF8CharsZ utf8(sprinter.string(),
@@ -12697,6 +12687,12 @@ static bool SetContextOptions(JSContext* cx, const OptionParser& op) {
       return OptionFailure("cache-ir-stubs", str);
     }
   }
+
+#if defined(JS_CACHEIR_SPEW)
+  if (const char* str = op.getStringOption("cache-ir-spew-dir-path")) {
+    jit::JitOptions.cacheIrSpewDirPath = str;
+  }
+#endif
 
   if (const char* str = op.getStringOption("spectre-mitigations")) {
     if (strcmp(str, "on") == 0) {

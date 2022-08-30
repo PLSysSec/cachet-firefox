@@ -10,9 +10,13 @@
 #include "mozilla/TextUtils.h"
 
 #include <algorithm>
+#include <ctype.h>
 #include <dirent.h>
+#include <experimental/filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
+#include <sstream>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +37,8 @@
 
 #include "vm/JSObject-inl.h"
 #include "vm/Realm-inl.h"
+
+namespace filesystem = std::experimental::filesystem;
 
 using namespace js;
 using namespace js::jit;
@@ -66,7 +72,7 @@ class MOZ_RAII CacheIROpsJitSpewer {
   void spewOperandId(const char* name, const char* type, OperandId id) {
     spewRawOperandId(name, type, id.id());
   }
-  void spewRawOperandId(const char* name, const char* type, uint32_t id) {
+  void spewRawOperandId(const char* name, const char* type, uint16_t id) {
     out_.printf("[%s %s] %u", type, name, id);
   }
   void spewField(const char* name, const char* type, uint32_t offset) {
@@ -150,11 +156,279 @@ class MOZ_RAII CacheIROpsJitSpewer {
   }
 };
 
-void jit::SpewCacheIROps(GenericPrinter& out, const char* prefix,
-                         const CacheIRStubInfo* info) {
-  CacheIRReader reader(info);
+void jit::SpewCacheIROps(GenericPrinter& out, const char* const prefix,
+                         const CacheIRStubInfo* const stubInfo) {
+  CacheIRReader reader(stubInfo);
   CacheIROpsJitSpewer spewer(out, prefix);
   spewer.spew(reader);
+}
+
+bool jit::SpewCacheIRStubFields(JSContext* const cx, GenericPrinter& out,
+                                const CacheIRStubInfo* const stubInfo,
+                                uint8_t* const stubData) {
+  gc::AutoSuppressGC nogc(cx);
+
+  uint32_t field(0);
+  size_t offset(0);
+
+  HashSet<Shape*> shapes(cx);
+  HashSet<const JSClass*> classes(cx);
+
+  while (true) {
+    const StubField::Type fieldType(stubInfo->fieldType(field));
+    if (fieldType == StubField::Type::Limit) {
+      break;  // Done.
+    }
+
+    const char* const fieldTypeName(StubField::TypeNames[uint8_t(fieldType)]);
+    out.printf("%sField%*s %10zu, ", fieldTypeName,
+               12 - int(strlen(fieldTypeName)), "", offset);
+    switch (fieldType) {
+      case StubField::Type::RawInt32: {
+        out.printf("%i\n", int(stubInfo->getStubRawWord(stubData, offset)));
+        break;
+      }
+      case StubField::Type::RawPointer: {
+        out.printf("%" PRIxPTR "\n",
+                   stubInfo->getStubRawWord(stubData, offset));
+        break;
+      }
+      case StubField::Type::Shape: {
+        GCPtrShape& shapeField =
+            stubInfo->getStubField<Shape*>(stubData, offset);
+        Shape* const shape(shapeField.get());
+        out.printf("%p\n", shape);
+        auto ptr = shapes.lookupForAdd(shape);
+        if (!ptr) {
+          if (!shapes.add(ptr, shape)) {
+            return false;
+          }
+        }
+        break;
+      }
+      case StubField::Type::GetterSetter: {
+        GCPtrGetterSetter& getterSetterField =
+            stubInfo->getStubField<GetterSetter*>(stubData, offset);
+        out.printf("%p\n", getterSetterField.get());
+        break;
+      }
+      case StubField::Type::JSObject: {
+        GCPtrObject& objectField =
+            stubInfo->getStubField<JSObject*>(stubData, offset);
+        out.printf("%p\n", objectField.get());
+        break;
+      }
+      case StubField::Type::Symbol: {
+        GCPtr<JS::Symbol*>& symbolField =
+            stubInfo->getStubField<JS::Symbol*>(stubData, offset);
+        out.printf("%p\n", symbolField.get());
+        break;
+      }
+      case StubField::Type::String: {
+        GCPtrString& stringField =
+            stubInfo->getStubField<JSString*>(stubData, offset);
+        out.printf("%p\n", stringField.get());
+        break;
+      }
+      case StubField::Type::BaseScript: {
+        GCPtr<BaseScript*>& baseScriptField =
+            stubInfo->getStubField<BaseScript*>(stubData, offset);
+        out.printf("%p\n", baseScriptField.get());
+        break;
+      }
+      case StubField::Type::Id: {
+        GCPtrId& idField = stubInfo->getStubField<jsid>(stubData, offset);
+        out.printf("%p\n", (void*)JSID_BITS(idField.get()));
+        break;
+      }
+      case StubField::Type::AllocSite: {
+        out.printf("%p\n",
+                   stubInfo->getPtrStubField<gc::AllocSite>(stubData, offset));
+        break;
+      }
+      case StubField::Type::RawInt64: {
+        out.printf("%" PRIi64 "\n",
+                   stubInfo->getStubRawInt64(stubData, offset));
+        break;
+      }
+      case StubField::Type::Value: {
+        GCPtrValue& valueField =
+            stubInfo->getStubField<JS::Value>(stubData, offset);
+        out.printf("%016" PRIx64 "\n", valueField.get().asRawBits());
+        break;
+      }
+      case StubField::Type::Limit: {
+        MOZ_MAKE_COMPILER_ASSUME_IS_UNREACHABLE(
+            "StubField::Type::Limit is handled before the switch");
+      }
+    }
+
+    field++;
+    offset += StubField::sizeInBytes(fieldType);
+  }
+
+  out.printf("%%\n");
+
+  for (auto iter = shapes.iter(); !iter.done(); iter.next()) {
+    Shape* const shape(iter.get());
+    out.putChar('\n');
+
+    const JSClass* const klass(shape->getObjectClass());
+    {
+      auto ptr = classes.lookupForAdd(klass);
+      if (!ptr) {
+        if (!classes.add(ptr, klass)) {
+          return false;
+        }
+      }
+    }
+    out.printf("ShapeClass                    %p, %p\n", shape, klass);
+
+    out.printf("ShapeNumFixedSlots            %p, %" PRIu32 "\n", shape,
+               shape->numFixedSlots());
+    out.printf("ShapeSlotSpan                 %p, %" PRIu32 "\n", shape,
+               shape->slotSpan());
+  }
+
+  for (auto iter = classes.iter(); !iter.done(); iter.next()) {
+    const JSClass* const klass(iter.get());
+    out.putChar('\n');
+
+    if (klass->isNativeObject()) {
+      out.printf("ClassIsNativeObject           %p\n", klass);
+    }
+  }
+
+  return true;
+}
+
+bool jit::SpewCacheIRStub(JSContext* const cx, GenericPrinter& out,
+                          const CacheIRStubInfo* const stubInfo,
+                          uint8_t* const stubData) {
+  const CacheKind kind(stubInfo->kind());
+  const ICStubEngine engine(stubInfo->engine());
+  out.printf("%s %s\n", GetCacheKindName(kind), GetICStubEngineName(engine));
+
+  const CacheKindSignature& sig(GetCacheKindSignature(kind));
+  for (uint16_t inputIndex = 0; inputIndex < sig.numInputs; ++inputIndex) {
+    const CacheKindSignature::Input input(sig.inputs[inputIndex]);
+    out.printf("Input                         [%sId %s] %u\n",
+               GetCacheTypeName(input.type), input.name, inputIndex);
+  }
+  out.printf("%%\n\n");
+
+  SpewCacheIROps(out, "", stubInfo);
+  out.printf("%%\n\n");
+  if (!SpewCacheIRStubFields(cx, out, stubInfo, stubData)) {
+    return false;
+  }
+
+  return true;
+}
+
+#endif /* JS_CACHEIR_SPEW || !JS_DISABLE_SHELL */
+
+#ifdef JS_CACHEIR_SPEW
+
+static bool StringStartsWith(const char* const prefix, const char* const str) {
+  return strncmp(prefix, str, strlen(prefix)) == 0;
+}
+
+void jit::SpewCacheIRStubToFile(JSContext* cx, JSScript* const script,
+                                const CacheIRStubInfo* const stubInfo,
+                                const CacheIRStubKey::Lookup& lookup,
+                                uint8_t* const stubData) {
+  if (JitOptions.cacheIrSpewDirPath.empty()) {
+    return;
+  }
+
+  const char* const scriptFileName(script->filename());
+
+  // Don't dump stubs from internal scripts.
+  if (strcmp("self-hosted", scriptFileName) == 0 ||
+      StringStartsWith("about:", scriptFileName) ||
+      StringStartsWith("chrome://", scriptFileName) ||
+      StringStartsWith("file://", scriptFileName) ||
+      StringStartsWith("moz-extension://", scriptFileName) ||
+      StringStartsWith("resource://", scriptFileName)) {
+    return;
+  }
+
+  // Create a stub-dumping directory for the engine and cache kind.
+  static const filesystem::path stubsDirName("stubs");
+  const filesystem::path stubsDirPath(JitOptions.cacheIrSpewDirPath / stubsDirName);
+  const filesystem::path icStubEngineDirName(GetICStubEngineName(stubInfo->engine()));
+  const filesystem::path cacheKindDirName(GetCacheKindName(stubInfo->kind()));
+  const filesystem::path cacheKindDirRelPath(icStubEngineDirName / cacheKindDirName);
+  filesystem::create_directories(stubsDirPath / cacheKindDirRelPath);
+
+  // Generate a file name for the dumped CacheIR stub.
+  std::stringstream stubFileNameStream;
+  HashNumber hash(CacheIRStubKey::hash(lookup));
+  //hash = AddToHash(hash, HashBytes(stubData, stubInfo->stubDataSize()));
+  stubFileNameStream << hash << ".cacheir";
+  const filesystem::path stubFileName(stubFileNameStream.str());
+
+  // Dump the stub if it hasn't been dumped already.
+  const filesystem::path stubFileRelPath(cacheKindDirRelPath / stubFileName);
+  const filesystem::path stubFilePath(stubsDirPath / stubFileRelPath);
+  FILE* const stubFile(fopen(stubFilePath.c_str(), "wx"));
+  if (stubFile) {
+    Fprinter stubFilePrinter(stubFile);
+    SpewCacheIRStub(cx, stubFilePrinter, stubInfo, stubData);
+    stubFilePrinter.flush();
+    stubFilePrinter.finish();
+  }
+
+  // Generate a path-safe directory name from the script file name.
+  std::string scriptFilteredFileName(scriptFileName);
+  std::replace_if(scriptFilteredFileName.begin(), scriptFilteredFileName.end(), [](char c) {
+    return !(isalnum(c) || c == '.' || c == '-' || c == '_');
+  }, '-');
+  std::stringstream scriptDirNameStream;
+  scriptDirNameStream << scriptFilteredFileName << '-' << HashString(scriptFileName);
+  const filesystem::path scriptDirName(scriptDirNameStream.str());
+  static const filesystem::path scriptsDirName("scripts");
+  const filesystem::path scriptsDirPath(JitOptions.cacheIrSpewDirPath / scriptsDirName);
+  const filesystem::path scriptDirPath(scriptsDirPath / scriptDirName);
+
+  // Save the script source code, if available.
+  /*
+  RootedString scriptSource(cx);
+  RootedFunction scriptFunc(cx, script->function());
+  if (scriptFunc) {
+    scriptSource = FunctionToString(cx, scriptFunc, false);
+  } else {
+    bool haveSource;
+    if (ScriptSource::loadSource(cx, script->scriptSource(), &haveSource) && haveSource) {
+      RootedScript rootedScript(cx, script);
+      scriptSource = JSScript::sourceData(cx, rootedScript);
+    }
+  }
+  if (scriptSource) {
+    Sprinter scriptSourceBuf(cx);
+    if (scriptSourceBuf.init() && scriptSourceBuf.putString(scriptSource)) {
+      filesystem::create_directories(scriptDirPath);
+      const filesystem::path scriptSourceFilePath(scriptDirPath / filesystem::path("source.js"));
+      FILE* const scriptSourceFile(fopen(scriptSourceFilePath.c_str(), "wx"));
+      if (scriptSourceFile) {
+        fputs(scriptSourceBuf.string(), scriptSourceFile);
+        fclose(scriptSourceFile);
+      }
+    }
+  }
+  */
+
+  // Create a symbolic link associating the stub file with the script.
+  const filesystem::path scriptCacheKindDirPath(scriptDirPath / stubsDirName / cacheKindDirRelPath);
+  filesystem::create_directories(scriptCacheKindDirPath);
+  const filesystem::path scriptStubLinkPath(scriptCacheKindDirPath / stubFileName);
+  static const filesystem::path stubsDirFromScriptCacheKindDirRelPath(
+      filesystem::path("..") / filesystem::path("..") / filesystem::path("..") /
+      filesystem::path("..") / filesystem::path("..") / stubsDirName);
+  std::error_code ignoredError;
+  filesystem::create_symlink(stubsDirFromScriptCacheKindDirRelPath /
+                             stubFileRelPath, scriptStubLinkPath, ignoredError);
 }
 
 template <typename CharT>
@@ -186,79 +460,6 @@ static void QuoteString(GenericPrinter& out, JSLinearString* str) {
     QuoteString(out, str->twoByteChars(nogc), length);
   }
 }
-
-void jit::SpewCacheIRToFile(const CacheIRStubInfo* info, JSScript* script, JSContext* ctx) {
-  std::string baseOutPath = "stub_dump/";
-  // Get the js file this cache stub came from
-  const char* filename = script->filename();
-  uint32_t lineno = script->lineno();
-  // check if the base output path exists
-  struct stat buf;
-  if (stat(baseOutPath.c_str(), &buf) != 0) {
-    mkdir(baseOutPath.c_str(), 0775);
-  }
-  std::string stubDirPath = baseOutPath + filename + std::string("/");
-  if (stat(stubDirPath.c_str(), &buf) != 0) {
-    mkdir(stubDirPath.c_str(), 0775);
-  }
-
-  // If the source javascript file already exists, we don't have to worry about
-  // saving the new one
-  // TODO: Saving the source crashes in the browser for some reason
-  ScriptSource* source = script->scriptSource();
-  std::string sourcePath = stubDirPath + std::string("source.js");
-  if (stat(sourcePath.c_str(), &buf) != 0) {
-    // Not all script sources will have a source text (not sure all the conditions,
-    // but things like `eval` might elide sources, and functions can also be
-    // constructed directly from bytecode)
-    if (source->hasSourceText()) {
-      size_t srcLen = source->length();
-      if (srcLen != 0) {
-        size_t start = script->toStringStart();
-        size_t end = (start + script->length());
-        if (source->isFunctionBody()) {
-          JSLinearString* srcStr = source->functionBodyString(ctx);
-            FILE* printerFile = fopen(sourcePath.c_str(), "w");
-          if (printerFile != nullptr) {
-            Fprinter printer = Fprinter(printerFile);
-            JS::AutoCheckCannotGC nogc;
-            QuoteString(printer, srcStr);
-            fclose(printerFile);
-          }
-        }
-      }
-    }
-  }
-
-  // Save our CacheIR stub
-
-  // Count the number of files in the output directory
-  // Surely there must be a better way to do this
-  int numFiles = 0;
-  DIR* dirPath = opendir(stubDirPath.c_str());
-  struct dirent *entry;
-  if (dirPath != NULL) {
-      while ((entry = readdir(dirPath))) {
-        numFiles++;
-      }
-      closedir(dirPath);
-  }
-
-  std::string stubPath = stubDirPath + std::string("stub") + std::to_string(numFiles) + std::string(".cacheir");
-  FILE* printerFile = fopen(stubPath.c_str(), "w");
-  if (printerFile != nullptr) {
-    Fprinter printer = Fprinter(printerFile);
-    std::string header = std::string("// filename: ") + std::string(filename) + std::string("\n//lineno: ") + std::to_string(lineno) + std::string("\n");
-    printer.put(header.c_str(), header.length());
-    const char* prefix = "";
-    SpewCacheIROps(printer, prefix, info);
-    fclose(printerFile);
-  }
-}
-
-#endif /* JS_CACHEIR_SPEW || !JS_DISABLE_SHELL */
-
-#ifdef JS_CACHEIR_SPEW
 
 // JSON spewer for CacheIR ops. Output looks like this:
 //
@@ -314,7 +515,7 @@ class MOZ_RAII CacheIROpsJSONSpewer {
   void spewOperandId(const char* name, const char* type, OperandId id) {
     spewRawOperandId(name, type, id.id());
   }
-  void spewRawOperandId(const char* name, const char* type, uint32_t id) {
+  void spewRawOperandId(const char* name, const char* type, uint16_t id) {
     spewArgImpl(name, "Id", id);
   }
   void spewField(const char* name, const char* type, uint32_t offset) {
@@ -398,7 +599,7 @@ CacheIRSpewer CacheIRSpewer::cacheIRspewer;
 
 CacheIRSpewer::CacheIRSpewer()
     : outputLock_(mutexid::CacheIRSpewer), guardCount_(0) {
-  spewInterval_ =
+ spewInterval_ =
       getenv("CACHEIR_LOG_FLUSH") ? atoi(getenv("CACHEIR_LOG_FLUSH")) : 10000;
 
   if (spewInterval_ < 1) {
@@ -561,122 +762,3 @@ void CacheIRSpewer::endCache() {
 }
 
 #endif /* JS_CACHEIR_SPEW */
-
-#ifndef JS_DISABLE_SHELL
-
-bool jit::SpewCacheIRStubFields(JSContext* cx, GenericPrinter& out,
-                                uint8_t* stubData,
-                                const CacheIRStubInfo* stubInfo) {
-  gc::AutoSuppressGC nogc(cx);
-
-  uint32_t field(0);
-  size_t offset(0);
-
-  HashSet<Shape*> shapes(cx);
-
-  while (true) {
-    const StubField::Type fieldType(stubInfo->fieldType(field));
-    if (fieldType == StubField::Type::Limit) {
-      break;  // Done.
-    }
-
-    const char* const fieldTypeName(StubField::TypeNames[uint8_t(fieldType)]);
-    out.printf("%sField%*s %10zu, ", fieldTypeName,
-               12 - int(strlen(fieldTypeName)), "", offset);
-    switch (fieldType) {
-      case StubField::Type::RawInt32: {
-        out.printf("%i\n", int(stubInfo->getStubRawWord(stubData, offset)));
-        break;
-      }
-      case StubField::Type::RawPointer: {
-        out.printf("%" PRIxPTR "\n",
-                   stubInfo->getStubRawWord(stubData, offset));
-        break;
-      }
-      case StubField::Type::Shape: {
-        GCPtrShape& shapeField =
-            stubInfo->getStubField<Shape*>(stubData, offset);
-        Shape* const shape(shapeField.get());
-        out.printf("%p\n", shape);
-        auto ptr = shapes.lookupForAdd(shape);
-        if (!ptr) {
-          if (!shapes.add(ptr, shape)) {
-            return false;
-          }
-        }
-        break;
-      }
-      case StubField::Type::GetterSetter: {
-        GCPtrGetterSetter& getterSetterField =
-            stubInfo->getStubField<GetterSetter*>(stubData, offset);
-        out.printf("%p\n", getterSetterField.get());
-        break;
-      }
-      case StubField::Type::JSObject: {
-        GCPtrObject& objectField =
-            stubInfo->getStubField<JSObject*>(stubData, offset);
-        out.printf("%p\n", objectField.get());
-        break;
-      }
-      case StubField::Type::Symbol: {
-        GCPtr<JS::Symbol*>& symbolField =
-            stubInfo->getStubField<JS::Symbol*>(stubData, offset);
-        out.printf("%p\n", symbolField.get());
-        break;
-      }
-      case StubField::Type::String: {
-        GCPtrString& stringField =
-            stubInfo->getStubField<JSString*>(stubData, offset);
-        out.printf("%p\n", stringField.get());
-        break;
-      }
-      case StubField::Type::BaseScript: {
-        GCPtr<BaseScript*>& baseScriptField =
-            stubInfo->getStubField<BaseScript*>(stubData, offset);
-        out.printf("%p\n", baseScriptField.get());
-        break;
-      }
-      case StubField::Type::Id: {
-        GCPtrId& idField = stubInfo->getStubField<jsid>(stubData, offset);
-        out.printf("%p\n", (void*)JSID_BITS(idField.get()));
-        break;
-      }
-      case StubField::Type::AllocSite: {
-        out.printf("%p\n",
-                   stubInfo->getPtrStubField<gc::AllocSite>(stubData, offset));
-        break;
-      }
-      case StubField::Type::RawInt64: {
-        out.printf("%" PRIi64 "\n",
-                   stubInfo->getStubRawInt64(stubData, offset));
-        break;
-      }
-      case StubField::Type::Value: {
-        GCPtrValue& valueField =
-            stubInfo->getStubField<JS::Value>(stubData, offset);
-        out.printf("%016" PRIx64 "\n", valueField.get().asRawBits());
-        break;
-      }
-      case StubField::Type::Limit: {
-        MOZ_MAKE_COMPILER_ASSUME_IS_UNREACHABLE(
-            "StubField::Type::Limit is handled before the switch");
-      }
-    }
-
-    field++;
-    offset += StubField::sizeInBytes(fieldType);
-  }
-
-  for (auto iter = shapes.iter(); !iter.done(); iter.next()) {
-    Shape* const shape(iter.get());
-    out.putChar('\n');
-    out.printf("ShapeNumFixedSlots            %p, %" PRIu32 "\n", shape,
-               shape->numFixedSlots());
-    out.printf("ShapeSlotSpan                 %p, %" PRIu32 "\n", shape,
-               shape->slotSpan());
-  }
-
-  return true;
-}
-
-#endif /* !JS_DISABLE_SHELL */

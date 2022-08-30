@@ -7,9 +7,12 @@
 #include "jit/JitOptions.h"
 
 #include <cstdlib>
+#include <experimental/filesystem>
 #include <type_traits>
 
 #include "vm/JSScript.h"
+
+namespace filesystem = std::experimental::filesystem;
 
 using namespace js;
 using namespace js::jit;
@@ -48,6 +51,8 @@ T overrideDefault(const char* param, T dflt) {
       return false;
     }
     Warn(param, str);
+  } else if constexpr (std::is_same_v<T, filesystem::path>) {
+    return str;
   } else {
     Maybe<int> value = ParseInt(str);
     if (value.isSome()) {
@@ -307,6 +312,10 @@ DefaultJitOptions::DefaultJitOptions() {
 #ifdef WASM_CODEGEN_DEBUG
   SET_DEFAULT(enableWasmImportCallSpew, false);
   SET_DEFAULT(enableWasmFuncCallSpew, false);
+#endif
+
+#if defined(JS_CACHEIR_SPEW)
+  SET_DEFAULT(cacheIrSpewDirPath, filesystem::path());
 #endif
 }
 

@@ -2101,10 +2101,6 @@ ICCacheIRStub* js::jit::AttachBaselineCacheIRStub(
     }
   }
 
-#ifdef JS_CACHEIR_SPEW
-  SpewCacheIRToFile(stubInfo, outerScript, cx);
-#endif // JS_CACHEIR_SPEW
-
   MOZ_ASSERT(code);
   MOZ_ASSERT(stubInfo);
   MOZ_ASSERT(stubInfo->engine() == ICStubEngine::Baseline);
@@ -2167,6 +2163,10 @@ ICCacheIRStub* js::jit::AttachBaselineCacheIRStub(
   newStub->setTypeData(writer.typeData());
   stub->addNewStub(icEntry, newStub);
   *attached = true;
+#ifdef JS_CACHEIR_SPEW
+  SpewCacheIRStubToFile(cx, outerScript, stubInfo, lookup,
+                        newStub->stubDataStart());
+#endif // JS_CACHEIR_SPEW
   return newStub;
 }
 

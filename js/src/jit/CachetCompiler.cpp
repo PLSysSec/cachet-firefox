@@ -65,15 +65,20 @@ Type_ValueType::Ref Variant_Object(Cachet_ContextRef cx) {
 };  // namespace Impl_ValueType
 
 
-namespace Impl_NativeObject {
+namespace Impl_Object {
 
-Type_NativeObject::Val From_Object(Type_Object::Val param_in) {
+Type_NativeObject::Val To_NativeObject(Type_Object::Val param_in) {
   return &param_in->as<NativeObject>();
 }
 
-Type_NativeObject::Ref From_Object(Type_Object::Ref param_in) {
+Type_NativeObject::Ref To_NativeObject(Type_Object::Ref param_in) {
   return param_in.as<NativeObject>();
 }
+
+};  // namespace Impl_Object
+
+
+namespace Impl_NativeObject {
 
 Type_Object::Val To_Object(Type_NativeObject::Val param_in) {
   return param_in;

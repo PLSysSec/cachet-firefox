@@ -1564,11 +1564,6 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
     }
   }
 
-#ifdef JS_CACHEIR_SPEW
-  JSScript* script = this->script();
-  SpewCacheIRToFile(stubInfo, script, cx);
-#endif // JS_CACHEIR_SPEW
-
   MOZ_ASSERT(stubInfo);
   MOZ_ASSERT(stubInfo->engine() == ICStubEngine::IonIC);
 
@@ -1615,6 +1610,11 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
 
   attachStub(newStub, code);
   *attached = true;
+
+#ifdef JS_CACHEIR_SPEW
+  JSScript* script = this->script();
+  SpewCacheIRStubToFile(cx, script, stubInfo, lookup, newStub->stubDataStart());
+#endif // JS_CACHEIR_SPEW
 }
 
 bool IonCacheIRCompiler::emitCallStringObjectConcatResult(ValOperandId lhsId,
