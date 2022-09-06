@@ -329,6 +329,106 @@ Type_Bool::Val Impl_Shape::Fn_hasFixedSlot(Cachet_ContextRef cx,
          param_slot < Type_Int32::Val(param_shape->numFixedSlots());
 }
 
+namespace Impl_OperandLocationKind {
+
+Type_OperandLocationKind::Ref Variant_Uninitialized(Cachet_ContextRef cx) {
+  return OperandLocationKind::Uninitialized;
+}
+
+Type_OperandLocationKind::Ref Variant_ValueReg(Cachet_ContextRef cx) {
+  return OperandLocationKind::ValueReg;
+}
+
+Type_OperandLocationKind::Ref Variant_PayloadReg(Cachet_ContextRef cx) {
+  return OperandLocationKind::PayloadReg;
+}
+
+}
+
+namespace Impl_OperandLocation {
+
+Type_OperandLocationKind::Val Fn_kind(Cachet_ContextRef cx, Type_OperandLocation::Ref param_loc) {
+  return Type_OperandLocationKind::Val(param_loc.kind());
+}
+
+Type_OperandLocation::Val Fn_newUninitializedUnchecked(Cachet_ContextRef cx) {
+  return OperandLocation();
+}
+
+void Fn_setValueRegUnchecked(Cachet_ContextRef cx, Type_OperandLocation::MutRef param_loc, Type_ValueReg::Ref param_valueReg) {
+  param_loc.setValueReg(param_valueReg);
+}
+
+Type_ValueReg::Val Fn_getValueRegUnchecked(Cachet_ContextRef cx, Type_OperandLocation::Ref param_loc) {
+  return param_loc.valueReg();
+}
+
+void Fn_setPayloadRegUnchecked(Cachet_ContextRef cx, Type_OperandLocation::MutRef param_loc, Type_Reg::Ref param_reg, Type_ValueType::Ref param_type) {
+  param_loc.setPayloadReg(param_reg, JSValueType(param_type));
+}
+
+Type_Reg::Val Fn_getPayloadRegUnchecked(Cachet_ContextRef cx, Type_OperandLocation::Ref param_loc) {
+  return param_loc.payloadReg();
+}
+
+Type_ValueType::Val Fn_getPayloadTypeUnchecked(Cachet_ContextRef cx, Type_OperandLocation::Ref param_loc) {
+  return Type_ValueType::Val(param_loc.payloadType());
+}
+
+}
+
+inline Type_OperandId::Val Impl_ValueId::To_OperandId(Type_ValueId::Val in) {
+  return static_cast<Type_OperandId::Val>(in);
+}
+
+inline Type_OperandId::Val Impl_ObjectId::To_OperandId(Type_ObjectId::Val in) {
+  return static_cast<Type_OperandId::Val>(in);
+}
+
+inline Type_OperandId::Val Impl_Int32Id::To_OperandId(Type_Int32Id::Val in) {
+  return static_cast<Type_OperandId::Val>(in);
+}
+
+namespace Impl_TypedId {
+
+inline Type_OperandId::Val To_OperandId(Type_TypedId::Val in) {
+  return static_cast<Type_OperandId::Val>(in);
+}
+
+Type_ValueType::Val Fn_type(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
+  return Type_ValueType::Val(param_typedId.type());
+}
+
+Type_Bool::Val Fn_isValueId(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
+  return param_typedId.isValueId();
+}
+
+Type_TypedId::Val Fn_fromValueIdUnchecked(Cachet_ContextRef cx, Type_ValueId::Ref param_valueId, Type_ValueType::Ref param_type) {
+  return TypedOperandIdW(TypedOperandId(param_valueId, JSValueType(param_type)), true);
+}
+
+Type_ValueId::Val Fn_toValueIdUnchecked(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
+  return Type_ValueId::Val(param_typedId.id());
+}
+
+Type_TypedId::Val Fn_fromObjectIdUnchecked(Cachet_ContextRef cx, Type_ObjectId::Ref param_objectId) {
+  return TypedOperandIdW(TypedOperandId(param_objectId), false);
+}
+
+Type_ObjectId::Val Fn_toObjectIdUnchecked(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
+  return Type_ObjectId::Val(param_typedId.id());
+}
+
+Type_TypedId::Val Fn_fromInt32IdUnchecked(Cachet_ContextRef cx, Type_Int32Id::Ref param_int32Id) {
+  return TypedOperandIdW(TypedOperandId(param_int32Id), false);
+}
+
+Type_Int32Id::Val Fn_toInt32IdUnchecked(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
+  return Type_Int32Id::Val(param_typedId.id());
+}
+
+}
+
 void Impl_CacheIR::Fn_addFailurePath(Cachet_ContextRef cx, IR_MASM::LabelMutRef failure) {
   FailurePath* failurePath;
   // TODO: use this result in some way

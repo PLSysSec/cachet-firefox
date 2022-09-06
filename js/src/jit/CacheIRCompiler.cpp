@@ -1559,7 +1559,7 @@ bool CacheIRCompiler::emitGuardToObject(ValOperandId inputId) {
   }
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardToObject(cachet::CachetContext {this, cx_}, inputId, ObjOperandId(inputId.id()));
+  cachet::Impl_CacheIR::Op_GuardToObject(cachet::CachetContext {this, cx_}, inputId);
   // input.setPayloadReg(reg, JSVAL_TYPE_OBJECT);
 #else
   ValueOperand input = allocator.useValueRegister(masm, inputId);
@@ -1718,7 +1718,10 @@ bool CacheIRCompiler::emitGuardToInt32(ValOperandId inputId) {
   if (allocator.knownType(inputId) == JSVAL_TYPE_INT32) {
     return true;
   }
-
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_GuardToInt32(cachet::CachetContext {this, cx_}, inputId);
+  // input.setPayloadReg(reg, JSVAL_TYPE_OBJECT);
+#else
   ValueOperand input = allocator.useValueRegister(masm, inputId);
 
   FailurePath* failure;
@@ -1727,6 +1730,7 @@ bool CacheIRCompiler::emitGuardToInt32(ValOperandId inputId) {
   }
 
   masm.branchTestInt32(Assembler::NotEqual, input, failure->label());
+#endif
   return true;
 }
 
