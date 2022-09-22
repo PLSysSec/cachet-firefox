@@ -137,6 +137,12 @@ void EmitOp_Mov(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   ops.mov(param_srcReg, param_dstReg);
 }
 
+void EmitOp_Move32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                    Type_Int32::Val int32, Type_Reg::Ref param_dstReg) {
+  ops.move32(Imm32(int32), param_dstReg); 
+}
+
+
 void EmitOp_BranchTestInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                     Type_Condition::Ref param_condition,
                                     Type_ValueReg::Ref param_valueReg,
@@ -451,6 +457,12 @@ Type_Reg::Val Impl_CacheIR::Fn_allocateReg(Cachet_ContextRef cx) {
 void Impl_CacheIR::Fn_releaseReg(Cachet_ContextRef cx, Type_Reg::Ref param_reg) {
   return cx.compiler->allocator.releaseRegister(param_reg);
 }
+
+Type_Reg::Val Impl_CacheIR::Fn_defineInt32Reg(Cachet_ContextRef cx,
+                                            Type_Int32Id::Ref param_int32Id) {
+  return cx.compiler->allocator.defineRegister(cx.compiler->masm, param_int32Id);
+}
+
 
 Type_ValueReg::Val Impl_CacheIR::Fn_useValueReg(
     Cachet_ContextRef cx,

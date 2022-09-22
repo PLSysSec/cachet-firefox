@@ -160,6 +160,13 @@ ir CacheIR emits MASM {
         emit MASM::BranchTestInt32(Condition::NotEqual, valueReg, failure);
     }
 
+    op LoadInt32Constant(valField: Int32Field, resultId: Int32Id) {
+        let resultReg = CacheIR::defineInt32Reg(resultId);
+        let val = CacheIR::readInt32Field(valField);
+
+        emit MASM::Move32(val, resultReg);
+    }
+
     op Int32AddResult(lhsId: Int32Id, rhsId: Int32Id) {
         let lhsReg = CacheIR::useInt32Reg(lhsId);
         let rhsReg = CacheIR::useInt32Reg(rhsId);
@@ -183,6 +190,14 @@ ir CacheIR emits MASM {
     fn allocateValueReg() -> ValueReg;
     fn releaseValueReg(valueReg: ValueReg);
 
+    fn defineReg(typedId: TypedId) -> Reg;
+    fn defineValueReg(valueId: ValueId) -> ValueReg;
+
+    #[refined]
+    fn defineInt32Reg(id: Int32Id) -> Reg {
+        let typedId = TypedId::fromInt32Id(id);
+        CacheIR::defineReg(typedId)
+    }
 
     fn getOperandLocation(id: OperandId) -> OperandLocation;
     fn setOperandLocation(id: OperandId, loc: OperandLocation);
