@@ -16,6 +16,7 @@
 
 #include "jit/JSONSpewer.h"
 #include "js/TypeDecls.h"
+#include "js/Value.h"
 #include "vm/Printer.h"
 
 enum JSValueType : uint8_t;
@@ -196,8 +197,6 @@ void DisableChannel(JitSpewChannel channel);
 void EnableIonDebugSyncLogging();
 void EnableIonDebugAsyncLogging();
 
-const char* ValTypeToString(JSValueType type);
-
 #  define JitSpewIfEnabled(channel, fmt, ...) \
     do {                                      \
       if (JitSpewEnabled(channel)) {          \
@@ -275,6 +274,16 @@ static inline void EnableIonDebugSyncLogging() {}
 static inline void EnableIonDebugAsyncLogging() {}
 
 #endif /* JS_JITSPEW */
+
+#if defined(JS_JITSPEW) || defined(JS_CACHEIR_SPEW) || !defined(JS_DISABLE_SHELL)
+
+const char* ValTypeToString(JSValueType type);
+
+inline const char* ValTypeToString(JS::ValueType type) {
+  return ValTypeToString(JSValueType(type));
+}
+
+#endif
 
 }  // namespace jit
 }  // namespace js

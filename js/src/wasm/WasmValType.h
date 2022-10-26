@@ -301,6 +301,29 @@ class FieldTypeTraits {
     Ref = uint8_t(AbstractReferenceTypeCode),
   };
 
+  static const char* kindName(Kind kind) {
+    switch (kind) {
+      case I8:
+        return "I8";
+      case I16:
+        return "I16";
+      case I32:
+        return "I32";
+      case I64:
+        return "I64";
+      case F32:
+        return "F32";
+      case F64:
+        return "F64";
+      case V128:
+        return "V128";
+      case Rtt:
+        return "Rtt";
+      case Ref:
+        return "Ref";
+    }
+  }
+
   static bool isValidTypeCode(TypeCode tc) {
     switch (tc) {
 #ifdef ENABLE_WASM_GC
@@ -342,6 +365,25 @@ class ValTypeTraits {
     Ref = uint8_t(AbstractReferenceTypeCode),
   };
 
+  static const char* kindName(Kind kind) {
+    switch (kind) {
+      case I32:
+        return "I32";
+      case I64:
+        return "I64";
+      case F32:
+        return "F32";
+      case F64:
+        return "F64";
+      case V128:
+        return "V128";
+      case Rtt:
+        return "Rtt";
+      case Ref:
+        return "Ref";
+    }
+  }
+
   static bool isValidTypeCode(TypeCode tc) {
     switch (tc) {
       case TypeCode::I32:
@@ -375,6 +417,10 @@ template <class T>
 class PackedType : public T {
  public:
   using Kind = typename T::Kind;
+
+  static const char* kindName(Kind kind) {
+    return T::kindName(kind);
+  }
 
  protected:
   PackedTypeCode tc_;

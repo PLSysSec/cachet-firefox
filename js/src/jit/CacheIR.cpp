@@ -9623,6 +9623,18 @@ void CallIRGenerator::trackAttached(const char* name) {
 #endif
 }
 
+const char* const js::jit::CallFlags::ArgFormatNames[] = {
+#define DEFINE_FORMAT(format) #format,
+    CALL_FLAGS_ARG_FORMATS(DEFINE_FORMAT)
+#undef DEFINE_FORMAT
+};
+
+const char* const js::jit::GuardClassKindNames[] = {
+#define DEFINE_KIND(kind) #kind,
+    GUARD_CLASS_KINDS(DEFINE_KIND)
+#undef DEFINE_KIND
+};
+
 const JSClass* jit::ClassForGuardClassKind(const JSRuntime* const runtime,
                                            const GuardClassKind kind) {
   switch (kind) {

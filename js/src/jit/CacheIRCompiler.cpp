@@ -1209,7 +1209,7 @@ void CacheIRWriter::copyStubData(uint8_t* dest) const {
       case StubField::Type::GetterSetter:
         InitGCPtr<GetterSetter*>(destWords, field.asWord());
         break;
-      case StubField::Type::JSObject:
+      case StubField::Type::Object:
         InitGCPtr<JSObject*>(destWords, field.asWord());
         break;
       case StubField::Type::Symbol:
@@ -1263,7 +1263,7 @@ void jit::TraceCacheIRStub(JSTracer* trc, T* stub,
         TraceEdge(trc, &stubInfo->getStubField<GetterSetter*>(stub, offset),
                   "cacheir-getter-setter");
         break;
-      case StubField::Type::JSObject:
+      case StubField::Type::Object:
         TraceEdge(trc, &stubInfo->getStubField<JSObject*>(stub, offset),
                   "cacheir-object");
         break;
@@ -3620,7 +3620,7 @@ bool CacheIRCompiler::emitGuardXrayExpandoShapeAndDefaultProto(
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
   Register obj = allocator.useRegister(masm, objId);
-  StubFieldOffset shapeWrapper(shapeWrapperOffset, StubField::Type::JSObject);
+  StubFieldOffset shapeWrapper(shapeWrapperOffset, StubField::Type::Object);
 
   AutoScratchRegister scratch(allocator, masm);
   AutoScratchRegister scratch2(allocator, masm);
@@ -4308,7 +4308,7 @@ bool CacheIRCompiler::emitObjectCreateResult(uint32_t templateObjectOffset) {
   AutoCallVM callvm(masm, this, allocator);
   AutoScratchRegister scratch(allocator, masm);
 
-  StubFieldOffset objectField(templateObjectOffset, StubField::Type::JSObject);
+  StubFieldOffset objectField(templateObjectOffset, StubField::Type::Object);
   emitLoadStubField(objectField, scratch);
 
   callvm.prepare();
@@ -4327,7 +4327,7 @@ bool CacheIRCompiler::emitNewArrayFromLengthResult(
   AutoScratchRegister scratch(allocator, masm);
   Register length = allocator.useRegister(masm, lengthId);
 
-  StubFieldOffset objectField(templateObjectOffset, StubField::Type::JSObject);
+  StubFieldOffset objectField(templateObjectOffset, StubField::Type::Object);
   emitLoadStubField(objectField, scratch);
 
   callvm.prepare();
@@ -4347,7 +4347,7 @@ bool CacheIRCompiler::emitNewTypedArrayFromLengthResult(
   AutoScratchRegister scratch(allocator, masm);
   Register length = allocator.useRegister(masm, lengthId);
 
-  StubFieldOffset objectField(templateObjectOffset, StubField::Type::JSObject);
+  StubFieldOffset objectField(templateObjectOffset, StubField::Type::Object);
   emitLoadStubField(objectField, scratch);
 
   callvm.prepare();
@@ -4374,7 +4374,7 @@ bool CacheIRCompiler::emitNewTypedArrayFromArrayBufferResult(
   ValueOperand byteOffset = allocator.useValueRegister(masm, byteOffsetId);
   ValueOperand length = allocator.useValueRegister(masm, lengthId);
 
-  StubFieldOffset objectField(templateObjectOffset, StubField::Type::JSObject);
+  StubFieldOffset objectField(templateObjectOffset, StubField::Type::Object);
   emitLoadStubField(objectField, scratch);
 
   callvm.prepare();
@@ -4397,7 +4397,7 @@ bool CacheIRCompiler::emitNewTypedArrayFromArrayResult(
   AutoScratchRegister scratch(allocator, masm);
   Register array = allocator.useRegister(masm, arrayId);
 
-  StubFieldOffset objectField(templateObjectOffset, StubField::Type::JSObject);
+  StubFieldOffset objectField(templateObjectOffset, StubField::Type::Object);
   emitLoadStubField(objectField, scratch);
 
   callvm.prepare();
@@ -6881,7 +6881,7 @@ void CacheIRCompiler::emitLoadStubFieldConstant(StubFieldOffset val,
     case StubField::Type::String:
       masm.movePtr(ImmGCPtr(stringStubField(val.getOffset())), dest);
       break;
-    case StubField::Type::JSObject:
+    case StubField::Type::Object:
       masm.movePtr(ImmGCPtr(objectStubField(val.getOffset())), dest);
       break;
     case StubField::Type::RawPointer:
@@ -6931,7 +6931,7 @@ void CacheIRCompiler::emitLoadStubField(StubFieldOffset val, Register dest) {
       case StubField::Type::RawPointer:
       case StubField::Type::Shape:
       case StubField::Type::GetterSetter:
-      case StubField::Type::JSObject:
+      case StubField::Type::Object:
       case StubField::Type::Symbol:
       case StubField::Type::String:
       case StubField::Type::Id:
@@ -7201,7 +7201,7 @@ bool CacheIRCompiler::emitLoadObject(ObjOperandId resultId,
                                      uint32_t objOffset) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
   Register reg = allocator.defineRegister(masm, resultId);
-  StubFieldOffset obj(objOffset, StubField::Type::JSObject);
+  StubFieldOffset obj(objOffset, StubField::Type::Object);
   emitLoadStubField(obj, reg);
   return true;
 }

@@ -620,6 +620,10 @@ void jit::DisableChannel(JitSpewChannel channel) {
   LoggingBits &= ~(uint64_t(1) << uint32_t(channel));
 }
 
+#endif /* JS_JITSPEW */
+
+#if defined(JS_JITSPEW) || defined(JS_CACHEIR_SPEW) || !defined(JS_DISABLE_SHELL)
+
 const char* js::jit::ValTypeToString(JSValueType type) {
   switch (type) {
     case JSVAL_TYPE_DOUBLE:
@@ -651,4 +655,4 @@ const char* js::jit::ValTypeToString(JSValueType type) {
   }
 }
 
-#endif /* JS_JITSPEW */
+#endif

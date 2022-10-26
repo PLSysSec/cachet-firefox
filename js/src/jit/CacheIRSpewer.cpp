@@ -27,6 +27,7 @@
 
 #include "gc/GC.h"  // js::gc::AutoSuppressGC
 #include "jit/CacheIRCompiler.h"
+#include "jit/JitSpewer.h"
 #include "js/HashTable.h"
 #include "js/ScalarType.h"  // js::Scalar::Type
 #include "util/GetPidProvider.h"
@@ -99,17 +100,18 @@ class MOZ_RAII CacheIROpsJitSpewer {
   }
   void spewCallFlagsImm(const char* name, const char* type, CallFlags flags) {
     out_.printf(
-        "[%s %s] %u%s%s%s", type, name, flags.getArgFormat(),
-        flags.isConstructing() ? "/isConstructing" : "",
-        flags.isSameRealm() ? "/isSameRealm" : "",
-        flags.needsUninitializedThis() ? "/needsUninitializedThis" : "");
+        "[%s %s] %s%s%s%s", type, name,
+        CallFlags::GetArgFormatName(flags.getArgFormat()),
+        flags.isConstructing() ? " + isConstructing" : "",
+        flags.isSameRealm() ? " + isSameRealm" : "",
+        flags.needsUninitializedThis() ? " + needsUninitializedThis" : "");
   }
   void spewJSWhyMagicImm(const char* name, const char* type, JSWhyMagic magic) {
-    out_.printf("[%s %s] %u", type, name, unsigned(magic));
+    out_.printf("[%s %s] %s", type, name, JS::GetJSWhyMagicName(magic));
   }
   void spewScalarTypeImm(const char* name, const char* type,
                          Scalar::Type scalarType) {
-    out_.printf("[%s %s] %u", type, name, unsigned(scalarType));
+    out_.printf("[%s %s] %s", type, name, Scalar::name(scalarType));
   }
   void spewUnaryMathFunctionImm(const char* name, const char* type,
                                 UnaryMathFunction fun) {
@@ -117,22 +119,22 @@ class MOZ_RAII CacheIROpsJitSpewer {
   }
   void spewValueTypeImm(const char* name, const char* type,
                         ValueType valueType) {
-    out_.printf("[%s %s] %u", type, name, unsigned(valueType));
+    out_.printf("[%s %s] %s", type, name, ValTypeToString(valueType));
   }
   void spewJSNativeImm(const char* name, const char* type, JSNative native) {
     out_.printf("[%s %s] %p", type, name, native);
   }
   void spewGuardClassKindImm(const char* name, const char* type,
                              GuardClassKind kind) {
-    out_.printf("[%s %s] %u", type, name, unsigned(kind));
+    out_.printf("[%s %s] %s", type, name, GetGuardClassKindName(kind));
   }
   void spewWasmValTypeImm(const char* name, const char* type,
                           wasm::ValType::Kind kind) {
-    out_.printf("[%s %s] %u", type, name, unsigned(kind));
+    out_.printf("[%s %s] %s", type, name, wasm::ValType::kindName(kind));
   }
   void spewAllocKindImm(const char* name, const char* type,
                         gc::AllocKind kind) {
-    out_.printf("[%s %s] %u", type, name, unsigned(kind));
+    out_.printf("[%s %s] %s", type, name, gc::AllocKindName(kind));
   }
 
  public:
@@ -172,7 +174,9 @@ bool jit::SpewCacheIRStubFields(JSContext* const cx, GenericPrinter& out,
   size_t offset(0);
 
   HashSet<Shape*> shapes(cx);
+  HashSet<BaseShape*> baseShapes(cx);
   HashSet<const JSClass*> classes(cx);
+  HashSet<JSObject*> taggedProtos(cx);
 
   while (true) {
     const StubField::Type fieldType(stubInfo->fieldType(field));
@@ -212,7 +216,7 @@ bool jit::SpewCacheIRStubFields(JSContext* const cx, GenericPrinter& out,
         out.printf("%p\n", getterSetterField.get());
         break;
       }
-      case StubField::Type::JSObject: {
+      case StubField::Type::Object: {
         GCPtrObject& objectField =
             stubInfo->getStubField<JSObject*>(stubData, offset);
         out.printf("%p\n", objectField.get());
@@ -273,6 +277,17 @@ bool jit::SpewCacheIRStubFields(JSContext* const cx, GenericPrinter& out,
     Shape* const shape(iter.get());
     out.putChar('\n');
 
+    BaseShape* const baseShape(shape->base());
+    {
+      auto ptr = baseShapes.lookupForAdd(baseShape);
+      if (!ptr) {
+        if (!baseShapes.add(ptr, baseShape)) {
+          return false;
+        }
+      }
+    }
+    out.printf("ShapeBase                     %p, %p\n", shape, baseShape);
+
     const JSClass* const klass(shape->getObjectClass());
     {
       auto ptr = classes.lookupForAdd(klass);
@@ -290,12 +305,45 @@ bool jit::SpewCacheIRStubFields(JSContext* const cx, GenericPrinter& out,
                shape->slotSpan());
   }
 
+  for (auto iter = baseShapes.iter(); !iter.done(); iter.next()) {
+    BaseShape* const baseShape(iter.get());
+    out.putChar('\n');
+
+    const TaggedProto taggedProto(baseShape->proto());
+    JSObject* const rawTaggedProto(taggedProto.raw());
+    {
+      auto ptr = taggedProtos.lookupForAdd(rawTaggedProto);
+      if (!ptr) {
+        if (!taggedProtos.add(ptr, rawTaggedProto)) {
+          return false;
+        }
+      }
+    }
+    out.printf("BaseShapeTaggedProto          %p, %p\n", baseShape,
+               rawTaggedProto);
+  }
+
   for (auto iter = classes.iter(); !iter.done(); iter.next()) {
     const JSClass* const klass(iter.get());
     out.putChar('\n');
 
     if (klass->isNativeObject()) {
       out.printf("ClassIsNativeObject           %p\n", klass);
+    }
+  }
+
+  for (auto iter = taggedProtos.iter(); !iter.done(); iter.next()) {
+    JSObject* const rawTaggedProto(iter.get());
+    const TaggedProto taggedProto(rawTaggedProto);
+    out.putChar('\n');
+
+    if (taggedProto.isObject()) {
+      out.printf("TaggedProtoIsObject           %p\n", rawTaggedProto);
+    } else if (taggedProto.isDynamic()) {
+      out.printf("TaggedProtoIsLazy             %p\n", rawTaggedProto);
+    } else {
+      MOZ_ASSERT(rawTaggedProto == nullptr);
+      out.printf("TaggedProtoIsNull             %p\n", rawTaggedProto);
     }
   }
 
@@ -544,11 +592,11 @@ class MOZ_RAII CacheIROpsJSONSpewer {
     spewArgImpl(name, "Imm", flags.toByte());
   }
   void spewJSWhyMagicImm(const char* name, const char* type, JSWhyMagic magic) {
-    spewArgImpl(name, "Imm", unsigned(magic));
+    spewArgImpl(name, "Imm", JS::GetJSWhyMagicName(magic));
   }
   void spewScalarTypeImm(const char* name, const char* type,
                          Scalar::Type scalarType) {
-    spewArgImpl(name, "Imm", unsigned(scalarType));
+    spewArgImpl(name, "Imm", Scalar::name(scalarType));
   }
   void spewUnaryMathFunctionImm(const char* name, const char* type,
                                 UnaryMathFunction fun) {
@@ -557,22 +605,22 @@ class MOZ_RAII CacheIROpsJSONSpewer {
   }
   void spewValueTypeImm(const char* name, const char* type,
                         ValueType valueType) {
-    spewArgImpl(name, "Imm", unsigned(valueType));
+    spewArgImpl(name, "Imm", ValTypeToString(valueType));
   }
   void spewJSNativeImm(const char* name, const char* type, JSNative native) {
     spewArgImpl(name, "Word", uintptr_t(native));
   }
   void spewGuardClassKindImm(const char* name, const char* type,
                              GuardClassKind kind) {
-    spewArgImpl(name, "Imm", unsigned(kind));
+    spewArgImpl(name, "Imm", GetGuardClassKindName(kind));
   }
   void spewWasmValTypeImm(const char* name, const char* type,
                           wasm::ValType::Kind kind) {
-    spewArgImpl(name, "Imm", unsigned(kind));
+    spewArgImpl(name, "Imm", wasm::ValType::kindName(kind));
   }
   void spewAllocKindImm(const char* name, const char* type,
                         gc::AllocKind kind) {
-    spewArgImpl(name, "Imm", unsigned(kind));
+    spewArgImpl(name, "Imm", gc::AllocKindName(kind));
   }
 
  public:

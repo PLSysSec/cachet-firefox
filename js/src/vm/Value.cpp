@@ -22,6 +22,12 @@ static const mozilla::Maybe<JS::Value> JSVAL_NOTHING;
 
 namespace JS {
 
+const char* const JSWhyMagicNames[] = {
+#define DEFINE_MAGIC(magic) #magic,
+    JS_WHY_MAGICS(DEFINE_MAGIC)
+#undef DEFINE_MAGIC
+};
+
 const HandleValue NullHandleValue =
     HandleValue::fromMarkedLocation(&JSVAL_NULL);
 const HandleValue UndefinedHandleValue =

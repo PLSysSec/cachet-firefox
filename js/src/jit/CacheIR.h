@@ -277,7 +277,7 @@ extern const uint32_t CacheIROpHealth[];
   _(RawPointer)                                        \
   _(Shape)                                             \
   _(GetterSetter)                                      \
-  _(JSObject)                                          \
+  _(Object)                                            \
   _(Symbol)                                            \
   _(String)                                            \
   _(BaseScript)                                        \
@@ -350,15 +350,26 @@ class StubField {
 // decodes them and uses them for compilation.)
 class CallFlags {
  public:
+#define CALL_FLAGS_ARG_FORMATS(_) \
+  _(Unknown) \
+  _(Standard) \
+  _(Spread) \
+  _(FunCall) \
+  _(FunApplyArgsObj) \
+  _(FunApplyArray) \
+
   enum ArgFormat : uint8_t {
-    Unknown,
-    Standard,
-    Spread,
-    FunCall,
-    FunApplyArgsObj,
-    FunApplyArray,
+#define DEFINE_FORMAT(format) format,
+    CALL_FLAGS_ARG_FORMATS(DEFINE_FORMAT)
+#undef DEFINE_FORMAT
     LastArgFormat = FunApplyArray
   };
+
+  static const char* const ArgFormatNames[];
+
+  static constexpr const char* GetArgFormatName(const ArgFormat format) {
+    return ArgFormatNames[uint8_t(format)];
+  }
 
   CallFlags() = default;
   explicit CallFlags(ArgFormat format) : argFormat_(format) {}
@@ -541,20 +552,31 @@ inline int32_t GetIndexOfArgument(ArgumentKind kind, CallFlags flags,
   }
 }
 
+#define GUARD_CLASS_KINDS(_) \
+  _(Array) \
+  _(ArrayBuffer) \
+  _(SharedArrayBuffer) \
+  _(DataView) \
+  _(MappedArguments) \
+  _(UnmappedArguments) \
+  _(WindowProxy) \
+  _(JSFunction) \
+  _(Set) \
+  _(Map)
+
 // We use this enum as GuardClass operand, instead of storing Class* pointers
 // in the IR, to keep the IR compact and the same size on all platforms.
 enum class GuardClassKind : uint8_t {
-  Array,
-  ArrayBuffer,
-  SharedArrayBuffer,
-  DataView,
-  MappedArguments,
-  UnmappedArguments,
-  WindowProxy,
-  JSFunction,
-  Set,
-  Map,
+#define DEFINE_KIND(kind) kind,
+  GUARD_CLASS_KINDS(DEFINE_KIND)
+#undef DEFINE_KIND
 };
+
+extern const char* const GuardClassKindNames[];
+
+constexpr const char* GetGuardClassKindName(const GuardClassKind kind) {
+  return GuardClassKindNames[uint8_t(kind)];
+}
 
 const JSClass* ClassForGuardClassKind(const JSRuntime* const runtime,
                                       const GuardClassKind kind);
@@ -708,7 +730,7 @@ class MOZ_RAII CacheIRWriter : public JS::CustomAutoRooter {
   void writeObjectField(JSObject* obj) {
     MOZ_ASSERT(obj);
     assertSameCompartment(obj);
-    addStubField(uintptr_t(obj), StubField::Type::JSObject);
+    addStubField(uintptr_t(obj), StubField::Type::Object);
   }
   void writeStringField(JSString* str) {
     MOZ_ASSERT(str);

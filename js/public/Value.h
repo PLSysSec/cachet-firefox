@@ -210,72 +210,71 @@ constexpr uint64_t IsValidUserModePointer(uint64_t bits) {
 
 #define JSVAL_TYPE_TO_TAG(type) (JS::detail::ValueTypeToTag(type))
 
-enum JSWhyMagic {
-  /** a hole in a native object's elements */
-  JS_ELEMENTS_HOLE,
-
-  /** there is not a pending iterator value */
-  JS_NO_ITER_VALUE,
-
-  /** exception value thrown when closing a generator */
-  JS_GENERATOR_CLOSING,
-
-  /** used in debug builds to catch tracing errors */
-  JS_ARG_POISON,
-
-  /** an empty subnode in the AST serializer */
-  JS_SERIALIZE_NO_NODE,
-
-  /** magic value passed to natives to indicate construction */
-  JS_IS_CONSTRUCTING,
-
-  /** see class js::HashableValue */
-  JS_HASH_KEY_EMPTY,
-
-  /** error while running Ion code */
-  JS_ION_ERROR,
-
-  /** missing recover instruction result */
-  JS_ION_BAILOUT,
-
-  /** optimized out slot */
-  JS_OPTIMIZED_OUT,
-
-  /** uninitialized lexical bindings that produce ReferenceError on touch. */
-  JS_UNINITIALIZED_LEXICAL,
-
-  /** arguments object can't be created because environment is dead. */
-  JS_MISSING_ARGUMENTS,
-
-  /** for local use */
-  JS_GENERIC_MAGIC,
-
+#define JS_WHY_MAGICS(_) \
+  /** a hole in a native object's elements */ \
+  _(JS_ELEMENTS_HOLE) \
+  /** there is not a pending iterator value */ \
+  _(JS_NO_ITER_VALUE) \
+  /** exception value thrown when closing a generator */ \
+  _(JS_GENERATOR_CLOSING) \
+  /** used in debug builds to catch tracing errors */ \
+  _(JS_ARG_POISON) \
+  /** an empty subnode in the AST serializer */ \
+  _(JS_SERIALIZE_NO_NODE) \
+  /** magic value passed to natives to indicate construction */ \
+  _(JS_IS_CONSTRUCTING) \
+  /** see class js::HashableValue */ \
+  _(JS_HASH_KEY_EMPTY) \
+  /** error while running Ion code */ \
+  _(JS_ION_ERROR) \
+  /** missing recover instruction result */ \
+  _(JS_ION_BAILOUT) \
+  /** optimized out slot */ \
+  _(JS_OPTIMIZED_OUT) \
+  /** uninitialized lexical bindings that produce ReferenceError on touch. */ \
+  _(JS_UNINITIALIZED_LEXICAL) \
+  /** arguments object can't be created because environment is dead. */ \
+  _(JS_MISSING_ARGUMENTS) \
+  /** for local use */ \
+  _(JS_GENERIC_MAGIC) \
   /**
    * Write records queued up in WritableStreamDefaultController.[[queue]] in the
    * spec are either "close" (a String) or Record { [[chunk]]: chunk }, where
    * chunk is an arbitrary user-provided (and therefore non-magic) value.
    * Represent "close" the String as this magic value; represent Record records
    * as the |chunk| value within each of them.
-   */
-  JS_WRITABLESTREAM_CLOSE_RECORD,
-
+   */ \
+  _(JS_WRITABLESTREAM_CLOSE_RECORD) \
   /**
    * The ReadableStream pipe-to operation concludes with a "finalize" operation
    * that accepts an optional |error| argument.  In certain cases that optional
    * |error| must be stored in a handler function, for use after a promise has
    * settled.  We represent the argument not being provided, in those cases,
    * using this magic value.
-   */
-  JS_READABLESTREAM_PIPETO_FINALIZE_WITHOUT_ERROR,
-
+   */ \
+  _(JS_READABLESTREAM_PIPETO_FINALIZE_WITHOUT_ERROR) \
   /**
    * When an error object is created without the error cause argument, we set
    * the error's cause slot to this magic value.
-   */
-  JS_ERROR_WITHOUT_CAUSE,
+   */ \
+  _(JS_ERROR_WITHOUT_CAUSE)
 
+enum JSWhyMagic {
+#define DEFINE_MAGIC(magic) magic,
+  JS_WHY_MAGICS(DEFINE_MAGIC)
+#undef DEFINE_MAGIC
   JS_WHY_MAGIC_COUNT
 };
+
+namespace JS {
+
+extern const char* const JSWhyMagicNames[];
+
+constexpr const char* GetJSWhyMagicName(const JSWhyMagic magic) {
+  return JSWhyMagicNames[uint8_t(magic)];
+}
+
+}  // namespace JS
 
 namespace js {
 static inline JS::Value PoisonedObjectValue(uintptr_t poison);

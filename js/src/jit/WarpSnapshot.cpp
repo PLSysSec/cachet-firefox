@@ -330,7 +330,7 @@ void WarpCacheIR::traceData(JSTracer* trc) {
                                          "warp-cacheir-getter-setter");
           break;
         }
-        case StubField::Type::JSObject: {
+        case StubField::Type::Object: {
           uintptr_t word = stubInfo_->getStubRawWord(stubData_, offset);
           WarpObjectField field = WarpObjectField::fromData(word);
           if (!field.isNurseryIndex()) {

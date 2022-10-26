@@ -1067,7 +1067,7 @@ bool WarpScriptOracle::replaceNurseryAndAllocSitePointers(
         static_assert(std::is_convertible_v<BaseScript*, gc::TenuredCell*>,
                       "Code assumes scripts are tenured");
         break;
-      case StubField::Type::JSObject: {
+      case StubField::Type::Object: {
         JSObject* obj = stubInfo->getStubField<JSObject*>(stub, offset);
         if (IsInsideNursery(obj)) {
           uint32_t nurseryIndex;
