@@ -375,6 +375,9 @@ void IonCacheIRCompiler::assertFloatRegisterAvailable(FloatRegister reg) {
 bool IonCacheIRCompiler::emitGuardShape(ObjOperandId objId,
                                         uint32_t shapeOffset) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_GuardShape(cachet::CachetContext {this, cx_}, objId, shapeOffset);
+#else
   Register obj = allocator.useRegister(masm, objId);
   Shape* shape = shapeStubField(shapeOffset);
 
@@ -397,6 +400,7 @@ bool IonCacheIRCompiler::emitGuardShape(ObjOperandId objId,
     masm.branchTestObjShapeNoSpectreMitigations(Assembler::NotEqual, obj, shape,
                                                 failure->label());
   }
+#endif
 
   return true;
 }
@@ -552,10 +556,14 @@ bool IonCacheIRCompiler::emitLoadValueResult(uint32_t valOffset) {
 bool IonCacheIRCompiler::emitLoadFixedSlotResult(ObjOperandId objId,
                                                  uint32_t offsetOffset) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_LoadFixedSlotResult(cachet::CachetContext {this, cx_}, objId, offsetOffset);
+#else
   AutoOutputRegister output(*this);
   Register obj = allocator.useRegister(masm, objId);
   int32_t offset = int32StubField(offsetOffset);
   masm.loadTypedOrValue(Address(obj, offset), output);
+#endif
   return true;
 }
 

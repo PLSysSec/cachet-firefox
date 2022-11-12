@@ -102,6 +102,15 @@ struct NumericType : public PrimitiveType<T> {
   static Val Sub(Ref lhs, Ref rhs) {
     return lhs - rhs;
   }
+
+  static Val Div(Ref lhs, Ref rhs) {
+    return lhs / rhs;
+  }
+
+  static Val Mod(Ref lhs, Ref rhs) {
+    return lhs % rhs;
+  }
+
 };
 
 template <typename T>
