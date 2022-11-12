@@ -3,6 +3,75 @@
 struct Heap;
 var mut heap: Heap;
 
+#[spec]
+enum RegDataType {
+    Value,
+    UnboxedValue,
+}
+
+#[spec]
+struct RegData;
+
+impl RegData {
+    fn typeOf(data: RegData) -> RegDataType;
+
+    fn isValue(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::Value
+    }
+
+    fn fromValue(value: Value) -> RegData {
+        let data = (unsafe { RegData::fromValueUnchecked(value) });
+        assume RegData::isValue(data);
+        assume (unsafe { RegData::toValueUnchecked(data) }) == value;
+        data
+    }
+
+    unsafe fn fromValueUnchecked(value: Value) -> RegData;
+
+    fn toValue(data: RegData) -> Value {
+        assert RegData::isValue(data);
+        let value = (unsafe { RegData::toValueUnchecked(data) });
+        assume (unsafe { RegData::fromValueUnchecked(value) }) == data;
+        value
+    }
+
+    unsafe fn toValueUnchecked(data: RegData) -> Value;
+
+    fn isUnboxedValue(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::UnboxedValue
+    }
+
+    fn fromUnboxedValue(value: Value) -> RegData {
+        let data = (unsafe { RegData::fromUnboxedValueUnchecked(value) });
+        assume RegData::isUnboxedValue(data);
+        assume (unsafe { RegData::toUnboxedValueUnchecked(data) }) == value;
+        data
+    }
+
+    unsafe fn fromUnboxedValueUnchecked(value: Value) -> RegData;
+
+    fn toUnboxedValue(data: RegData) -> Value {
+        assert RegData::isUnboxedValue(data);
+        let value = (unsafe { RegData::toUnboxedValueUnchecked(data) });
+        assume (unsafe { RegData::fromUnboxedValueUnchecked(value) }) == data;
+        value
+    }
+
+    unsafe fn toUnboxedValueUnchecked(data: RegData) -> Value;
+
+    #[spec]
+    fn readData(data: RegData, offset: Int64) -> RegData {
+        if RegData::isUnboxedValue(data) {
+            let value = RegData::toUnboxedValue(data);
+            return Value::readData(value, offset);
+        }
+
+        assert false;
+        data // returning to satisfy compiler
+    }
+}
+
+
 enum ValueType {
   Double,
   Int32,
@@ -21,6 +90,8 @@ enum ValueType {
 struct Value;
 
 impl Value {
+    var sizeOf: UInt64 = 8_u64;
+
     fn typeOf(value: Value) -> ValueType;
 
     fn isDouble(value: Value) -> Bool {
@@ -188,6 +259,17 @@ impl Value {
     }
 
     unsafe fn toBigIntUnchecked(value: Value) -> BigInt;
+
+    #[spec]
+    fn readData(value: Value, offset: Int64) -> RegData {
+        if Value::isObject(value) {
+            let object = Value::toObject(value);
+            return Object::readData(object, offset);
+        }
+
+        assert false; // Only support Object for now
+        return RegData::fromValue(value);
+    }
 }
 
 struct Object;
@@ -216,24 +298,58 @@ impl Object {
         (unsafe { object as NativeObject })
     }
 
-    fn getFixedSlot(object: Object, slot: Int32) -> Value {
+    fn getFixedSlot(object: Object, slot: UInt32) -> Value {
         let nativeObject = Object::toNativeObject(object);
         NativeObject::getFixedSlot(nativeObject, slot)
+    }
+
+    // read RegData at the specified memory offset of the Object
+    #[spec]
+    fn readData(object: Object, offset: Int64) -> RegData {
+        let shape = Object::shapeOf(object);
+        let class = Shape::classOf(shape);
+
+        if Class::isNativeObject(class) {
+            let nativeObject = (unsafe { object as NativeObject });
+            return NativeObject::readData(nativeObject, offset);
+        }
+
+        assert false; // only support NativeObject for now
+        return RegData::fromValue(Value::fromObject(object)); // satisfy the compiler
     }
 }
 
 struct NativeObject <: Object;
 
 impl NativeObject {
-    fn getFixedSlot(nativeObject: NativeObject, slot: Int32) -> Value {
+    var maxFixedSlots: UInt64 = 16_u64;
+    var sizeOf: UInt64 = 24_u64;
+
+    fn getFixedSlot(nativeObject: NativeObject, slot: UInt32) -> Value {
         let shape = Object::shapeOf(nativeObject);
         assert Shape::hasFixedSlot(shape, slot);
         (unsafe { NativeObject::getFixedSlotUnchecked(heap, nativeObject, slot) })
     }
 
     // #[reads(heap)]
-    // unsafe fn getFixedSlotUnchecked(nativeObject: NativeObject, slot: Int32) -> Value;
-    unsafe fn getFixedSlotUnchecked(heap: Heap, nativeObject: NativeObject, slot: Int32) -> Value;
+    // unsafe fn getFixedSlotUnchecked(nativeObject: NativeObject, slot: UInt32) -> Value;
+    unsafe fn getFixedSlotUnchecked(heap: Heap, nativeObject: NativeObject, slot: UInt32) -> Value;
+
+    #[spec]
+    fn readData(nativeObject: NativeObject, offset: Int64) -> RegData {
+        if offset >= NativeObject::sizeOf as Int64 {
+            // fixed slots
+            let slotOffset = offset as UInt64 - NativeObject::sizeOf;
+            assert slotOffset % Value::sizeOf == 0_u64;
+            assert slotOffset / Value::sizeOf < NativeObject::maxFixedSlots;
+            let slot = (slotOffset / Value::sizeOf) as UInt32;
+            let value = NativeObject::getFixedSlot(nativeObject, slot);
+            return RegData::fromValue(value);
+        }
+
+        assert false;
+        return RegData::fromValue(Value::fromObject(nativeObject as Object)); // satisfy the compiler
+    }
 }
 
 struct NativeObjectSlots;
@@ -245,7 +361,7 @@ struct Shape;
 impl Shape {
     fn classOf(shape: Shape) -> Class;
 
-    fn hasFixedSlot(shape: Shape, slot: Int32) -> Bool;
+    fn hasFixedSlot(shape: Shape, slot: UInt32) -> Bool;
 }
 
 struct Class;

@@ -11,6 +11,9 @@
 
 #include "jit/CacheIR.h"
 #include "jit/CacheIRCompiler.h"
+#ifdef JS_CACHET
+#include "jit/CachetCompiler.h"
+#endif
 
 namespace js {
 namespace jit {

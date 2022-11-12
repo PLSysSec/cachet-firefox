@@ -128,6 +128,20 @@ Type_Condition::Ref Variant_LessThan(Cachet_ContextRef cx) {
 
 };  // namespace Impl_ValueType
 
+namespace Impl_Address {
+Type_Address::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_Reg::Ref param_base, Type_Int32::Ref param_offset) {
+  return Address(param_base, param_offset);
+}
+
+Type_Reg::Val Fn_base(Cachet_ContextRef cx, Type_Address::Ref param_address) {
+  return param_address.base;
+}
+
+Type_Int32::Val Fn_offset(Cachet_ContextRef cx, Type_Address::Ref param_address) {
+  return param_address.offset;
+}
+
+};
 
 
 namespace Impl_MASM {
@@ -150,6 +164,16 @@ void EmitOp_Cmp32Move32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                     Type_Reg::Ref param_dstReg) {
 
   ops.cmp32Move32(param_condition, param_lhsReg, param_rhsReg, param_srcReg, param_dstReg);
+}
+
+void EmitOp_Jump(Cachet_ContextRef cx, IR_MASM::OpsRef ops, IR_MASM::LabelRef param_target) {
+  ops.jump(param_target);
+}
+
+void EmitOp_LoadValueAddress(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                    Type_Address::Ref param_address,
+                                    Type_ValueReg::Ref param_dstReg) {
+  ops.loadValue(param_address, param_dstReg);
 }
 
 void EmitOp_BranchTestInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
@@ -211,6 +235,15 @@ void EmitOp_BranchTestNull(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Condi
   ops.branchTestNull(param_condition, param_valueReg, param_branch);
 }
 
+void EmitOp_BranchTest32(Cachet_ContextRef cx,
+                            IR_MASM::OpsRef ops,
+                            Type_Condition::Ref param_condition,
+                            Type_Reg::Ref param_lhsReg,
+                            Type_Reg::Ref param_rhsReg,
+                            IR_MASM::LabelRef param_branch) {
+  ops.branchTest32(param_condition, param_lhsReg, param_rhsReg, param_branch);
+}
+
 void EmitOp_BranchTest32Imm(Cachet_ContextRef cx,
                             IR_MASM::OpsRef ops,
                             Type_Condition::Ref param_condition,
@@ -235,10 +268,37 @@ void EmitOp_BranchAdd32(Cachet_ContextRef cx,
                          param_branch);
 }
 
+void EmitOp_BranchSub32(Cachet_ContextRef cx,
+                                         IR_MASM::OpsRef ops,
+                                         Type_Condition::Ref param_condition,
+                                         Type_Reg::Ref param_srcReg,
+                                         Type_Reg::Ref param_dstReg,
+                                         IR_MASM::LabelRef param_branch) {
+  ops.branchSub32(param_condition, param_srcReg, param_dstReg,
+                         param_branch);
+}
+
+void EmitOp_BranchMul32(Cachet_ContextRef cx,
+                                         IR_MASM::OpsRef ops,
+                                         Type_Condition::Ref param_condition,
+                                         Type_Reg::Ref param_srcReg,
+                                         Type_Reg::Ref param_dstReg,
+                                         IR_MASM::LabelRef param_branch) {
+  ops.branchMul32(param_condition, param_srcReg, param_dstReg,
+                         param_branch);
+}
+
 void EmitOp_Neg32(Cachet_ContextRef cx,
                   IR_MASM::OpsRef ops,
                   Type_Reg::Ref param_valueReg) {
   ops.neg32(param_valueReg);
+}
+
+void EmitOp_Or32(Cachet_ContextRef cx,
+                                         IR_MASM::OpsRef ops,
+                                         Type_Reg::Ref param_srcReg,
+                                         Type_Reg::Ref param_dstReg) {
+  ops.or32(param_srcReg, param_dstReg);
 }
 
 };  // namespace Impl_MASM
@@ -256,8 +316,12 @@ IR_MASM::LabelMutRef IR_MASM::ToLabelMutRef(IR_MASM::LabelLocal& label) {
   return label;
 }
 
-IR_MASM::LabelRef IR_MASM::ToLabelRef(IR_MASM::LabelLocal& label) {
+IR_MASM::LabelRef IR_MASM::ToLabelRef(IR_MASM::LabelLocal label) {
   return label;
+}
+
+void IR_MASM::BindLabel(Cachet_ContextRef cx, OpsRef ops, IR_MASM::LabelMutRef label) {
+  ops.bind(label);
 }
 
 Type_ValueReg::Ref Impl_CacheIR::Var_outputReg(Cachet_ContextRef cx) {
@@ -341,8 +405,7 @@ Type_Shape::Val Impl_Object::Fn_shapeOfUnchecked(Cachet_ContextRef cx,
 
 Type_Value::Val Impl_NativeObject::Fn_getFixedSlotUnchecked(
     Cachet_ContextRef cx, Type_Heap::Ref param_heap, Type_NativeObject::Ref param_nativeObject,
-    Type_Int32::Ref param_slot) {
-  param_slot = NativeObject::getFixedSlotIndexFromOffset(param_slot);
+    Type_UInt32::Ref param_slot) {
   return param_nativeObject->getFixedSlot(param_slot);
 }
 
@@ -353,10 +416,9 @@ Type_Class::Val Impl_Shape::Fn_classOf(Cachet_ContextRef cx,
 
 Type_Bool::Val Impl_Shape::Fn_hasFixedSlot(Cachet_ContextRef cx,
                                            Type_Shape::Ref param_shape,
-                                           Type_Int32::Ref param_slot) {
-  param_slot = NativeObject::getFixedSlotIndexFromOffset(param_slot);
+                                           Type_UInt32::Ref param_slot) {
   return param_slot >= 0 &&
-         param_slot < Type_Int32::Val(param_shape->numFixedSlots());
+         param_slot < Type_UInt32::Val(param_shape->numFixedSlots());
 }
 
 namespace Impl_OperandLocationKind {
@@ -501,22 +563,12 @@ Type_ValueReg::Val Impl_CacheIR::Fn_useValueReg(
 
 Type_Reg::Val Impl_CacheIR::Fn_useObjectReg(Cachet_ContextRef cx,
                                             Type_ObjectId::Ref param_objectId) {
-  OperandLocation loc(cx.compiler->allocator.operandLocation(param_objectId.id()));
-  if (loc.kind() == OperandLocation::PayloadReg) {
-    return loc.payloadReg();
-  } else {
     return cx.compiler->allocator.useRegister(cx.compiler->masm, param_objectId);
-  }
 }
 
 Type_Reg::Val Impl_CacheIR::Fn_useInt32Reg(Cachet_ContextRef cx,
                                             Type_Int32Id::Ref param_int32Id) {
-  OperandLocation loc(cx.compiler->allocator.operandLocation(param_int32Id.id()));
-  if (loc.kind() == OperandLocation::PayloadReg) {
-    return loc.payloadReg();
-  } else {
     return cx.compiler->allocator.useRegister(cx.compiler->masm, param_int32Id);
-  }
 }
 
 void Impl_CacheIR::Fn_emitLoadInt32StubField(

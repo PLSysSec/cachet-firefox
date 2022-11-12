@@ -124,6 +124,7 @@ using Type_Class = PrimitiveType<const JSClass*>;
 using Type_ValueReg = PrimitiveType<ValueOperand>;
 using Type_Reg = PrimitiveType<Register>;
 using Type_Condition = PrimitiveType<Assembler::Condition>;
+using Type_Address = PrimitiveType<js::jit::Address>;
 
 using Type_OperandLocation = PrimitiveType<OperandLocation>;
 
@@ -173,7 +174,9 @@ namespace IR_MASM {
 
   LabelLocal NewLabel(Cachet_ContextRef cx);
   LabelMutRef ToLabelMutRef(LabelLocal& label);
-  LabelRef ToLabelRef(LabelLocal& label);
+  LabelRef ToLabelRef(LabelLocal label);
+
+  void BindLabel(Cachet_ContextRef cx, OpsRef ops, LabelMutRef label);
 }
 
 #define CACHET_CacheIR_COMPILER
