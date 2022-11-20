@@ -7,12 +7,19 @@
 #ifndef jit_CachetCompiler_h
 #define jit_CachetCompiler_h
 
+#include "builtin/DataViewObject.h"
+#include "builtin/MapObject.h"
+#include "builtin/Object.h"
 #include "jit/CacheIR.h"
 #include "jit/CachetPrelude.h"
 #include "jit/MacroAssembler.h"
 #include "js/Class.h"
 #include "js/RootingAPI.h"
 #include "js/Value.h"
+#include "vm/ArgumentsObject.h"
+#include "vm/ArrayBufferObject.h"
+#include "vm/ArrayBufferViewObject.h"
+#include "vm/JSFunction.h"
 #include "vm/JSObject.h"
 #include "vm/NativeObject.h"
 #include "vm/Shape.h"
@@ -111,6 +118,7 @@ struct GCType {
 
 using Type_Heap = Type_Unit;
 
+using Type_JSValueType = PrimitiveType<JSValueType>;
 using Type_ValueType = PrimitiveType<JS::ValueType>;
 using Type_Value = GCType<JS::Value>;
 using Type_Object = GCType<JSObject*>;
@@ -118,7 +126,21 @@ using Type_String = GCType<JSString*>;
 using Type_Symbol = GCType<JS::Symbol*>;
 using Type_BigInt = GCType<JS::BigInt*>;
 using Type_NativeObject = GCType<js::NativeObject*>;
+using Type_JSFunction = GCType<JSFunction*>;
+using Type_ArrayObject = GCType<js::ArrayObject*>;
+using Type_PlainObject = GCType<js::PlainObject*>;
+using Type_ArrayBufferObjectMaybeShared = GCType<js::ArrayBufferObjectMaybeShared*>;
+using Type_ArrayBufferObject = GCType<js::ArrayBufferObject*>;
+using Type_SharedArrayBufferObject = GCType<js::SharedArrayBufferObject*>;
+using Type_ArrayBufferViewObject = GCType<js::ArrayBufferViewObject*>;
+using Type_DataViewObject = GCType<js::DataViewObject*>;
+using Type_ArgumentsObject = GCType<js::ArgumentsObject*>;
+using Type_MappedArgumentsObject = GCType<js::MappedArgumentsObject*>;
+using Type_UnmappedArgumentsObject = GCType<js::UnmappedArgumentsObject*>;
+using Type_SetObject = GCType<js::SetObject*>;
+using Type_MapObject = GCType<js::MapObject*>;
 using Type_Shape = GCType<js::Shape*>;
+using Type_BaseShape = GCType<js::BaseShape*>;
 using Type_Class = PrimitiveType<const JSClass*>;
 
 using Type_ValueReg = PrimitiveType<ValueOperand>;
@@ -140,6 +162,8 @@ using Type_OperandId = PrimitiveType<OperandId>;
 using Type_ValueId = PrimitiveType<ValOperandId>;
 using Type_ObjectId = PrimitiveType<ObjOperandId>;
 using Type_Int32Id = PrimitiveType<Int32OperandId>;
+using Type_BooleanId = PrimitiveType<BooleanOperandId>;
+using Type_ValueTagId = PrimitiveType<ValueTagOperandId>;
 
 class TypedOperandIdW : public TypedOperandId {
   bool isValueId_;
@@ -160,6 +184,9 @@ using Type_TypedId = PrimitiveType<TypedOperandIdW>;
 
 using Type_Int32Field = PrimitiveType<uint32_t>;
 using Type_ShapeField = PrimitiveType<uint32_t>;
+using Type_ClassField = PrimitiveType<uint32_t>;
+
+using Type_GuardClassKind = PrimitiveType<GuardClassKind>;
 
 inline Type_Heap::MutRef Var_heap(Cachet_ContextRef cx) {
   static Type_Heap::Local heap;
