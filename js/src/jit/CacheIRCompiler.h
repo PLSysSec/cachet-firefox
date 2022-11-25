@@ -740,7 +740,7 @@ class MOZ_RAII CacheIRCompiler {
 
 #ifdef JS_CACHET
 friend cachet::IR_MASM::OpsRef cachet::IR_CacheIR::GetOutput(cachet::Cachet_ContextRef cx);
-friend cachet::Type_ValueReg::Ref cachet::Impl_CacheIR::Var_outputReg(cachet::Cachet_ContextRef cx);
+friend cachet::Type_TypedOrValueReg::Ref cachet::Impl_CacheIR::Var_outputReg(cachet::Cachet_ContextRef cx);
 friend cachet::Type_JSValueType::Ref cachet::Impl_CacheIR::Fn_knownType(cachet::Cachet_ContextRef cx, cachet::Type_ValueId::Ref param_valueId);
 friend void cachet::Impl_CacheIR::Fn_addFailurePath(cachet::Cachet_ContextRef cx, cachet::IR_MASM::LabelMutRef failure);
 friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_allocateValueReg(cachet::Cachet_ContextRef cx);

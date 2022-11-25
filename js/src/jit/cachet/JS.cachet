@@ -119,6 +119,70 @@ impl RegData {
     }
 }
 
+enum MIRType {
+    Undefined,
+    Null,
+    Boolean,
+    Int32,
+    Int64,
+    IntPtr,
+    Double,
+    Float32,
+
+    String,
+    Symbol,
+    BigInt,
+    Simd128,
+
+    Object,
+    MagicOptimizedOut,
+    MagicHole,
+    MagicIsConstructing,
+    MagicUninitializedLexical,
+
+    Value,
+    None,
+    Slots,
+    Elements,
+    Pointer,
+    RefOrNull,
+    StackResults,
+    Shape,
+}
+
+struct Float64;
+
+impl Float64 {
+    fn isNegativeZero(float64: Float64) -> Bool;
+    fn isNan(float64: Float64) -> Bool;
+
+    fn isSafeInt32(float64: Float64) -> Bool;
+
+    fn fromInt32(int32: Int32) -> Float64 {
+       let float64 = (unsafe { Float64::fromInt32Unchecked(int32) });
+       assume !Float64::isNegativeZero(float64);
+       assume !Float64::isNan(float64);
+       assume Float64::isSafeInt32(float64);
+       assume (unsafe { Float64::toInt32Unchecked(float64) }) == int32;
+
+       float64
+    }
+
+    unsafe fn fromInt32Unchecked(int32: Int32) -> Float64;
+
+    fn toInt32(float64: Float64) -> Int32 {
+        let int32 = (unsafe { Float64::toInt32Unchecked(float64) });
+
+        if Float64::isSafeInt32(float64) {
+            assume (unsafe { Float64::fromInt32Unchecked(int32) }) == float64;
+        }
+
+        int32
+    }
+
+    unsafe fn toInt32Unchecked(float64: Float64) -> Int32;
+}
+
 enum JSValueType {
   Double,
   Int32,
@@ -162,6 +226,32 @@ impl JSValueType {
         assert valTy == ValueType::Object;
         return JSValueType::Object;
     }
+
+    fn fromMIRType(type: MIRType) -> JSValueType {
+        if type == MIRType::Undefined {
+            return JSValueType::Undefined;
+        } else if type == MIRType::Null {
+            return JSValueType::Null;
+        } else if type == MIRType::Boolean {
+            return JSValueType::Bool;
+        } else if type == MIRType::Int32 {
+            return JSValueType::Int32;
+        } else if type == MIRType::Float32 || type == MIRType::Double {
+            return JSValueType::Double;
+        } else if type == MIRType::String {
+            return JSValueType::String;
+        } else if type == MIRType::Symbol {
+            return JSValueType::Symbol;
+        } else if type == MIRType::BigInt {
+            return JSValueType::BigInt;
+        } else if type == MIRType::MagicOptimizedOut || type == MIRType::MagicHole || type ==
+        MIRType::MagicIsConstructing || type == MIRType::MagicUninitializedLexical {
+            return JSValueType::Magic;
+        }
+
+        assert type == MIRType::Object;
+        JSValueType::Object
+    }
 }
 
 enum ValueType {
@@ -189,23 +279,23 @@ impl Value {
         Value::typeOf(value) == ValueType::Double
     }
 
-    fn fromDouble(double: Double) -> Value {
+    fn fromDouble(double: Float64) -> Value {
         let value = (unsafe { Value::fromDoubleUnchecked(double) });
         assume Value::isDouble(value);
         assume (unsafe { Value::toDoubleUnchecked(value) }) == double;
         value
     }
 
-    unsafe fn fromDoubleUnchecked(value: Double) -> Value;
+    unsafe fn fromDoubleUnchecked(value: Float64) -> Value;
 
-    fn toDouble(value: Value) -> Double {
+    fn toDouble(value: Value) -> Float64 {
         assert Value::isDouble(value);
         let double = (unsafe { Value::toDoubleUnchecked(value) });
         assume (unsafe { Value::fromDoubleUnchecked(double) }) == value;
         double
     }
 
-    unsafe fn toDoubleUnchecked(value: Value) -> Double;
+    unsafe fn toDoubleUnchecked(value: Value) -> Float64;
 
     fn isInt32(value: Value) -> Bool {
         Value::typeOf(value) == ValueType::Int32

@@ -236,6 +236,25 @@ class TypedOrValueRegister {
     }
     return typedReg();
   }
+
+  bool operator==(const TypedOrValueRegister& other) const {
+    if (type_ != other.type_) {
+      return false;
+    }
+
+    if (hasValue()) {
+      return valueReg() == other.valueReg();
+    } else if (hasTyped()) {
+      return typedReg() == other.typedReg();
+    } else {
+      MOZ_ASSERT(type_ == MIRType::None);
+      return true;
+    }
+  }
+
+  bool operator!=(const TypedOrValueRegister& other) const {
+    return !operator==(other);
+  }
 };
 
 // A constant value, or registers to hold a typed/untyped value.
