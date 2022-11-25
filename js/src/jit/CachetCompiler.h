@@ -118,9 +118,11 @@ struct GCType {
 
 using Type_Heap = Type_Unit;
 
+using Type_MIRType = PrimitiveType<MIRType>;
 using Type_JSValueType = PrimitiveType<JSValueType>;
 using Type_ValueType = PrimitiveType<JS::ValueType>;
 using Type_Value = GCType<JS::Value>;
+using Type_Float64 = NumericType<double>;
 using Type_Object = GCType<JSObject*>;
 using Type_String = GCType<JSString*>;
 using Type_Symbol = GCType<JS::Symbol*>;
@@ -145,6 +147,13 @@ using Type_Class = PrimitiveType<const JSClass*>;
 
 using Type_ValueReg = PrimitiveType<ValueOperand>;
 using Type_Reg = PrimitiveType<Register>;
+using Type_PhyFloatReg = PrimitiveType<X86Encoding::XMMRegisterID>;
+using Type_FloatContentType = PrimitiveType<FloatRegisters::ContentType>;
+using Type_FloatReg = PrimitiveType<FloatRegister>;
+using Type_AnyReg = PrimitiveType<AnyRegister>;
+using Type_TypedOrValueReg = PrimitiveType<TypedOrValueRegister>;
+using Type_GeneralRegSet = PrimitiveType<GeneralRegisterSet>;
+using Type_FloatRegSet = PrimitiveType<FloatRegisterSet>;
 using Type_Condition = PrimitiveType<Assembler::Condition>;
 using Type_Address = PrimitiveType<js::jit::Address>;
 
@@ -239,7 +248,7 @@ IR_MASM::OpsRef GetOutput(Cachet_ContextRef cx);
 
 namespace Impl_CacheIR {
 
-Type_ValueReg::Ref Var_outputReg(Cachet_ContextRef cx);
+Type_TypedOrValueReg::Ref Var_outputReg(Cachet_ContextRef cx);
 
 };  // namespace Impl_CacheIR
 

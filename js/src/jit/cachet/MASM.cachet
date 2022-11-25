@@ -2,7 +2,30 @@
 
 import "./JS.cachet"
 
-struct Reg;
+enum Reg {
+    Rax,
+    Rcx,
+    Rdx,
+    Rbx,
+    Rsp,
+    Rbp,
+    Rsi,
+    Rdi,
+    R8,
+    R9,
+    R10,
+    R11,
+    R12,
+    R13,
+    R14,
+    R15,
+}
+
+impl Reg {
+    fn scratchReg() -> Reg {
+        Reg::R11
+    }
+}
 
 // #[cfg(cpp)]
 struct ValueReg;
@@ -11,6 +34,236 @@ struct ValueReg;
 
 impl ValueReg {
     fn scratchReg(valueReg: ValueReg) -> Reg;
+}
+
+enum PhyFloatReg {
+    Xmm0,
+    Xmm1,
+    Xmm2,
+    Xmm3,
+    Xmm4,
+    Xmm5,
+    Xmm6,
+    Xmm7,
+    Xmm8,
+    Xmm9,
+    Xmm10,
+    Xmm11,
+    Xmm12,
+    Xmm13,
+    Xmm14,
+    Xmm15,
+}
+
+enum FloatContentType {
+    Single,
+    Double,
+    Simd128,
+}
+
+struct FloatReg;
+
+impl FloatReg {
+    fn reg(floatReg: FloatReg) -> PhyFloatReg;
+    fn type(floatReg: FloatReg) -> FloatContentType;
+
+    fn new(reg: PhyFloatReg, type: FloatContentType) -> FloatReg {
+        let floatReg = (unsafe { FloatReg::newUnchecked(reg, type) });
+        assume FloatReg::reg(floatReg) == reg;
+        assume FloatReg::type(floatReg) == type;
+        floatReg
+    }
+
+    fn newDouble(reg: PhyFloatReg) -> FloatReg {
+        FloatReg::new(reg, FloatContentType::Double)
+    }
+
+    unsafe fn newUnchecked(reg: PhyFloatReg, type: FloatContentType) -> FloatReg;
+
+    fn floatReg0() -> FloatReg {
+        FloatReg::newDouble(PhyFloatReg::Xmm0)
+    }
+
+    fn doubleScratchReg() -> FloatReg {
+        FloatReg::newDouble((PhyFloatReg::Xmm15))
+    }
+}
+
+struct AnyReg;
+
+impl AnyReg {
+    fn isFloat(anyReg: AnyReg) -> Bool;
+
+    fn fromReg(reg: Reg) -> AnyReg {
+       let anyReg = (unsafe { AnyReg::fromRegUnchecked(reg) });
+       assume !AnyReg::isFloat(anyReg);
+       assume (unsafe { AnyReg::toRegUnchecked(anyReg) }) == reg;
+       anyReg
+    }
+
+    unsafe fn fromRegUnchecked(reg: Reg) -> AnyReg;
+
+    fn toReg(anyReg: AnyReg) -> Reg {
+        assert !AnyReg::isFloat(anyReg);
+        let reg = (unsafe { AnyReg::toRegUnchecked(anyReg) });
+        assume (unsafe { AnyReg::fromRegUnchecked(reg) }) == anyReg;
+        reg
+    }
+
+    unsafe fn toRegUnchecked(anyReg: AnyReg) -> Reg;
+
+    fn fromFloatReg(floatReg: FloatReg) -> AnyReg {
+        let anyReg = (unsafe { AnyReg::fromFloatRegUnchecked(floatReg) });
+        assume AnyReg::isFloat(anyReg);
+        assume (unsafe { AnyReg::toFloatRegUnchecked(anyReg) }) == floatReg;
+        anyReg
+    }
+
+    unsafe fn fromFloatRegUnchecked(floatReg: FloatReg) -> AnyReg;
+
+    fn toFloatReg(anyReg: AnyReg) -> FloatReg {
+        assert AnyReg::isFloat(anyReg);
+        let floatReg = (unsafe { AnyReg::toFloatRegUnchecked(anyReg) });
+        assume (unsafe { AnyReg::fromFloatRegUnchecked(floatReg) }) == anyReg;
+        floatReg
+    }
+
+    unsafe fn toFloatRegUnchecked(anyReg: AnyReg) -> FloatReg;
+}
+
+struct TypedOrValueReg;
+
+impl TypedOrValueReg {
+    fn type(reg: TypedOrValueReg) -> MIRType;
+
+    fn hasTyped(reg: TypedOrValueReg) -> Bool {
+        let type = TypedOrValueReg::type(reg);
+        type != MIRType::Value && type != MIRType::None
+    }
+
+    fn hasValue(reg: TypedOrValueReg) -> Bool {
+        TypedOrValueReg::type(reg) == MIRType::Value
+    }
+
+    fn fromValueReg(valueReg: ValueReg) -> TypedOrValueReg {
+        let reg = (unsafe { TypedOrValueReg::fromValueRegUnchecked(valueReg) });
+        assume TypedOrValueReg::type(reg) == MIRType::Value;
+        assume (unsafe { TypedOrValueReg::toValueRegUnchecked(reg) }) == valueReg;
+        reg
+    }
+
+    unsafe fn fromValueRegUnchecked(valueReg: ValueReg) -> TypedOrValueReg;
+
+    fn toValueReg(reg: TypedOrValueReg) -> ValueReg {
+        assert TypedOrValueReg::hasValue(reg);
+        let valueReg = (unsafe { TypedOrValueReg::toValueRegUnchecked(reg) });
+        assume (unsafe { TypedOrValueReg::fromValueRegUnchecked(valueReg) }) == reg;
+        valueReg
+    }
+
+    unsafe fn toValueRegUnchecked(reg: TypedOrValueReg) -> ValueReg;
+
+    fn fromTypedReg(type: MIRType, typedReg: AnyReg) -> TypedOrValueReg {
+        // NOTE: don't support this currently even though it may be okay
+        assert type != MIRType::Value;
+
+        let reg = (unsafe { TypedOrValueReg::fromTypedRegUnchecked(type, typedReg) });
+        assume TypedOrValueReg::type(reg) == type;
+        assume (unsafe { TypedOrValueReg::toTypedRegUnchecked(reg) }) == typedReg;
+        reg
+    }
+
+    unsafe fn fromTypedRegUnchecked(type: MIRType, reg: AnyReg) -> TypedOrValueReg;
+
+    fn toTypedReg(reg: TypedOrValueReg) -> AnyReg {
+       assert TypedOrValueReg::hasTyped(reg);
+       let typedReg = (unsafe { TypedOrValueReg::toTypedRegUnchecked(reg) });
+       let type = TypedOrValueReg::type(reg);
+       assume (unsafe { TypedOrValueReg::fromTypedRegUnchecked(type, typedReg) }) == reg;
+       typedReg
+    }
+
+    unsafe fn toTypedRegUnchecked(reg: TypedOrValueReg) -> AnyReg;
+}
+
+struct GeneralRegSet;
+
+impl GeneralRegSet {
+    fn newEmpty() -> GeneralRegSet;
+    fn newVolatile() -> GeneralRegSet;
+
+    fn newIntersect(lhs: GeneralRegSet, rhs: GeneralRegSet) -> GeneralRegSet;
+    fn newDifference(lhs: GeneralRegSet, rhs: GeneralRegSet) -> GeneralRegSet;
+
+    #[refined]
+    fn isEmpty(set: GeneralRegSet) -> Bool {
+        let mut res = true;
+
+        for reg in Reg asc {
+            if GeneralRegSet::contains(set, reg) {
+                res = false;
+            }
+        }
+
+        res
+    }
+
+    fn contains(set: GeneralRegSet, reg: Reg) -> Bool;
+    fn add(out newSet: GeneralRegSet, set: GeneralRegSet, reg: Reg);
+    fn take(out newSet: GeneralRegSet, set: GeneralRegSet, reg: Reg);
+}
+
+struct FloatRegSet;
+
+impl FloatRegSet {
+    fn newEmpty() -> FloatRegSet;
+    fn newVolatile() -> FloatRegSet;
+
+    fn newIntersect(lhs: FloatRegSet, rhs: FloatRegSet) -> FloatRegSet;
+    fn newDifference(lhs: FloatRegSet, rhs: FloatRegSet) -> FloatRegSet;
+
+    fn contains(set: FloatRegSet, floatReg: FloatReg) -> Bool;
+    fn add(out newSet: FloatRegSet, set: FloatRegSet, floatReg: FloatReg);
+    fn take(out newSet: FloatRegSet, set: FloatRegSet, floatReg: FloatReg);
+
+    #[refined]
+    fn isEmpty(set: FloatRegSet) -> Bool {
+        let mut res = true;
+        for phyReg in PhyFloatReg asc {
+            let singleReg = FloatReg::new(phyReg, FloatContentType::Single);
+            let doubleReg = FloatReg::new(phyReg, FloatContentType::Double);
+            let simdReg = FloatReg::new(phyReg, FloatContentType::Simd128);
+
+            if FloatRegSet::contains(set, singleReg) || FloatRegSet::contains(set, doubleReg) || FloatRegSet::contains(set, simdReg) {
+                res = false;
+            }
+        }
+
+        res
+    }
+
+    #[refined]
+    fn reducedForPush(set: FloatRegSet) -> FloatRegSet {
+        if FloatRegSet::isEmpty(set) {
+            return set;
+        }
+
+        let mut newSet = set;
+        for phyReg in PhyFloatReg asc {
+            let singleReg = FloatReg::new(phyReg, FloatContentType::Single);
+            let doubleReg = FloatReg::new(phyReg, FloatContentType::Double);
+            let simdReg = FloatReg::new(phyReg, FloatContentType::Simd128);
+
+            if FloatRegSet::contains(newSet, simdReg) {
+                FloatRegSet::take(out newSet, newSet, doubleReg);
+                FloatRegSet::take(out newSet, newSet, singleReg);
+            } else if FloatRegSet::contains(newSet, doubleReg) {
+                FloatRegSet::take(out newSet, newSet, singleReg);
+            }
+        }
+
+        newSet
+    }
 }
 
 enum Condition {
@@ -69,14 +322,21 @@ ir MASM {
     }
 
     op Jump(label target: MASM) {
-      goto target;
+        goto target;
     }
 
-    op LoadValueAddress(address: Address, dstReg: ValueReg) {
-        let baseData = MASM::getData(Address::base(address));
+    op LoadTypedOrValueAddress(address: Address, dstReg: TypedOrValueReg) {
+        let baseData = MASM::getData(Address::base(address));    
         let data = RegData::readData(baseData, Address::offset(address));
         let value = RegData::toValue(data);
-        MASM::setValue(dstReg, value);
+
+        if TypedOrValueReg::hasValue(dstReg) {
+            MASM::setValue(TypedOrValueReg::toValueReg(dstReg), value);
+        } else {
+            assert TypedOrValueReg::hasTyped(dstReg);
+            MASM::loadUnboxedValue(value, TypedOrValueReg::type(dstReg),
+                TypedOrValueReg::toTypedReg(dstReg));
+        }
     }
 
     op UnboxObject(valueReg: ValueReg, objectReg: Reg) {
@@ -97,33 +357,13 @@ ir MASM {
     }
 
     op UnboxInt32(valueReg: ValueReg, int32Reg: Reg) {
-      let value = MASM::getValue(valueReg);
-      MASM::setInt32(int32Reg, Value::toInt32(value)); 
+        let value = MASM::getValue(valueReg);
+        MASM::setInt32(int32Reg, Value::toInt32(value)); 
     }
 
     op UnboxNonDouble(valueReg: ValueReg, dstReg: Reg, valTy: JSValueType) {
-        assert valTy != JSValueType::Double;
-
         let value = MASM::getValue(valueReg);
-
-        if valTy == JSValueType::Int32 {
-            let i = Value::toInt32(value);
-            MASM::setInt32(dstReg, i);
-        } else if valTy == JSValueType::Bool {
-            let b = Value::toBool(value);
-            MASM::setBool(dstReg, b);
-        } else if valTy == JSValueType::String {
-            let s = Value::toString(value);
-            MASM::setString(dstReg, s);
-        } else if valTy == JSValueType::Symbol {
-            let s = Value::toSymbol(value);
-            MASM::setSymbol(dstReg, s);
-        } else if valTy == JSValueType::BigInt {
-            let b = Value::toBigInt(value);
-            MASM::setBigInt(dstReg, b);
-        }
-
-        assert false;
+        MASM::unboxNonDouble(value, dstReg, valTy);
     }
 
     // NOTE: This Op needs to be implemented as a Phantom Op on the
@@ -359,66 +599,66 @@ ir MASM {
     }
 
     op BranchTest32(condition: Condition, lhsReg: Reg, rhsReg: Reg, label branch: MASM) {
-      let lhsInt32 = MASM::getInt32(lhsReg);
-      let rhsInt32 = MASM::getInt32(rhsReg);
+        let lhsInt32 = MASM::getInt32(lhsReg);
+        let rhsInt32 = MASM::getInt32(rhsReg);
 
-      let result = lhsInt32 & rhsInt32;
+        let result = lhsInt32 & rhsInt32;
 
-      assert (
-        condition == Condition::Zero ||
-        condition == Condition::NonZero ||
-        condition == Condition::Signed ||
-        condition == Condition::NotSigned
-      );
+        assert (
+                condition == Condition::Zero ||
+                condition == Condition::NonZero ||
+                condition == Condition::Signed ||
+                condition == Condition::NotSigned
+               );
 
-      if condition == Condition::Zero {
-        if result == 0_i32 {
-          goto branch;
+        if condition == Condition::Zero {
+            if result == 0_i32 {
+                goto branch;
+            }
+        } else if condition == Condition::NonZero {
+            if result != 0_i32 {
+                goto branch;
+            }
+        } else if condition == Condition::Signed {
+            if result < 0_i32 {
+                goto branch;
+            }
+        } else if condition == Condition::NotSigned {
+            if result > 0_i32 {
+                goto branch;
+            }
         }
-      } else if condition == Condition::NonZero {
-        if result != 0_i32 {
-          goto branch;
-        }
-      } else if condition == Condition::Signed {
-        if result < 0_i32 {
-          goto branch;
-        }
-      } else if condition == Condition::NotSigned {
-        if result > 0_i32 {
-          goto branch;
-        }
-      }
     }
 
     op BranchTest32Imm(condition: Condition, lhsReg: Reg, rhsInt32: Int32, label branch: MASM) {
-      let lhsInt32 = MASM::getInt32(lhsReg);
+        let lhsInt32 = MASM::getInt32(lhsReg);
 
-      let result = lhsInt32 & rhsInt32;
+        let result = lhsInt32 & rhsInt32;
 
-      assert (
-        condition == Condition::Zero ||
-        condition == Condition::NonZero ||
-        condition == Condition::Signed ||
-        condition == Condition::NotSigned
-      );
+        assert (
+                condition == Condition::Zero ||
+                condition == Condition::NonZero ||
+                condition == Condition::Signed ||
+                condition == Condition::NotSigned
+               );
 
-      if condition == Condition::Zero {
-        if result == 0_i32 {
-          goto branch;
+        if condition == Condition::Zero {
+            if result == 0_i32 {
+                goto branch;
+            }
+        } else if condition == Condition::NonZero {
+            if result != 0_i32 {
+                goto branch;
+            }
+        } else if condition == Condition::Signed {
+            if result < 0_i32 {
+                goto branch;
+            }
+        } else if condition == Condition::NotSigned {
+            if result > 0_i32 {
+                goto branch;
+            }
         }
-      } else if condition == Condition::NonZero {
-        if result != 0_i32 {
-          goto branch;
-        }
-      } else if condition == Condition::Signed {
-        if result < 0_i32 {
-          goto branch;
-        }
-      } else if condition == Condition::NotSigned {
-        if result > 0_i32 {
-          goto branch;
-        }
-      }
     }
 
     op Branch32Tag(condition: Condition, lhsReg: Reg, rhsReg: Reg, label branch: MASM) {
@@ -529,100 +769,150 @@ ir MASM {
 
     // this op corresponds to an overload of the BranchAdd32 MASM op.
     op BranchAdd32Imm(condition: Condition, lhsInt32: Int32, dstReg: Reg, label branch: MASM) {
-      let rhsInt32 = MASM::getInt32(dstReg);
+        let rhsInt32 = MASM::getInt32(dstReg);
 
-      let result = lhsInt32 + rhsInt32;
+        let result = lhsInt32 + rhsInt32;
 
-      assert condition == Condition::Overflow;
-      if lhsInt32 > 0_i32 && rhsInt32 > 0_i32 && result < 0_i32 {
-          goto branch;
-      }
+        assert condition == Condition::Overflow;
+        if lhsInt32 > 0_i32 && rhsInt32 > 0_i32 && result < 0_i32 {
+            goto branch;
+        }
 
-      if lhsInt32 < 0_i32 && rhsInt32 < 0_i32 && result > 0_i32 {
-          goto branch;
-      }
+        if lhsInt32 < 0_i32 && rhsInt32 < 0_i32 && result > 0_i32 {
+            goto branch;
+        }
 
-      MASM::setInt32(dstReg, result);
+        MASM::setInt32(dstReg, result);
     }
 
     op BranchSub32(condition: Condition, srcReg: Reg, dstReg: Reg, label branch: MASM) {
-      let lhsInt32 = MASM::getInt32(dstReg);
-      let rhsInt32 = MASM::getInt32(srcReg);
+        let lhsInt32 = MASM::getInt32(dstReg);
+        let rhsInt32 = MASM::getInt32(srcReg);
 
-      let result = lhsInt32 - rhsInt32;
+        let result = lhsInt32 - rhsInt32;
 
-      assert condition == Condition::Overflow;
+        assert condition == Condition::Overflow;
 
-      let rhsInt32Neg = -rhsInt32;
-      let minInt32 = 1_i32 << 31_i32; // Do it this way until negative literals are a thing
+        let rhsInt32Neg = -rhsInt32;
+        let minInt32 = 1_i32 << 31_i32; // Do it this way until negative literals are a thing
 
-      if rhsInt32 == minInt32 && lhsInt32 >= 0_i32 {
-          goto branch;
-      } else if lhsInt32 > 0_i32 && rhsInt32 < 0_i32 && result < 0_i32 {
-          goto branch;
-      }
+        if rhsInt32 == minInt32 && lhsInt32 >= 0_i32 {
+            goto branch;
+        } else if lhsInt32 > 0_i32 && rhsInt32 < 0_i32 && result < 0_i32 {
+            goto branch;
+        }
 
-      if lhsInt32 < 0_i32 && rhsInt32 > 0_i32 && result > 0_i32 {
-          goto branch;
-      }
+        if lhsInt32 < 0_i32 && rhsInt32 > 0_i32 && result > 0_i32 {
+            goto branch;
+        }
 
-      MASM::setInt32(dstReg, result);
+        MASM::setInt32(dstReg, result);
     }
 
     // this op corresponds to an overload of the BranchAdd32 MASM op.
     op BranchSub32Imm(condition: Condition, rhsInt32: Int32, dstReg: Reg, label branch: MASM) {
-      let lhsInt32 = MASM::getInt32(dstReg);
+        let lhsInt32 = MASM::getInt32(dstReg);
 
-      let result = lhsInt32 - rhsInt32;
+        let result = lhsInt32 - rhsInt32;
 
-      assert condition == Condition::Overflow;
+        assert condition == Condition::Overflow;
 
-      let rhsInt32Neg = -rhsInt32;
-      let minInt32 = 1_i32 << 31_i32; // Do it this way until negative literals are a thing
+        let rhsInt32Neg = -rhsInt32;
+        let minInt32 = 1_i32 << 31_i32; // Do it this way until negative literals are a thing
 
-      if rhsInt32 == minInt32 && lhsInt32 >= 0_i32 {
-          goto branch;
-      } else if lhsInt32 > 0_i32 && rhsInt32 < 0_i32 && result < 0_i32 {
-          goto branch;
-      }
+        if rhsInt32 == minInt32 && lhsInt32 >= 0_i32 {
+            goto branch;
+        } else if lhsInt32 > 0_i32 && rhsInt32 < 0_i32 && result < 0_i32 {
+            goto branch;
+        }
 
-      if lhsInt32 < 0_i32 && rhsInt32 > 0_i32 && result > 0_i32 {
-          goto branch;
-      }
+        if lhsInt32 < 0_i32 && rhsInt32 > 0_i32 && result > 0_i32 {
+            goto branch;
+        }
 
-      MASM::setInt32(dstReg, result);
+        MASM::setInt32(dstReg, result);
     }
 
     op BranchMul32(condition: Condition, srcReg: Reg, dstReg: Reg, label branch: MASM) {
-      let lhsInt32 = MASM::getInt32(dstReg);
-      let rhsInt32 = MASM::getInt32(srcReg);
+        let lhsInt32 = MASM::getInt32(dstReg);
+        let rhsInt32 = MASM::getInt32(srcReg);
 
-      let result = lhsInt32 * rhsInt32;
+        let result = lhsInt32 * rhsInt32;
 
-      assert condition == Condition::Overflow;
+        assert condition == Condition::Overflow;
 
-      let resultWide = (lhsInt32 as Int64) * (rhsInt32 as Int64);
-      if (result as Int64) != resultWide {
-        goto branch;
-      }
+        let resultWide = (lhsInt32 as Int64) * (rhsInt32 as Int64);
+        if (result as Int64) != resultWide {
+            goto branch;
+        }
 
-      MASM::setInt32(dstReg, result);
+        MASM::setInt32(dstReg, result);
     }
 
     op Neg32(valueReg: Reg) {
-      let valueInt32 = MASM::getInt32(valueReg);
-      let result = -valueInt32;
+        let valueInt32 = MASM::getInt32(valueReg);
+        let result = -valueInt32;
 
-      MASM::setInt32(valueReg, result);
+        MASM::setInt32(valueReg, result);
     }
 
     op Or32(srcReg: Reg, dstReg: Reg) {
-      let lhsInt32 = MASM::getInt32(srcReg);
-      let rhsInt32 = MASM::getInt32(dstReg);
+        let lhsInt32 = MASM::getInt32(srcReg);
+        let rhsInt32 = MASM::getInt32(dstReg);
 
-      let result = lhsInt32 | rhsInt32;
+        let result = lhsInt32 | rhsInt32;
 
-      MASM::setInt32(dstReg, result);
+        MASM::setInt32(dstReg, result);
+    }
+
+    #[spec]
+    fn loadUnboxedValue(value: Value, type: MIRType, dstReg: AnyReg) {
+        if AnyReg::isFloat(dstReg) {
+            MASM::loadInt32OrDouble(value, AnyReg::toFloatReg(dstReg));
+        } else {
+            MASM::unboxNonDouble(value, AnyReg::toReg(dstReg), JSValueType::fromMIRType(type));
+        }
+    }
+
+    #[spec]
+    fn unboxNonDouble(value: Value, dstReg: Reg, valTy: JSValueType) {
+        assert valTy != JSValueType::Double;
+
+        if valTy == JSValueType::Object {
+            let o = Value::toObject(value);
+            MASM::setObject(dstReg, o);
+        } else if valTy == JSValueType::Int32 {
+            let i = Value::toInt32(value);
+            MASM::setInt32(dstReg, i);
+        } else if valTy == JSValueType::Bool {
+            let b = Value::toBool(value);
+            MASM::setBool(dstReg, b);
+        } else if valTy == JSValueType::String {
+            let s = Value::toString(value);
+            MASM::setString(dstReg, s);
+        } else if valTy == JSValueType::Symbol {
+            let s = Value::toSymbol(value);
+            MASM::setSymbol(dstReg, s);
+        } else if valTy == JSValueType::BigInt {
+            let b = Value::toBigInt(value);
+            MASM::setBigInt(dstReg, b);
+        }
+
+        assert false;
+    }
+
+    #[spec]
+    fn loadInt32OrDouble(value: Value, dstReg: FloatReg) {
+        if Value::isInt32(value) {
+            let int32 = Value::toInt32(value);
+            let double = Float64::fromInt32(int32);
+            MASM::setDouble(dstReg, double);
+        } else if Value::isDouble(value) {
+            let double = Value::toDouble(value);
+            MASM::setDouble(dstReg, double);
+        }
+
+        assert false;
     }
 
     #[spec]
@@ -660,5 +950,8 @@ ir MASM {
 
     fn getBigInt(reg: Reg) -> BigInt;
     fn setBigInt(reg: Reg, bigInt: BigInt);
+
+    fn getDouble(floatReg: FloatReg) -> Float64;
+    fn setDouble(floatReg: FloatReg, double: Float64);
 }
 
