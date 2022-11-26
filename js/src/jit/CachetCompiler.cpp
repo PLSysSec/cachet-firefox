@@ -245,6 +245,8 @@ Type_Object::Ref To_Object(Type_NativeObject::Ref param_in) {
 
 };  // namespace Impl_NativeObject
 
+
+
 namespace Impl_Reg {
 
 inline Type_Reg::Ref Variant_R11(Cachet_ContextRef cx) {
@@ -454,6 +456,22 @@ Type_FloatRegSet::Val Fn_reducedForPush(Cachet_ContextRef cx, Type_FloatRegSet::
 
 };  // namespace Impl_FloatRegSet
 
+namespace Impl_LiveRegSet {
+
+Type_GeneralRegSet::Val Fn_gprs(Cachet_ContextRef cx, Type_LiveRegSet::Ref param_set) {
+  return param_set.gprs();
+}
+
+Type_FloatRegSet::Val Fn_fpus(Cachet_ContextRef cx, Type_LiveRegSet::Ref param_set) {
+  return param_set.fpus();
+}
+
+Type_LiveRegSet::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_GeneralRegSet::Ref param_gprs, Type_FloatRegSet::Ref param_fpus) {
+  return LiveRegisterSet(param_gprs, param_fpus);  
+}
+
+};  // namespace Impl_LiveRegSet
+
 namespace Impl_Condition {
 
 Type_Condition::Ref Variant_Equal(Cachet_ContextRef cx) {
@@ -546,6 +564,12 @@ void EmitOp_LoadTypedOrValueAddress(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                     Type_Address::Ref param_address,
                                     Type_TypedOrValueReg::Ref param_dstReg) {
   ops.loadTypedOrValue(param_address, param_dstReg);
+}
+
+void EmitOp_LoadPtrAddress(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                           Type_Address::Ref param_address,
+                           Type_Reg::Ref param_dstReg) {
+  ops.loadPtr(param_address, param_dstReg);
 }
 
 void EmitOp_UnboxInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
@@ -688,6 +712,15 @@ void EmitOp_Branch32Imm(Cachet_ContextRef cx,
   ops.branch32(param_condition, param_lhsReg, Imm32(param_rhsInt32), param_branch);
 }
 
+void EmitOp_Branch32AddressImm32(Cachet_ContextRef cx,
+                                 IR_MASM::OpsRef ops,
+                                 Type_Condition::Ref param_condition,
+                                 Type_Address::Ref param_address,
+                                 Type_Int32::Ref param_rhsInt32,
+                                 IR_MASM::LabelRef param_branch) {
+  ops.branch32(param_condition, param_address, Imm32(param_rhsInt32), param_branch);
+}
+
 void EmitOp_Branch32Tag(Cachet_ContextRef cx,
                         IR_MASM::OpsRef ops,
                         Type_Condition::Ref param_condition,
@@ -714,6 +747,15 @@ void EmitOp_BranchTestObjectIsProxy(Cachet_ContextRef cx,
   ops.branchTestObjectIsProxy(param_proxy, param_objectReg, param_scratchReg, param_branch);
 }
 
+void EmitOp_GuardSpecificAtom(Cachet_ContextRef cx,
+                              IR_MASM::OpsRef ops,
+                              Type_Reg::Ref param_strReg,
+                              Type_Atom::Ref param_atom,
+                              Type_Reg::Ref param_scratchReg,
+                              Type_LiveRegSet::Ref param_volatileRegs,
+                              IR_MASM::LabelRef param_fail) {
+  ops.guardSpecificAtom(param_strReg, param_atom, param_scratchReg, param_volatileRegs, param_fail);
+}
 
 void EmitOp_TagValue(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_JSValueType::Ref param_valTy,
                       Type_Reg::Ref param_payload, Type_ValueReg::Ref param_dest) {
@@ -865,11 +907,67 @@ Type_Shape::Val Impl_Object::Fn_shapeOfUnchecked(Cachet_ContextRef cx,
   return param_object->shape();
 }
 
-Type_Value::Val Impl_NativeObject::Fn_getFixedSlotUnchecked(
-    Cachet_ContextRef cx, Type_Heap::Ref param_heap, Type_NativeObject::Ref param_nativeObject,
-    Type_UInt32::Ref param_slot) {
+namespace Impl_NativeObject {
+
+Type_Value::Val Fn_getFixedSlotUnchecked(Cachet_ContextRef cx,
+                                         Type_Heap::Ref param_heap,
+                                         Type_NativeObject::Ref param_nativeObject,
+                                         Type_UInt32::Ref param_slot) {
   return param_nativeObject->getFixedSlot(param_slot);
 }
+
+Type_NativeObjectSlots::Val Fn_getSlotsUnchecked(Cachet_ContextRef cx,
+                                                 Type_Heap::Ref param_heap,
+                                                 Type_NativeObject::Ref param_nativeObject) {
+  return param_nativeObject->getSlotsHeader()->slots();
+}
+
+Type_NativeObjectElements::Val Fn_getElementsUnchecked(Cachet_ContextRef cx,
+                                                             Type_Heap::Ref param_heap,
+                                                             Type_NativeObject::Ref param_nativeObject) {
+  return param_nativeObject->getElementsHeader()->elements();
+}
+
+};  // namespace Impl_NativeObject
+
+namespace Impl_NativeObjectSlots {
+
+// TODO: need to rethink how to implement this
+Type_UInt32::Val Fn_length(Cachet_ContextRef cx, Type_NativeObjectSlots::Ref param_slots) {
+  return 0;
+}
+
+Type_Value::Val Fn_getDynamicSlotUnchecked(Cachet_ContextRef cx,
+                                           Type_Heap::Ref param_heap,
+                                           Type_NativeObjectSlots::Ref param_slots,
+                                           Type_UInt32::Ref param_slot) {
+  return param_slots[param_slot];
+}
+
+};  // namespace Impl_NativeObjectSlots
+
+namespace Impl_NativeObjectElements {
+
+Type_UInt32::Val Fn_getLengthUnchecked(Cachet_ContextRef cx,
+                                       Type_Heap::Ref param_heap,
+                                       Type_NativeObjectElements::Ref param_elements) {
+  return *(Type_UInt32::Val *)((char *)param_elements + Impl_NativeObjectElements::Var_offsetOfLength());
+}
+
+Type_UInt32::Val Fn_getInitializedLengthUnchecked(Cachet_ContextRef cx,
+                                                  Type_Heap::Ref param_heap,
+                                                  Type_NativeObjectElements::Ref param_elements) {
+  return *(Type_UInt32::Val *)((char *)param_elements + Impl_NativeObjectElements::Var_offsetOfInitializedLength());
+}
+
+Type_Value::Val Fn_getElementUnchecked(Cachet_ContextRef cx,
+                                       Type_Heap::Ref param_heap,
+                                       Type_NativeObjectElements::Ref param_elements,
+                                       Type_UInt64::Ref param_index) {
+  return param_elements[param_index];
+}
+
+};  // namespace Impl_NativeObjectElements
 
 namespace Impl_JSFunction {
 
@@ -964,6 +1062,15 @@ Type_Bool::Val Fn_hasFixedSlot(Cachet_ContextRef cx,
          param_slot < Type_UInt32::Val(param_shape->numFixedSlots());
 }
 
+Type_UInt32::Val Fn_numFixedSlots(Cachet_ContextRef cx, Type_Shape::Ref param_shape) {
+  return param_shape->numFixedSlots();
+}
+
+Type_UInt32::Val Fn_slotSpan(Cachet_ContextRef cx, Type_Shape::Ref param_shape) {
+  return param_shape->slotSpan();
+}
+
+
 }; // namespace Impl_Shape
 
 namespace Impl_BaseShape {
@@ -989,6 +1096,22 @@ Type_Bool::Val Fn_isProxyObject(Cachet_ContextRef cx, Type_Class::Ref param_clas
 }
 
 };  // namespace Impl_Class
+
+namespace Impl_String {
+
+Type_Bool::Val Fn_isAtom(Cachet_ContextRef cx, Type_String::Ref param_string) {
+  return param_string->isAtom();
+}
+
+Type_Atom::Val Fn_asAtom(Cachet_ContextRef cx, Type_String::Ref param_string) {
+  return &param_string->asAtom();
+}
+
+Type_UInt64::Val Fn_length(Cachet_ContextRef cx, Type_String::Ref param_string) {
+  return param_string->length();
+}
+
+};  // namespace Impl_String
 
 namespace Impl_OperandLocationKind {
 
@@ -1054,6 +1177,10 @@ inline Type_OperandId::Val Impl_BooleanId::To_OperandId(Type_BooleanId::Val in) 
   return static_cast<Type_OperandId::Val>(in);
 }
 
+inline Type_OperandId::Val Impl_StringId::To_OperandId(Type_StringId::Val in) {
+  return static_cast<Type_OperandId::Val>(in);
+}
+
 inline Type_OperandId::Val Impl_ValueTagId::To_OperandId(Type_ValueTagId::Val in) {
   return static_cast<Type_OperandId::Val>(in);
 }
@@ -1102,6 +1229,14 @@ Type_TypedId::Val Fn_fromBooleanIdUnchecked(Cachet_ContextRef cx, Type_BooleanId
 
 Type_BooleanId::Val Fn_toBooleanIdUnchecked(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
   return Type_BooleanId::Val(param_typedId.id());
+}
+
+Type_TypedId::Val Fn_fromStringIdUnchecked(Cachet_ContextRef cx, Type_StringId::Ref param_stringId) {
+  return TypedOperandIdW(TypedOperandId(param_stringId), false);
+}
+
+Type_StringId::Val Fn_toStringIdUnchecked(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
+  return Type_StringId::Val(param_typedId.id());
 }
 
 Type_TypedId::Val Fn_fromValueTagIdUnchecked(Cachet_ContextRef cx, Type_ValueTagId::Ref param_valueTagId) {
@@ -1212,6 +1347,11 @@ Type_Reg::Val Impl_CacheIR::Fn_useInt32Reg(Cachet_ContextRef cx,
     return cx.compiler->allocator.useRegister(cx.compiler->masm, param_int32Id);
 }
 
+Type_Reg::Val Impl_CacheIR::Fn_useStringReg(Cachet_ContextRef cx,
+                                            Type_StringId::Ref param_stringId) {
+    return cx.compiler->allocator.useRegister(cx.compiler->masm, param_stringId);
+}
+
 Type_Reg::Val Impl_CacheIR::Fn_useValueTagReg(Cachet_ContextRef cx,
                                             Type_ValueTagId::Ref param_valueTagId) {
     return cx.compiler->allocator.useRegister(cx.compiler->masm, param_valueTagId);
@@ -1231,6 +1371,12 @@ Type_Int32::Val Impl_CacheIR::Fn_readInt32Field(
   return cx.compiler->int32StubField(param_int32Field);
 }
 
+Type_String::Val Impl_CacheIR::Fn_readStringField(
+    Cachet_ContextRef cx,
+    Type_StringField::Ref param_stringField) {
+  return cx.compiler->stringStubField(param_stringField);
+}
+
 Type_Shape::Val Impl_CacheIR::Fn_readShapeField(
     Cachet_ContextRef cx,
     Type_ShapeField::Ref param_shapeField) {
@@ -1247,6 +1393,10 @@ Type_Bool::Val Impl_CacheIR::Fn_objectGuardNeedsSpectreMitigations(
     Cachet_ContextRef cx,
     Type_ObjectId::Ref param_objectId) {
   return cx.compiler->objectGuardNeedsSpectreMitigations(param_objectId);
+}
+
+Type_FloatRegSet::Val Impl_CacheIR::Fn_liveFloatRegSet(Cachet_ContextRef cx) {
+  return cx.compiler->liveFloatRegs_.set(); 
 }
 
 #define CACHET_CacheIR_COMPILER

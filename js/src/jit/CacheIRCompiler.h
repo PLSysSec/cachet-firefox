@@ -751,12 +751,15 @@ friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_defineInt32Reg(cachet::Cac
 friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_useValueReg(cachet::Cachet_ContextRef cx, cachet::Type_ValueId::Ref param_valueId);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useObjectReg(cachet::Cachet_ContextRef cx, cachet::Type_ObjectId::Ref param_objectId);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useInt32Reg(cachet::Cachet_ContextRef cx, cachet::Type_Int32Id::Ref param_int32Id);
+friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useStringReg(cachet::Cachet_ContextRef cx, cachet::Type_StringId::Ref param_stringId);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useValueTagReg(cachet::Cachet_ContextRef cx, cachet::Type_ValueTagId::Ref param_valueTagId);
 friend void cachet::Impl_CacheIR::Fn_emitLoadInt32StubField(cachet::Cachet_ContextRef cx, cachet::Type_Int32Field::Ref param_int32Field, cachet::Type_Reg::Ref param_dstReg);
 friend cachet::Type_Int32::Val cachet::Impl_CacheIR::Fn_readInt32Field(cachet::Cachet_ContextRef cx, cachet::Type_Int32Field::Ref param_int32Field);
+friend cachet::Type_String::Val cachet::Impl_CacheIR::Fn_readStringField(cachet::Cachet_ContextRef cx, cachet::Type_StringField::Ref param_stringField);
 friend cachet::Type_Shape::Val cachet::Impl_CacheIR::Fn_readShapeField(cachet::Cachet_ContextRef cx, cachet::Type_ShapeField::Ref param_shapeField);
 friend cachet::Type_Class::Val cachet::Impl_CacheIR::Fn_readClassField(cachet::Cachet_ContextRef cx, cachet::Type_ClassField::Ref param_classField);
 friend cachet::Type_Bool::Val cachet::Impl_CacheIR::Fn_objectGuardNeedsSpectreMitigations(cachet::Cachet_ContextRef cx, cachet::Type_ObjectId::Ref param_objectId);
+friend cachet::Type_FloatRegSet::Val cachet::Impl_CacheIR::Fn_liveFloatRegSet(cachet::Cachet_ContextRef cx);
 #endif  // JS_CACHET
 
   bool preparedForVMCall_;

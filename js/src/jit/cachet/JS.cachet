@@ -3,10 +3,14 @@
 struct Heap;
 var mut heap: Heap;
 
+fn EqualStringsHelperPure(str1: String, str2: String) -> Bool;
+
 #[spec]
 enum RegDataType {
     Value,
     UnboxedValue,
+    NativeObjectSlots,
+    NativeObjectElements,
     ValueTag,
     Class,
 }
@@ -60,6 +64,51 @@ impl RegData {
     }
 
     unsafe fn toUnboxedValueUnchecked(data: RegData) -> Value;
+
+    fn isNativeObjectSlots(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::NativeObjectSlots
+    }
+
+    fn fromNativeObjectSlots(slots: NativeObjectSlots) -> RegData {
+        let data = (unsafe { RegData::fromNativeObjectSlotsUnchecked(slots) });
+        assume RegData::isNativeObjectSlots(data);
+        assume (unsafe { RegData::toNativeObjectSlotsUnchecked(data) }) == slots;
+        data
+    }
+
+    unsafe fn fromNativeObjectSlotsUnchecked(slots: NativeObjectSlots) -> RegData;
+
+    fn toNativeObjectSlots(data: RegData) -> NativeObjectSlots {
+        assert RegData::isNativeObjectSlots(data);
+        let slots = (unsafe { RegData::toNativeObjectSlotsUnchecked(data) });
+        assume (unsafe { RegData::fromNativeObjectSlotsUnchecked(slots) }) == data;
+        slots
+    }
+
+    unsafe fn toNativeObjectSlotsUnchecked(data: RegData) -> NativeObjectSlots;
+
+    fn isNativeObjectElements(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::NativeObjectElements
+    }
+
+    fn fromNativeObjectElements(elements: NativeObjectElements) -> RegData {
+        let data = (unsafe { RegData::fromNativeObjectElementsUnchecked(elements) });
+        assume RegData::isNativeObjectElements(data);
+        assume (unsafe { RegData::toNativeObjectElementsUnchecked(data) }) == elements;
+        data
+    }
+
+    unsafe fn fromNativeObjectElementsUnchecked(slots: NativeObjectElements) -> RegData;
+
+    fn toNativeObjectElements(data: RegData) -> NativeObjectElements {
+        assert RegData::isNativeObjectElements(data);
+        let elements = (unsafe { RegData::toNativeObjectElementsUnchecked(data) });
+        assume (unsafe { RegData::fromNativeObjectElementsUnchecked(elements) }) == data;
+        elements
+    }
+
+    unsafe fn toNativeObjectElementsUnchecked(data: RegData) -> NativeObjectElements;
+
 
     fn isValueTag(data: RegData) -> Bool {
         RegData::typeOf(data) == RegDataType::ValueTag
@@ -505,6 +554,8 @@ struct NativeObject <: Object;
 impl NativeObject {
     var maxFixedSlots: UInt64 = 16_u64;
     var sizeOf: UInt64 = 24_u64;
+    var offsetOfSlots: UInt64 = 8_u64;
+    var offsetOfElements: UInt64 = 16_u64;
 
     fn getFixedSlot(nativeObject: NativeObject, slot: UInt32) -> Value {
         let shape = Object::shapeOf(nativeObject);
@@ -516,9 +567,34 @@ impl NativeObject {
     // unsafe fn getFixedSlotUnchecked(nativeObject: NativeObject, slot: UInt32) -> Value;
     unsafe fn getFixedSlotUnchecked(heap: Heap, nativeObject: NativeObject, slot: UInt32) -> Value;
 
+    fn getSlots(nativeObject: NativeObject) -> NativeObjectSlots {
+        let slots = (unsafe { NativeObject::getSlotsUnchecked(heap, nativeObject) } );
+        let shape = Object::shapeOf(nativeObject); 
+        assume NativeObjectSlots::length(slots) == 
+            (Shape::slotSpan(shape) - Shape::numFixedSlots(shape));
+        slots
+    }
+
+    unsafe fn getSlotsUnchecked(heap: Heap, nativeObject: NativeObject) -> NativeObjectSlots;
+
+    fn getElements(nativeObject: NativeObject) -> NativeObjectElements {
+        (unsafe { NativeObject::getElementsUnchecked(heap, nativeObject) } )
+    }
+
+    unsafe fn getElementsUnchecked(heap: Heap, nativeObject: NativeObject) ->
+    NativeObjectElements;
+
     #[spec]
     fn readData(nativeObject: NativeObject, offset: Int64) -> RegData {
-        if offset >= NativeObject::sizeOf as Int64 {
+        if offset == NativeObject::offsetOfSlots as Int64 {
+            // dynamic slots array
+            let slots = NativeObject::getSlots(nativeObject);
+            return RegData::fromNativeObjectSlots(slots);
+        } else if offset == NativeObject::offsetOfElements as Int64 {
+            // object elements
+            let elements = NativeObject::getElements(nativeObject); 
+            return RegData::fromNativeObjectElements(elements);
+        } else if offset >= NativeObject::sizeOf as Int64 {
             // fixed slots
             let slotOffset = offset as UInt64 - NativeObject::sizeOf;
             assert slotOffset % Value::sizeOf == 0_u64;
@@ -535,7 +611,75 @@ impl NativeObject {
 
 struct NativeObjectSlots;
 
+impl NativeObjectSlots {
+    fn length(slots: NativeObjectSlots) -> UInt32;
+
+    fn getDynamicSlot(slots: NativeObjectSlots, slot: UInt32) -> Value {
+        assert slot < NativeObjectSlots::length(slots);
+        (unsafe { NativeObjectSlots::getDynamicSlotUnchecked(heap, slots, slot) } )
+    }
+
+    unsafe fn getDynamicSlotUnchecked(heap: Heap, slots: NativeObjectSlots, slot: UInt32) ->
+    Value;
+
+    #[spec]
+    fn readData(slots: NativeObjectSlots, offset: Int64) -> RegData {
+        assert offset % Value::sizeOf as Int64 == 0_i64;
+        let slot = (offset / Value::sizeOf as Int64) as UInt32;
+        let value = NativeObjectSlots::getDynamicSlot(slots, slot);
+        RegData::fromValue(value)
+    }
+}
+
 struct NativeObjectElements;
+
+impl NativeObjectElements {
+    var offsetOfLength: Int32 = -4_i32;
+    var offsetOfInitializedLength: Int32 = -12_i32;
+
+    fn getLength(elements: NativeObjectElements) -> UInt32 {
+        ( unsafe { NativeObjectElements::getLengthUnchecked(heap, elements) } )
+    }
+
+    unsafe fn getLengthUnchecked(heap: Heap, elements: NativeObjectElements) -> UInt32;
+
+    fn getInitializedLength(elements: NativeObjectElements) -> UInt32 {
+        ( unsafe { NativeObjectElements::getInitializedLengthUnchecked(heap, elements) } )
+    }
+
+    // TODO: can initializedLength be changed ?
+    unsafe fn getInitializedLengthUnchecked(heap: Heap, elements: NativeObjectElements) -> UInt32;
+
+    fn getElement(elements: NativeObjectElements, index: UInt64) -> Value {
+        assert index < NativeObjectElements::getInitializedLength(elements);
+        ( unsafe { NativeObjectElements::getElementUnchecked(heap, elements, index) })
+    }
+
+    unsafe fn getElementUnchecked(heap: Heap, elements: NativeObjectElements, index: UInt64) -> Value;
+
+    #[spec]
+    fn readData(elements: NativeObjectElements, offset: Int64) -> RegData {
+        if offset == NativeObjectElements::offsetOfLength {
+            let length = NativeObjectElements::getLength(elements);
+            let value = Value::fromInt32(length as Int32);
+            return RegData::fromUnboxedValue(value);
+        } else if offset == NativeObjectElements::offsetOfInitializedLength {
+            let initializedLength = NativeObjectElements::getInitializedLength(elements);
+            let value = Value::fromInt32(initializedLength as Int32);
+            return RegData::fromUnboxedValue(value);
+        } else if offset >= 0_i64 {
+            let offset = offset as UInt64;
+            assert offset % Value::sizeOf == 0_u64;
+
+            let index = offset / Value::sizeOf;
+            let value = NativeObjectElements::getElement(elements, index);
+            return RegData::fromValue(value);
+        }
+
+        assert false;
+        RegData::fromNativeObjectElements(elements)
+    }
+}
 
 struct JSFunction <: NativeObject;
 
@@ -664,6 +808,10 @@ impl Shape {
     }
 
     fn hasFixedSlot(shape: Shape, slot: UInt32) -> Bool;
+
+    fn numFixedSlots(shape: Shape) -> UInt32;
+
+    fn slotSpan(shape: Shape) -> UInt32;
 }
 
 struct BaseShape;
@@ -690,6 +838,21 @@ impl Class {
 }
 
 struct String;
+
+impl String {
+    fn isAtom(string: String) -> Bool;
+
+    //TODO: figure out casting on C++ side
+    #[refined]
+    fn asAtom(string: String) -> Atom {
+        assert String::isAtom(string);
+        (unsafe { string as Atom })
+    }
+
+    fn length(string: String) -> UInt64;
+}
+
+struct Atom <: String;
 
 struct Symbol;
 

@@ -2293,6 +2293,9 @@ bool CacheIRCompiler::emitGuardIsNotDOMProxy(ObjOperandId objId) {
 
 bool CacheIRCompiler::emitGuardNoDenseElements(ObjOperandId objId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_GuardNoDenseElements(cachet::CachetContext {this, cx_}, objId);
+#else
   Register obj = allocator.useRegister(masm, objId);
   AutoScratchRegister scratch(allocator, masm);
 
@@ -2307,6 +2310,7 @@ bool CacheIRCompiler::emitGuardNoDenseElements(ObjOperandId objId) {
   // Make sure there are no dense elements.
   Address initLength(scratch, ObjectElements::offsetOfInitializedLength());
   masm.branch32(Assembler::NotEqual, initLength, Imm32(0), failure->label());
+#endif
   return true;
 }
 

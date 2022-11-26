@@ -266,6 +266,70 @@ impl FloatRegSet {
     }
 }
 
+struct LiveRegSet;
+
+impl LiveRegSet {
+    fn gprs(set: LiveRegSet) -> GeneralRegSet;
+    fn fpus(set: LiveRegSet) -> FloatRegSet;
+
+    fn containsReg(set: LiveRegSet, reg: Reg) -> Bool {
+        let gprs = LiveRegSet::gprs(set);
+        GeneralRegSet::contains(gprs, reg)
+    }
+
+    fn addReg(out newSet: LiveRegSet, set: LiveRegSet, reg: Reg) {
+        let gprs = LiveRegSet::gprs(set);
+        let fpus = LiveRegSet::fpus(set);
+
+        GeneralRegSet::add(out gprs, gprs, reg);
+        newSet = LiveRegSet::new(gprs, fpus);
+    }
+
+    fn takeReg(out newSet: LiveRegSet, set: LiveRegSet, reg: Reg) {
+        let gprs = LiveRegSet::gprs(set);
+        let fpus = LiveRegSet::fpus(set);
+
+        GeneralRegSet::take(out gprs, gprs, reg);
+        newSet = LiveRegSet::new(gprs, fpus);
+    }
+
+    fn containsFloatReg(set: LiveRegSet, floatReg: FloatReg) -> Bool {
+        let fpus = LiveRegSet::fpus(set);
+        FloatRegSet::contains(fpus, floatReg)
+    }
+
+    fn addFloatReg(out newSet: LiveRegSet, set: LiveRegSet, floatReg: FloatReg) {
+        let gprs = LiveRegSet::gprs(set);
+        let fpus = LiveRegSet::fpus(set);
+
+        FloatRegSet::add(out fpus, fpus, floatReg);
+        newSet = LiveRegSet::new(gprs, fpus);
+    }
+
+    fn takeFloatReg(out newSet: LiveRegSet, set: LiveRegSet, floatReg: FloatReg) {
+        let gprs = LiveRegSet::gprs(set);
+        let fpus = LiveRegSet::fpus(set);
+
+        FloatRegSet::take(out fpus, fpus, floatReg);
+        newSet = LiveRegSet::new(gprs, fpus);
+    }
+
+    fn newEmpty() -> LiveRegSet {
+        let gprs = GeneralRegSet::newEmpty();
+        let fpus = FloatRegSet::newEmpty();
+        LiveRegSet::new(gprs, fpus)
+    }
+
+    fn new(gprs: GeneralRegSet, fpus: FloatRegSet) -> LiveRegSet {
+        let set = (unsafe { LiveRegSet::newUnchecked(gprs, fpus) });
+        assume LiveRegSet::gprs(set) == gprs;
+        assume LiveRegSet::fpus(set) == fpus;
+        set
+    }
+
+    unsafe fn newUnchecked(gprs: GeneralRegSet, fpus: FloatRegSet) -> LiveRegSet;
+}
+
 enum Condition {
     Equal,
     NotEqual,
@@ -293,6 +357,31 @@ impl Address {
     fn base(address: Address) -> Reg;
     fn offset(address: Address) -> Int32;
 }
+
+enum ABIFunction {
+    EqualStringsHelperPure
+}
+
+impl ABIFunction {
+    #[spec]
+    fn call(function: ABIFunction) {
+        if function == ABIFunction::EqualStringsHelperPure {
+            let str1 = MASM::getString(Reg::Rcx);
+            let str2 = MASM::getString(Reg::Rdx);
+
+            ABIFunction::clobberVolatileRegs();
+
+            let equal = EqualStringsHelperPure(str1, str2);
+            MASM::setBool(Reg::Rax, equal);
+        } else {
+            assert false;
+        }
+    }
+
+    #[spec]
+    fn clobberVolatileRegs();
+}
+
 
 ir MASM {
     op Mov(srcReg: Reg, dstReg: Reg) {
@@ -337,6 +426,12 @@ ir MASM {
             MASM::loadUnboxedValue(value, TypedOrValueReg::type(dstReg),
                 TypedOrValueReg::toTypedReg(dstReg));
         }
+    }
+
+    op LoadPtrAddress(address: Address, dstReg: Reg) {
+        let baseData = MASM::getData(Address::base(address));
+        let data = RegData::readData(baseData, Address::offset(address));
+        MASM::setData(dstReg, data);
     }
 
     op UnboxObject(valueReg: ValueReg, objectReg: Reg) {
@@ -696,6 +791,29 @@ ir MASM {
         }
     }
 
+    op Branch32AddressImm32(
+        condition: Condition, address: Address, rhsInt32: Int32, label branch:MASM
+    ) {
+        assert (
+            condition == Condition::Equal ||
+            condition == Condition::NotEqual ||
+            condition == Condition::LessThan
+        );
+
+
+        let baseData = MASM::getData(Address::base(address));
+        let data = RegData::readData(baseData, Address::offset(address));
+        let lhsInt32 = Value::toInt32(RegData::toUnboxedValue(data));
+
+        if condition == Condition::Equal && lhsInt32 == rhsInt32 {
+            goto branch;
+        } else if condition == Condition::NotEqual && lhsInt32 != rhsInt32 {
+            goto branch;
+        } else if condition == Condition::LessThan && lhsInt32 < rhsInt32 {
+            goto branch;
+        }
+    }
+
     op BranchIfNonNativeObj(objectReg: Reg, scratchReg: Reg, label branch: MASM) {
         let object = MASM::getObject(objectReg);
         let shape = Object::shapeOf(object);
@@ -719,6 +837,40 @@ ir MASM {
             goto branch;
         } else if proxy && objectIsProxy {
             goto branch;
+        }
+    }
+
+    op GuardSpecificAtom(
+        strReg: Reg, atom: Atom, scratchReg: Reg, volatileRegs: LiveRegSet, label fail: MASM
+    ) {
+        let str = MASM::getString(strReg);
+        if str == atom {
+            return;
+        }
+
+        if String::isAtom(str) {
+            goto fail;
+        }
+
+        if String::length(str) != String::length(atom) {
+            goto fail;
+        }
+
+        MASM::pushRegsInMask(volatileRegs);
+
+        MASM::setString(scratchReg, atom);
+        MASM::setString(Reg::Rcx, MASM::getString(scratchReg));
+        MASM::setString(Reg::Rdx, str);
+
+        ABIFunction::call(ABIFunction::EqualStringsHelperPure);
+        MASM::setBool(scratchReg, MASM::getBool(Reg::Rax));
+
+        assert !LiveRegSet::containsReg(volatileRegs, scratchReg);
+        MASM::popRegsInMask(volatileRegs);
+
+        let result = MASM::getBool(scratchReg);
+        if !result {
+            goto fail;
         }
     }
 
@@ -953,5 +1105,88 @@ ir MASM {
 
     fn getDouble(floatReg: FloatReg) -> Float64;
     fn setDouble(floatReg: FloatReg, double: Float64);
-}
 
+    #[spec]
+    fn setHasPushedRegs();
+    #[spec]
+    fn unsetHasPushedRegs();
+
+    #[spec]
+    fn stackPushLiveGeneralReg(reg: Reg);
+    #[spec]
+    fn stackPopLiveGeneralReg(reg: Reg);
+
+    #[spec]
+    fn stackPushLiveFloatReg(floatReg: FloatReg);
+    #[spec]
+    fn stackPopLiveFloatReg(floatReg: FloatReg);
+
+    #[refined]
+    fn pushRegsInMask(set: LiveRegSet) {
+        MASM::setHasPushedRegs();
+        let gprs = LiveRegSet::gprs(set);
+        let fpus = LiveRegSet::fpus(set);
+
+        for reg in Reg desc {
+            if GeneralRegSet::contains(gprs, reg) {
+                MASM::stackPushLiveGeneralReg(reg);
+            }
+        }
+
+        for phyReg in PhyFloatReg desc {
+            let singleReg = FloatReg::new(phyReg, FloatContentType::Single);
+            let doubleReg = FloatReg::new(phyReg, FloatContentType::Double);
+            let simdReg = FloatReg::new(phyReg, FloatContentType::Simd128);
+
+            if FloatRegSet::contains(fpus, simdReg) {
+                MASM::stackPushLiveFloatReg(simdReg);
+            } else if FloatRegSet::contains(fpus, doubleReg) {
+                MASM::stackPushLiveFloatReg(doubleReg);
+            } else if FloatRegSet::contains(fpus, singleReg) {
+                MASM::stackPushLiveFloatReg(singleReg);
+            }
+        }
+    }
+
+    #[refined]
+    fn popRegsInMaskIgnore(set: LiveRegSet, ignore: LiveRegSet) {
+        let fpus = FloatRegSet::reducedForPush(LiveRegSet::fpus(set)); 
+        let gprs = LiveRegSet::gprs(set);
+
+
+        let fpusIgnore = LiveRegSet::fpus(ignore);
+        let fpusPop = FloatRegSet::newDifference(fpus, fpusIgnore);
+
+        for phyReg in PhyFloatReg desc {
+            let singleReg = FloatReg::new(phyReg, FloatContentType::Single);
+            let doubleReg = FloatReg::new(phyReg, FloatContentType::Double);
+            let simdReg = FloatReg::new(phyReg, FloatContentType::Simd128);
+
+            if FloatRegSet::contains(fpusPop, simdReg) {
+                MASM::stackPopLiveFloatReg(simdReg);
+            } else if FloatRegSet::contains(fpusPop, doubleReg) {
+                MASM::stackPopLiveFloatReg(doubleReg);
+            } else if FloatRegSet::contains(fpusPop, singleReg) {
+                MASM::stackPopLiveFloatReg(singleReg);
+            }
+        }
+
+
+        let gprsIgnore = LiveRegSet::gprs(ignore);
+        let gprsPop = GeneralRegSet::newDifference(gprs, gprsIgnore);
+
+        for reg in Reg desc {
+            if GeneralRegSet::contains(gprsPop, reg) {
+                MASM::stackPopLiveGeneralReg(reg);
+            }
+        }
+
+        MASM::unsetHasPushedRegs();
+    }
+
+    #[refined]
+    fn popRegsInMask(set: LiveRegSet) {
+        let ignore = LiveRegSet::newEmpty();
+        MASM::popRegsInMaskIgnore(set, ignore);
+    }
+}

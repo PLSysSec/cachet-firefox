@@ -70,6 +70,7 @@ struct ValueId <: OperandId;
 struct ObjectId <: OperandId;
 struct Int32Id <: OperandId;
 struct BooleanId <: OperandId;
+struct StringId <: OperandId;
 struct ValueTagId <: OperandId;
 
 struct TypedId <: OperandId;
@@ -163,6 +164,28 @@ impl TypedId {
 
     unsafe fn toBooleanIdUnchecked(typedId: TypedId) -> BooleanId;
 
+    fn fromStringId(stringId: StringId) -> TypedId {
+        let typedId = (unsafe { TypedId::fromStringIdUnchecked(stringId) });
+        assume !TypedId::isValueId(typedId);
+        assume TypedId::type(typedId) == JSValueType::String;
+        assume (unsafe { TypedId::toStringIdUnchecked(typedId) }) == stringId;
+        assume (stringId as OperandId) == (typedId as OperandId);
+        typedId
+    }
+
+    unsafe fn fromStringIdUnchecked(stringId: StringId) -> TypedId;
+
+    fn toStringId(typedId: TypedId) -> StringId {
+        assert !TypedId::isValueId(typedId);
+        assert TypedId::type(typedId) == JSValueType::String;
+        let stringId = (unsafe { TypedId::toStringIdUnchecked(typedId) });
+        assume (unsafe { TypedId::fromStringIdUnchecked(stringId) }) == typedId;
+        stringId
+    }
+
+    unsafe fn toStringIdUnchecked(typedId: TypedId) -> StringId;
+
+
     fn fromValueTagId(valueTagId: ValueTagId) -> TypedId {
         let typedId = (unsafe { TypedId::fromValueTagIdUnchecked(valueTagId) });
         assume !TypedId::isValueId(typedId);
@@ -186,6 +209,7 @@ impl TypedId {
 }
 
 struct Int32Field;
+struct StringField;
 struct ShapeField;
 struct ClassField;
 
@@ -451,6 +475,23 @@ ir CacheIR emits MASM {
         CacheIR::releaseReg(scratchReg);
     }
 
+    op GuardNoDenseElements(objectId: ObjectId) {
+        let objectReg = CacheIR::useObjectReg(objectId);
+        let scratchReg = CacheIR::allocateReg();
+
+        CacheIR::addFailurePath(out label failure);
+
+        emit MASM::LoadPtrAddress(
+            Address::new(objectReg, NativeObject::offsetOfElements as Int32), scratchReg
+        );
+
+        let initLength = Address::new(scratchReg, NativeObjectElements::offsetOfInitializedLength as Int32);
+
+        emit MASM::Branch32AddressImm32(Condition::NotEqual, initLength, 0_i32, failure);
+
+        CacheIR::releaseReg(scratchReg);
+    }
+
     op GuardInt32IsNonNegative(indexId: Int32Id) {
         let indexReg = CacheIR::useInt32Reg(indexId);
         CacheIR::addFailurePath(out label failure);
@@ -515,6 +556,24 @@ ir CacheIR emits MASM {
                 Condition::NotEqual, objectReg, class, scratchReg, failure
             );
         }
+
+        CacheIR::releaseReg(scratchReg);
+    }
+
+    op GuardSpecificAtom(strId: StringId, stringField: StringField) {
+        let strReg = CacheIR::useStringReg(strId);
+        let scratchReg = CacheIR::allocateReg();
+
+        let atom = String::asAtom(CacheIR::readStringField(stringField));
+
+        CacheIR::addFailurePath(out label failure);
+
+        let volatileRegs = LiveRegSet::new(
+            GeneralRegSet::newVolatile(), CacheIR::liveVolatileFloatRegs()
+        );
+        LiveRegSet::takeReg(out volatileRegs, volatileRegs, scratchReg);
+
+        emit MASM::GuardSpecificAtom(strReg, atom, scratchReg, volatileRegs, failure);
 
         CacheIR::releaseReg(scratchReg);
     }
@@ -736,6 +795,12 @@ ir CacheIR emits MASM {
     }
 
     #[refined]
+    fn useStringReg(id: StringId) emits MASM -> Reg {
+        let typedId = TypedId::fromStringId(id);
+        CacheIR::useReg(typedId)
+    }
+
+    #[refined]
     fn useValueTagReg(id: ValueTagId) emits MASM -> Reg {
         let typedId = TypedId::fromValueTagId(id);
         CacheIR::useReg(typedId)
@@ -749,8 +814,15 @@ ir CacheIR emits MASM {
     }
 
     fn readInt32Field(int32Field: Int32Field) -> Int32;
+    fn readStringField(stringField: StringField) -> String;
     fn readShapeField(shapeField: ShapeField) -> Shape;
     fn readClassField(classField: ClassField) -> Class;
 
     fn objectGuardNeedsSpectreMitigations(objectId: ObjectId) -> Bool;
+
+    fn liveFloatRegSet() -> FloatRegSet;
+
+    fn liveVolatileFloatRegs() -> FloatRegSet {
+        FloatRegSet::newIntersect(CacheIR::liveFloatRegSet(), FloatRegSet::newVolatile())
+    }
 }

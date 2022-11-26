@@ -118,6 +118,11 @@ struct GCType {
 
 using Type_Heap = Type_Unit;
 
+enum class ABIFunction {
+  EqualStringsHelperPure,
+};
+
+using Type_ABIFunction = PrimitiveType<ABIFunction>;
 using Type_MIRType = PrimitiveType<MIRType>;
 using Type_JSValueType = PrimitiveType<JSValueType>;
 using Type_ValueType = PrimitiveType<JS::ValueType>;
@@ -125,9 +130,12 @@ using Type_Value = GCType<JS::Value>;
 using Type_Float64 = NumericType<double>;
 using Type_Object = GCType<JSObject*>;
 using Type_String = GCType<JSString*>;
+using Type_Atom = GCType<JSAtom*>;
 using Type_Symbol = GCType<JS::Symbol*>;
 using Type_BigInt = GCType<JS::BigInt*>;
 using Type_NativeObject = GCType<js::NativeObject*>;
+using Type_NativeObjectSlots = PrimitiveType<HeapSlot*>;
+using Type_NativeObjectElements = PrimitiveType<HeapSlot*>;
 using Type_JSFunction = GCType<JSFunction*>;
 using Type_ArrayObject = GCType<js::ArrayObject*>;
 using Type_PlainObject = GCType<js::PlainObject*>;
@@ -154,6 +162,7 @@ using Type_AnyReg = PrimitiveType<AnyRegister>;
 using Type_TypedOrValueReg = PrimitiveType<TypedOrValueRegister>;
 using Type_GeneralRegSet = PrimitiveType<GeneralRegisterSet>;
 using Type_FloatRegSet = PrimitiveType<FloatRegisterSet>;
+using Type_LiveRegSet = PrimitiveType<LiveRegisterSet>;
 using Type_Condition = PrimitiveType<Assembler::Condition>;
 using Type_Address = PrimitiveType<js::jit::Address>;
 
@@ -172,6 +181,7 @@ using Type_ValueId = PrimitiveType<ValOperandId>;
 using Type_ObjectId = PrimitiveType<ObjOperandId>;
 using Type_Int32Id = PrimitiveType<Int32OperandId>;
 using Type_BooleanId = PrimitiveType<BooleanOperandId>;
+using Type_StringId = PrimitiveType<StringOperandId>;
 using Type_ValueTagId = PrimitiveType<ValueTagOperandId>;
 
 class TypedOperandIdW : public TypedOperandId {
@@ -192,6 +202,7 @@ class TypedOperandIdW : public TypedOperandId {
 using Type_TypedId = PrimitiveType<TypedOperandIdW>;
 
 using Type_Int32Field = PrimitiveType<uint32_t>;
+using Type_StringField = PrimitiveType<uint32_t>;
 using Type_ShapeField = PrimitiveType<uint32_t>;
 using Type_ClassField = PrimitiveType<uint32_t>;
 
