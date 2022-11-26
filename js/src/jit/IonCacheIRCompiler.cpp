@@ -519,6 +519,9 @@ bool IonCacheIRCompiler::emitGuardSpecificFunction(
 bool IonCacheIRCompiler::emitGuardSpecificAtom(StringOperandId strId,
                                                uint32_t expectedOffset) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_GuardSpecificAtom(cachet::CachetContext {this, cx_}, strId, expectedOffset);
+#else
   Register str = allocator.useRegister(masm, strId);
   AutoScratchRegister scratch(allocator, masm);
 
@@ -534,6 +537,7 @@ bool IonCacheIRCompiler::emitGuardSpecificAtom(StringOperandId strId,
   volatileRegs.takeUnchecked(scratch);
 
   masm.guardSpecificAtom(str, atom, scratch, volatileRegs, failure->label());
+#endif
   return true;
 }
 
