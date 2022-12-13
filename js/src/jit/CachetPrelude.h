@@ -101,6 +101,10 @@ struct NumericType : public PrimitiveType<T> {
     return lhs - rhs;
   }
 
+  static Val Mul(Ref lhs, Ref rhs) {
+    return lhs * rhs;
+  }
+
   static Val Div(Ref lhs, Ref rhs) {
     return lhs / rhs;
   }

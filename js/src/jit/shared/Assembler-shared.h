@@ -310,6 +310,14 @@ struct BaseIndex {
 #endif
 
   BaseIndex() = delete;
+
+  bool operator==(const BaseIndex& other) const {
+    return base == other.base && index == other.index && scale == other.scale && offset == other.offset;
+  }
+
+  bool operator!=(const BaseIndex& other) const {
+    return !operator==(other);
+  }
 };
 
 #if JS_BITS_PER_WORD == 32

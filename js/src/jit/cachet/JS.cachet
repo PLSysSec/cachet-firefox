@@ -398,6 +398,14 @@ impl Value {
         Value::typeOf(value) == ValueType::Undefined
     }
 
+    fn getUndefined() -> Value {
+        let value = (unsafe { Value::getUndefinedUnchecked() });
+        assume Value::isUndefined(value);
+        value
+    }
+
+    unsafe fn getUndefinedUnchecked() -> Value;
+
     fn isObject(value: Value) -> Bool {
         Value::typeOf(value) == ValueType::Object
     }

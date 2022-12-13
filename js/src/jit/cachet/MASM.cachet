@@ -358,6 +358,95 @@ impl Address {
     fn offset(address: Address) -> Int32;
 }
 
+enum Scale {
+    TimesOne,
+    TimesTwo,
+    TimesFour,
+    TimesEight,
+}
+
+var ValueScale: Scale = Scale::TimesEight;
+
+struct BaseIndex;
+
+impl BaseIndex {
+    fn base(baseIndex: BaseIndex) -> Reg;
+    fn index(baseIndex: BaseIndex) -> Reg;
+    fn scale(baseIndex: BaseIndex) -> Scale;
+    fn offset(baseIndex: BaseIndex) -> UInt32;
+
+    fn new(base: Reg, index: Reg, scale: Scale, offset: UInt32) -> BaseIndex {
+        let baseIndex = (unsafe { BaseIndex::newUnchecked(base, index, scale, offset) } );
+        assume BaseIndex::base(baseIndex) == base;
+        assume BaseIndex::index(baseIndex) == index;
+        assume BaseIndex::scale(baseIndex) == scale;
+        assume BaseIndex::offset(baseIndex) == offset;
+        baseIndex
+    }    
+
+    unsafe fn newUnchecked(base: Reg, index: Reg, scale: Scale, offset: UInt32) -> BaseIndex;
+
+    #[spec]
+    fn getOffset(baseIndex: BaseIndex) -> Int64 {
+        let index = (MASM::getInt32(BaseIndex::index(baseIndex)) as UInt32) as Int64;
+        if BaseIndex::scale(baseIndex) == Scale::TimesOne {
+            return index * 1_i64 + BaseIndex::offset(baseIndex);
+        } else if BaseIndex::scale(baseIndex) == Scale::TimesTwo {
+            return index * 2_i64 + BaseIndex::offset(baseIndex);
+        } else if BaseIndex::scale(baseIndex) == Scale::TimesFour {
+            return index * 4_i64 + BaseIndex::offset(baseIndex);
+        } else {
+            assert BaseIndex::scale(baseIndex) == Scale::TimesEight;
+            return index * 8_i64 + BaseIndex::offset(baseIndex);
+        }
+    }
+}
+
+struct BaseValueIndex;
+
+impl BaseValueIndex {
+    fn inner(baseValueIndex: BaseValueIndex) -> BaseIndex;
+
+    fn new(base: Reg, index: Reg, offset: UInt32) -> BaseValueIndex {
+        let inner = BaseIndex::new(base, index, ValueScale, offset);
+        let baseValueIndex = (unsafe { BaseValueIndex::newUnchecked(inner) } );
+        assume BaseValueIndex::inner(baseValueIndex) == inner;
+        baseValueIndex
+    }
+
+    unsafe fn newUnchecked(inner: BaseIndex) -> BaseValueIndex;
+}
+
+struct BaseObjectElementIndex;
+
+impl BaseObjectElementIndex {
+    fn inner(baseObjectElementIndex: BaseObjectElementIndex) -> BaseValueIndex;
+
+    fn new(base: Reg, index: Reg, offset: UInt32) -> BaseObjectElementIndex {
+        let inner = BaseValueIndex::new(base, index, offset);
+        let baseObjectElementIndex = (unsafe { BaseObjectElementIndex::newUnchecked(inner) } );
+        assume BaseObjectElementIndex::inner(baseObjectElementIndex) == inner;
+        baseObjectElementIndex
+    }
+
+    unsafe fn newUnchecked(inner: BaseValueIndex) -> BaseObjectElementIndex;
+}
+
+struct BaseObjectSlotIndex;
+
+impl BaseObjectSlotIndex {
+    fn inner(baseObjectSlotIndex: BaseObjectSlotIndex) -> BaseValueIndex;
+
+    fn new(base: Reg, index: Reg) -> BaseObjectSlotIndex {
+        let inner = BaseValueIndex::new(base, index, 0_u32);
+        let baseObjectSlotIndex = (unsafe { BaseObjectSlotIndex::newUnchecked(inner) } );
+        assume BaseObjectSlotIndex::inner(baseObjectSlotIndex) == inner;
+        baseObjectSlotIndex
+    }
+
+    unsafe fn newUnchecked(inner: BaseValueIndex) -> BaseObjectSlotIndex;
+}
+
 enum ABIFunction {
     EqualStringsHelperPure
 }
@@ -384,12 +473,29 @@ impl ABIFunction {
 
 
 ir MASM {
+
+    // NOTE: Needs to be implemented to call the equivalent
+    // op with string as argument.
+    op AssumeUnreachable() {
+        assert false;
+    }
+
     op Mov(srcReg: Reg, dstReg: Reg) {
         MASM::setInt32(dstReg, MASM::getInt32(srcReg));
     }
 
+    op MovData(srcReg: Reg, dstReg: Reg) {
+      MASM::setData(dstReg, MASM::getData(srcReg));
+    }
+
     op Move32Imm32(srcInt32: Int32, dstReg: Reg) {
         MASM::setInt32(dstReg, srcInt32);
+    }
+
+    // this op corresponds to an overload of the MoveValue op
+    // that takes an immediate Value operand
+    op MoveValueImm(value: Value, dstReg: ValueReg) {
+        MASM::setValue(dstReg, value);
     }
 
     op Cmp32Move32(condition: Condition, lhsReg: Reg, rhsReg: Reg, srcReg: Reg, dstReg: Reg) {
@@ -434,6 +540,32 @@ ir MASM {
         MASM::setData(dstReg, data);
     }
 
+    op LoadValueBaseObjectElementIndex(index: BaseObjectElementIndex, dstReg: ValueReg) {
+        let baseValueIndex = BaseObjectElementIndex::inner(index);
+        let baseIndex = BaseValueIndex::inner(baseValueIndex);
+        let baseData = MASM::getData(BaseIndex::base(baseIndex));    
+        let offset = BaseIndex::getOffset(baseIndex);
+
+        let data = RegData::readData(baseData, offset);
+        let value = RegData::toValue(data);
+        MASM::setValue(dstReg, value);
+    }
+
+    op TestObjectSet(condition: Condition, valueReg: ValueReg, dstReg: Reg) {
+        assert (condition == Condition::Equal || condition == Condition::NotEqual);
+
+        let value = MASM::getValue(valueReg);
+        let isObject = Value::isObject(value);
+
+        MASM::setBool(dstReg, false);
+
+        if condition == Condition::Equal && isObject {
+            MASM::setBool(dstReg, true);
+        } else if condition == Condition::NotEqual && !isObject {
+            MASM::setBool(dstReg, true);
+        }
+    }
+
     op UnboxObject(valueReg: ValueReg, objectReg: Reg) {
         let value = MASM::getValue(valueReg);
         MASM::setObject(objectReg, Value::toObject(value));
@@ -470,6 +602,32 @@ ir MASM {
             MASM::setInt32(int32Reg, 1_i32);
         } else {
             MASM::setInt32(int32Reg, 0_i32);
+        }
+    }
+
+    op ConvertInt32ToDouble(srcReg: Reg, destReg: FloatReg) {
+        let int32 = MASM::getInt32(srcReg);
+        let double = Float64::fromInt32(int32);
+        MASM::setDouble(destReg, double);
+    }
+
+    op SpectreBoundsCheck32Address(
+        indexReg: Reg,
+        length: Address,
+        maybeScratch: Reg,
+        label failure: MASM
+    ) {
+        assert indexReg != Address::base(length);
+        assert Address::base(length) != maybeScratch;
+        assert indexReg != maybeScratch;
+
+        let index = MASM::getInt32(indexReg) as UInt32;
+        let baseData = MASM::getData(Address::base(length));
+        let data = RegData::readData(baseData, Address::offset(length));
+        let length = Value::toInt32(RegData::toUnboxedValue(data)) as UInt32;
+
+        if index >= length {
+            goto failure;
         }
     }
 
@@ -587,6 +745,23 @@ ir MASM {
 
         if condition == Condition::NotEqual {
             if !valueIsObject {
+                goto branch;
+            }
+        }
+    }
+
+    op BranchTestMagic(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        let value = MASM::getValue(valueReg);
+        let valueIsMagic = Value::isMagic(value);
+
+        if condition == Condition::Equal {
+            if valueIsMagic {
+                goto branch;
+            }
+        }
+
+        if condition == Condition::NotEqual {
+            if !valueIsMagic {
                 goto branch;
             }
         }

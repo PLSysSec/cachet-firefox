@@ -165,6 +165,11 @@ using Type_FloatRegSet = PrimitiveType<FloatRegisterSet>;
 using Type_LiveRegSet = PrimitiveType<LiveRegisterSet>;
 using Type_Condition = PrimitiveType<Assembler::Condition>;
 using Type_Address = PrimitiveType<js::jit::Address>;
+using Type_Scale = PrimitiveType<js::jit::Scale>;
+using Type_BaseIndex = PrimitiveType<js::jit::BaseIndex>;
+using Type_BaseValueIndex = PrimitiveType<js::jit::BaseValueIndex>;
+using Type_BaseObjectElementIndex = PrimitiveType<js::jit::BaseObjectElementIndex>;
+using Type_BaseObjectSlotIndex = PrimitiveType<js::jit::BaseObjectSlotIndex>;
 
 using Type_OperandLocation = PrimitiveType<OperandLocation>;
 
