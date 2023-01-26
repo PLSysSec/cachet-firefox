@@ -636,6 +636,16 @@ void EmitOp_Move32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   ops.move32(Imm32(int32), param_dstReg); 
 }
 
+void EmitOp_MoveValueImm(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                          Type_Value::Ref param_value, Type_ValueReg::Ref param_dstReg) {
+  ops.moveValue(param_value, param_dstReg);
+}
+
+void EmitOp_MoveValue(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                        Type_ValueReg::Ref param_srcReg, Type_ValueReg::Ref param_dstReg) {
+  ops.moveValue(param_srcReg, param_dstReg);
+}
+
 void EmitOp_Cmp32Move32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                     Type_Condition::Ref param_condition,
                     Type_Reg::Ref param_lhsReg,
@@ -644,6 +654,11 @@ void EmitOp_Cmp32Move32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                     Type_Reg::Ref param_dstReg) {
 
   ops.cmp32Move32(param_condition, param_lhsReg, param_rhsReg, param_srcReg, param_dstReg);
+}
+
+void EmitOp_MovePtrBoolImmWord(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                Type_Bool::Ref param_b, Type_Reg::Ref param_dstReg) {
+  ops.movePtr(ImmWord(param_b), param_dstReg);
 }
 
 void EmitOp_Jump(Cachet_ContextRef cx, IR_MASM::OpsRef ops, IR_MASM::LabelRef param_target) {
@@ -656,10 +671,24 @@ void EmitOp_LoadValueAddress(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   ops.loadValue(param_address, param_dstReg);
 }
 
+void EmitOp_Load32Address(Cachet_ContextRef cx,
+                          IR_MASM::OpsRef ops,
+                          Type_Address::Ref param_address,
+                          Type_Reg::Ref param_dstReg) {
+  ops.load32(param_address, param_dstReg);
+}
+
 void EmitOp_LoadTypedOrValueAddress(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                     Type_Address::Ref param_address,
                                     Type_TypedOrValueReg::Ref param_dstReg) {
   ops.loadTypedOrValue(param_address, param_dstReg);
+}
+
+void EmitOp_LoadTypedOrValueBaseObjectElementIndex(Cachet_ContextRef cx,
+                                                   IR_MASM::OpsRef ops,
+                                                   Type_BaseObjectElementIndex::Ref param_index,
+                                                   Type_TypedOrValueReg::Ref param_dstReg) {
+  ops.loadTypedOrValue(param_index, param_dstReg);
 }
 
 void EmitOp_LoadPtrAddress(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
@@ -693,10 +722,40 @@ void EmitOp_UnboxObject(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   ops.unboxObject(param_valueReg, param_objectReg);
 }
 
+void EmitOp_UnboxObjectProto(Cachet_ContextRef cx,
+                             IR_MASM::OpsRef ops,
+                             Type_Reg::Ref param_srcReg,
+                             Type_Reg::Ref param_destReg) {
+  // Phantom op
+}
+
+void EmitOp_FallibleUnboxBoolean(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                        Type_ValueReg::Ref param_valueReg,
+                                        Type_Reg::Ref param_boolReg,
+                                        IR_MASM::LabelRef param_failure) {
+  ops.fallibleUnboxBoolean(param_valueReg, param_boolReg, param_failure);
+}
+
+void EmitOp_CastBoolToInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Reg::Ref param_int32Reg) {
+  // Phantom op
+}
+
 void EmitOp_ConvertInt32ToDouble(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                  Type_Reg::Ref param_srcReg,
                                  Type_FloatReg::Ref param_destReg) {
   ops.convertInt32ToDouble(param_srcReg, param_destReg);
+}
+
+void EmitOp_ConvertInt32ValueToDouble(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                        Type_ValueReg::Ref param_valueReg) {
+  ops.convertInt32ValueToDouble(param_valueReg);
+}
+
+void EmitOp_LoadObjectProto(Cachet_ContextRef cx,
+                            IR_MASM::OpsRef ops,
+                            Type_Reg::Ref param_objectReg,
+                            Type_Reg::Ref param_protoReg) {
+  ops.loadObjProto(param_objectReg, param_protoReg);
 }
 
 void EmitOp_SpectreBoundsCheck32Address(Cachet_ContextRef cx,
@@ -757,6 +816,14 @@ void EmitOp_BranchTestMagic(Cachet_ContextRef cx,
   ops.branchTestMagic(param_condition, param_valueReg, param_branch);
 }
 
+void EmitOp_BranchTestMagicBaseObjectElementIndex(Cachet_ContextRef cx,
+                                                  IR_MASM::OpsRef ops,
+                                                  Type_Condition::Ref param_condition,
+                                                  Type_BaseObjectElementIndex::Ref param_index,
+                                                  IR_MASM::LabelRef param_branch) {
+  ops.branchTestMagic(param_condition, param_index, param_branch);
+}
+
 void EmitOp_BranchTestObjClass(Cachet_ContextRef cx,
                                     IR_MASM::OpsRef ops,
                                     Type_Condition::Ref param_condition,
@@ -815,6 +882,14 @@ void EmitOp_BranchTestInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                     Type_ValueReg::Ref param_valueReg,
                                     IR_MASM::LabelRef param_branch) {
   ops.branchTestInt32(param_condition, param_valueReg, param_branch);
+}
+
+
+void EmitOp_BranchTestInt32Truthy(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                    Type_Bool::Ref param_truthy,
+                                    Type_ValueReg::Ref param_valueReg,
+                                    IR_MASM::LabelRef param_branch) {
+  ops.branchTestInt32Truthy(param_truthy, param_valueReg, param_branch);
 }
 
 void EmitOp_BranchTest32(Cachet_ContextRef cx,
@@ -904,6 +979,15 @@ void EmitOp_BranchAdd32(Cachet_ContextRef cx,
                          param_branch);
 }
 
+void EmitOp_BranchAdd32Imm(Cachet_ContextRef cx,
+                           IR_MASM::OpsRef ops,
+                           Type_Condition::Ref param_condition,
+                           Type_Int32::Ref param_lhsInt32,
+                           Type_Reg::Ref param_dstReg,
+                           IR_MASM::LabelRef param_branch) {
+  ops.branchAdd32(param_condition, Imm32(param_lhsInt32), param_dstReg, param_branch);
+}
+
 void EmitOp_BranchSub32(Cachet_ContextRef cx,
                                          IR_MASM::OpsRef ops,
                                          Type_Condition::Ref param_condition,
@@ -912,6 +996,15 @@ void EmitOp_BranchSub32(Cachet_ContextRef cx,
                                          IR_MASM::LabelRef param_branch) {
   ops.branchSub32(param_condition, param_srcReg, param_dstReg,
                          param_branch);
+}
+
+void EmitOp_BranchSub32Imm(Cachet_ContextRef cx,
+                           IR_MASM::OpsRef ops,
+                           Type_Condition::Ref param_condition,
+                           Type_Int32::Ref param_lhsInt32,
+                           Type_Reg::Ref param_dstReg,
+                           IR_MASM::LabelRef param_branch) {
+  ops.branchSub32(param_condition, Imm32(param_lhsInt32), param_dstReg, param_branch);
 }
 
 void EmitOp_BranchMul32(Cachet_ContextRef cx,
@@ -930,6 +1023,19 @@ void EmitOp_Neg32(Cachet_ContextRef cx,
   ops.neg32(param_valueReg);
 }
 
+void EmitOp_Not32(Cachet_ContextRef cx,
+                  IR_MASM::OpsRef ops,
+                  Type_Reg::Ref param_valueReg) {
+  ops.not32(param_valueReg);
+}
+
+void EmitOp_And32(Cachet_ContextRef cx,
+                  IR_MASM::OpsRef ops,
+                  Type_Reg::Ref param_srcReg,
+                  Type_Reg::Ref param_dstReg) {
+  ops.and32(param_srcReg, param_dstReg);
+}
+
 void EmitOp_Or32(Cachet_ContextRef cx,
                                          IR_MASM::OpsRef ops,
                                          Type_Reg::Ref param_srcReg,
@@ -937,10 +1043,43 @@ void EmitOp_Or32(Cachet_ContextRef cx,
   ops.or32(param_srcReg, param_dstReg);
 }
 
+void EmitOp_Xor32(Cachet_ContextRef cx,
+                  IR_MASM::OpsRef ops,
+                  Type_Reg::Ref param_srcReg,
+                  Type_Reg::Ref param_dstReg) {
+  ops.xor32(param_srcReg, param_dstReg);
+}
+
+void EmitOp_FlexibleLshift32(Cachet_ContextRef cx,
+                             IR_MASM::OpsRef ops,
+                             Type_Reg::Ref param_shiftReg,
+                             Type_Reg::Ref param_srcDestReg) {
+  ops.flexibleLshift32(param_shiftReg, param_srcDestReg);
+}
+
+void EmitOp_FlexibleRshift32Arithmetic(Cachet_ContextRef cx,
+                                       IR_MASM::OpsRef ops,
+                                       Type_Reg::Ref param_shiftReg,
+                                       Type_Reg::Ref param_srcDestReg) {
+  ops.flexibleRshift32Arithmetic(param_shiftReg, param_srcDestReg);
+}
+
+void EmitOp_SplitTagForTest(Cachet_ContextRef cx,
+                            IR_MASM::OpsRef ops,
+                            Type_ValueReg::Ref param_valueReg,
+                            Type_Reg::Ref param_tagReg) {
+  // skipping conversion from ScratchTagScope
+  ops.splitTag(param_valueReg, param_tagReg);
+}
+
 };  // namespace Impl_MASM
 
 
 IR_MASM::OpsRef IR_CacheIR::GetOutput(Cachet_ContextRef cx) {
+  return cx.compiler->masm;
+}
+
+IR_MASM::OpsRef IR_MASM::GetOutput(Cachet_ContextRef cx) {
   return cx.compiler->masm;
 }
 
@@ -1215,6 +1354,10 @@ Type_Class::Val Fn_classOf(Cachet_ContextRef cx, Type_BaseShape::Ref param_baseS
   return param_baseShape->clasp();
 }
 
+Type_TaggedProto::Val Fn_protoOfUnchecked(Cachet_ContextRef cx, Type_Heap::Ref param_heap, Type_BaseShape::Ref param_baseShape) {
+  return param_baseShape->proto();
+}
+
 };  // namespace Impl_BaseShape
 
 namespace Impl_Class {
@@ -1248,6 +1391,26 @@ Type_UInt64::Val Fn_length(Cachet_ContextRef cx, Type_String::Ref param_string) 
 }
 
 };  // namespace Impl_String
+
+namespace Impl_TaggedProto {
+
+Type_Bool::Val Fn_isNull(Cachet_ContextRef cx, Type_TaggedProto::Ref param_proto) {
+  return !param_proto.raw();
+}
+
+Type_Bool::Val Fn_isLazy(Cachet_ContextRef cx, Type_TaggedProto::Ref param_proto) {
+  return param_proto.isDynamic();
+}
+
+Type_Bool::Val Fn_isObject(Cachet_ContextRef cx, Type_TaggedProto::Ref param_proto) {
+  return param_proto.isObject();
+}
+
+Type_Object::Val Fn_toObjectUnchecked(Cachet_ContextRef cx, Type_TaggedProto::Ref param_proto) {
+  return param_proto.toObject();
+}
+
+};  // namespace Impl_TaggedProto
 
 namespace Impl_OperandLocationKind {
 
@@ -1297,6 +1460,12 @@ Type_JSValueType::Val Fn_getPayloadTypeUnchecked(Cachet_ContextRef cx, Type_Oper
 
 }
 
+namespace Impl_OperandId {
+  inline Type_BooleanId::Val To_BooleanId(Type_OperandId::Val in) {
+    return BooleanOperandId(in.id());
+  }
+}
+
 inline Type_OperandId::Val Impl_ValueId::To_OperandId(Type_ValueId::Val in) {
   return static_cast<Type_OperandId::Val>(in);
 }
@@ -1314,6 +1483,14 @@ inline Type_OperandId::Val Impl_BooleanId::To_OperandId(Type_BooleanId::Val in) 
 }
 
 inline Type_OperandId::Val Impl_StringId::To_OperandId(Type_StringId::Val in) {
+  return static_cast<Type_OperandId::Val>(in);
+}
+
+inline Type_OperandId::Val Impl_SymbolId::To_OperandId(Type_SymbolId::Val in) {
+  return static_cast<Type_OperandId::Val>(in);
+}
+
+inline Type_OperandId::Val Impl_BigIntId::To_OperandId(Type_BigIntId::Val in) {
   return static_cast<Type_OperandId::Val>(in);
 }
 
@@ -1373,6 +1550,22 @@ Type_TypedId::Val Fn_fromStringIdUnchecked(Cachet_ContextRef cx, Type_StringId::
 
 Type_StringId::Val Fn_toStringIdUnchecked(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
   return Type_StringId::Val(param_typedId.id());
+}
+
+Type_TypedId::Val Fn_fromSymbolIdUnchecked(Cachet_ContextRef cx, Type_SymbolId::Ref param_symbolId) {
+  return TypedOperandIdW(TypedOperandId(param_symbolId), false);
+}
+
+Type_SymbolId::Val Fn_toSymbolIdUnchecked(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
+  return Type_SymbolId::Val(param_typedId.id());
+}
+
+Type_TypedId::Val Fn_fromBigIntIdUnchecked(Cachet_ContextRef cx, Type_BigIntId::Ref param_bigIntId) {
+  return TypedOperandIdW(TypedOperandId(param_bigIntId), false);
+}
+
+Type_BigIntId::Val Fn_toBigIntIdUnchecked(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
+  return Type_BigIntId::Val(param_typedId.id());
 }
 
 Type_TypedId::Val Fn_fromValueTagIdUnchecked(Cachet_ContextRef cx, Type_ValueTagId::Ref param_valueTagId) {
@@ -1456,21 +1649,35 @@ void Impl_CacheIR::Fn_releaseReg(Cachet_ContextRef cx, Type_Reg::Ref param_reg) 
   return cx.compiler->allocator.releaseRegister(param_reg);
 }
 
+Type_Reg::Val Impl_CacheIR::Fn_defineObjectReg(Cachet_ContextRef cx,
+                                            Type_ObjectId::Ref param_objectId) {
+  return cx.compiler->allocator.defineRegister(cx.compiler->masm, param_objectId);
+}
+
 Type_Reg::Val Impl_CacheIR::Fn_defineInt32Reg(Cachet_ContextRef cx,
                                             Type_Int32Id::Ref param_int32Id) {
   return cx.compiler->allocator.defineRegister(cx.compiler->masm, param_int32Id);
 }
 
+Type_ValueReg::Val Impl_CacheIR::Fn_defineNumberReg(Cachet_ContextRef cx,
+                                            Type_NumberId::Ref param_numberId) {
+  return cx.compiler->allocator.defineValueRegister(cx.compiler->masm, param_numberId);
+}
+
+Type_Reg::Val Impl_CacheIR::Fn_defineValueTagReg(Cachet_ContextRef cx,
+                                            Type_ValueTagId::Ref param_valueTagId) {
+  return cx.compiler->allocator.defineRegister(cx.compiler->masm, param_valueTagId);
+}
 
 Type_ValueReg::Val Impl_CacheIR::Fn_useValueReg(
     Cachet_ContextRef cx,
     Type_ValueId::Ref param_valueId) {
-  OperandLocation loc(cx.compiler->allocator.operandLocation(param_valueId.id()));
-  if (loc.kind() == OperandLocation::ValueReg) {
-    return loc.valueReg();
-  } else {
+  //OperandLocation loc(cx.compiler->allocator.operandLocation(param_valueId.id()));
+  //if (loc.kind() == OperandLocation::ValueReg) {
+  //  return loc.valueReg();
+  //} else {
     return cx.compiler->allocator.useValueRegister(cx.compiler->masm, param_valueId);
-  }
+  //}
 }
 
 Type_Reg::Val Impl_CacheIR::Fn_useObjectReg(Cachet_ContextRef cx,
@@ -1483,9 +1690,29 @@ Type_Reg::Val Impl_CacheIR::Fn_useInt32Reg(Cachet_ContextRef cx,
     return cx.compiler->allocator.useRegister(cx.compiler->masm, param_int32Id);
 }
 
+Type_ValueReg::Val Impl_CacheIR::Fn_useNumberReg(Cachet_ContextRef cx,
+                                            Type_NumberId::Ref param_numberId) {
+    return cx.compiler->allocator.useValueRegister(cx.compiler->masm, param_numberId);
+}
+
+Type_Reg::Val Impl_CacheIR::Fn_useBooleanReg(Cachet_ContextRef cx,
+                                            Type_BooleanId::Ref param_booleanId) {
+    return cx.compiler->allocator.useRegister(cx.compiler->masm, param_booleanId);
+}
+
 Type_Reg::Val Impl_CacheIR::Fn_useStringReg(Cachet_ContextRef cx,
                                             Type_StringId::Ref param_stringId) {
     return cx.compiler->allocator.useRegister(cx.compiler->masm, param_stringId);
+}
+
+Type_Reg::Val Impl_CacheIR::Fn_useSymbolReg(Cachet_ContextRef cx,
+                                            Type_SymbolId::Ref param_symbolId) {
+    return cx.compiler->allocator.useRegister(cx.compiler->masm, param_symbolId);
+}
+
+Type_Reg::Val Impl_CacheIR::Fn_useBigIntReg(Cachet_ContextRef cx,
+                                            Type_BigIntId::Ref param_bigIntId) {
+    return cx.compiler->allocator.useRegister(cx.compiler->masm, param_bigIntId);
 }
 
 Type_Reg::Val Impl_CacheIR::Fn_useValueTagReg(Cachet_ContextRef cx,
@@ -1498,6 +1725,14 @@ void Impl_CacheIR::Fn_emitLoadInt32StubField(
     Type_Int32Field::Ref param_int32Field,
     Type_Reg::Ref param_dstReg) {
   StubFieldOffset val(param_int32Field, StubField::Type::RawInt32);
+  cx.compiler->emitLoadStubField(val, param_dstReg);
+}
+
+void Impl_CacheIR::Fn_emitLoadObjectStubField(
+    Cachet_ContextRef cx,
+    Type_ObjectField::Ref param_objectField,
+    Type_Reg::Ref param_dstReg) {
+  StubFieldOffset val(param_objectField, StubField::Type::JSObject);
   cx.compiler->emitLoadStubField(val, param_dstReg);
 }
 

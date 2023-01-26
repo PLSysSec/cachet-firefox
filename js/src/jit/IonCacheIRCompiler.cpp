@@ -584,6 +584,9 @@ bool IonCacheIRCompiler::emitLoadFixedSlotTypedResult(ObjOperandId objId,
 bool IonCacheIRCompiler::emitLoadDynamicSlotResult(ObjOperandId objId,
                                                    uint32_t offsetOffset) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_LoadDynamicSlotResult(cachet::CachetContext {this, cx_}, objId, offsetOffset);
+#else
   AutoOutputRegister output(*this);
   Register obj = allocator.useRegister(masm, objId);
   int32_t offset = int32StubField(offsetOffset);
@@ -591,6 +594,7 @@ bool IonCacheIRCompiler::emitLoadDynamicSlotResult(ObjOperandId objId,
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
   masm.loadPtr(Address(obj, NativeObject::offsetOfSlots()), scratch);
   masm.loadTypedOrValue(Address(scratch, offset), output);
+#endif
   return true;
 }
 

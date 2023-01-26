@@ -147,6 +147,7 @@ using Type_SharedArrayBufferObject = GCType<js::SharedArrayBufferObject*>;
 using Type_ArrayBufferViewObject = GCType<js::ArrayBufferViewObject*>;
 using Type_DataViewObject = GCType<js::DataViewObject*>;
 using Type_ArgumentsObject = GCType<js::ArgumentsObject*>;
+using Type_ArgumentsData = PrimitiveType<js::ArgumentsData*>;
 using Type_MappedArgumentsObject = GCType<js::MappedArgumentsObject*>;
 using Type_UnmappedArgumentsObject = GCType<js::UnmappedArgumentsObject*>;
 using Type_SetObject = GCType<js::SetObject*>;
@@ -154,6 +155,7 @@ using Type_MapObject = GCType<js::MapObject*>;
 using Type_Shape = GCType<js::Shape*>;
 using Type_BaseShape = GCType<js::BaseShape*>;
 using Type_Class = PrimitiveType<const JSClass*>;
+using Type_TaggedProto = GCType<js::TaggedProto>;
 
 using Type_ValueReg = PrimitiveType<ValueOperand>;
 using Type_Reg = PrimitiveType<Register>;
@@ -187,8 +189,11 @@ using Type_OperandId = PrimitiveType<OperandId>;
 using Type_ValueId = PrimitiveType<ValOperandId>;
 using Type_ObjectId = PrimitiveType<ObjOperandId>;
 using Type_Int32Id = PrimitiveType<Int32OperandId>;
+using Type_NumberId = PrimitiveType<NumberOperandId>;
 using Type_BooleanId = PrimitiveType<BooleanOperandId>;
 using Type_StringId = PrimitiveType<StringOperandId>;
+using Type_SymbolId = PrimitiveType<SymbolOperandId>;
+using Type_BigIntId = PrimitiveType<BigIntOperandId>;
 using Type_ValueTagId = PrimitiveType<ValueTagOperandId>;
 
 class TypedOperandIdW : public TypedOperandId {
@@ -209,6 +214,7 @@ class TypedOperandIdW : public TypedOperandId {
 using Type_TypedId = PrimitiveType<TypedOperandIdW>;
 
 using Type_Int32Field = PrimitiveType<uint32_t>;
+using Type_ObjectField = PrimitiveType<uint32_t>;
 using Type_StringField = PrimitiveType<uint32_t>;
 using Type_ShapeField = PrimitiveType<uint32_t>;
 using Type_ClassField = PrimitiveType<uint32_t>;
@@ -230,6 +236,8 @@ namespace IR_MASM {
   LabelMutRef ToLabelMutRef(LabelLocal& label);
   LabelRef ToLabelRef(LabelLocal label);
 
+  IR_MASM::OpsRef GetOutput(Cachet_ContextRef cx);
+  
   void BindLabel(Cachet_ContextRef cx, OpsRef ops, LabelMutRef label);
 }
 

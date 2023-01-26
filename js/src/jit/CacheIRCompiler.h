@@ -739,6 +739,7 @@ class MOZ_RAII CacheIRCompiler {
   friend class AutoAvailableFloatRegister;
 
 #ifdef JS_CACHET
+friend cachet::IR_MASM::OpsRef cachet::IR_MASM::GetOutput(cachet::Cachet_ContextRef cx);
 friend cachet::IR_MASM::OpsRef cachet::IR_CacheIR::GetOutput(cachet::Cachet_ContextRef cx);
 friend cachet::Type_TypedOrValueReg::Ref cachet::Impl_CacheIR::Var_outputReg(cachet::Cachet_ContextRef cx);
 friend cachet::Type_JSValueType::Ref cachet::Impl_CacheIR::Fn_knownType(cachet::Cachet_ContextRef cx, cachet::Type_ValueId::Ref param_valueId);
@@ -747,13 +748,21 @@ friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_allocateValueReg(cach
 friend void cachet::Impl_CacheIR::Fn_releaseValueReg(cachet::Cachet_ContextRef cx, cachet::Type_ValueReg::Ref param_valueReg);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_allocateReg(cachet::Cachet_ContextRef cx);
 friend void cachet::Impl_CacheIR::Fn_releaseReg(cachet::Cachet_ContextRef cx, cachet::Type_Reg::Ref param_reg);
+friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_defineObjectReg(cachet::Cachet_ContextRef cx, cachet::Type_ObjectId::Ref param_objectId);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_defineInt32Reg(cachet::Cachet_ContextRef cx, cachet::Type_Int32Id::Ref param_int32Id);
+friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_defineNumberReg(cachet::Cachet_ContextRef cx, cachet::Type_NumberId::Ref param_numberId);
+friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_defineValueTagReg(cachet::Cachet_ContextRef cx, cachet::Type_ValueTagId::Ref param_valueTagId);
 friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_useValueReg(cachet::Cachet_ContextRef cx, cachet::Type_ValueId::Ref param_valueId);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useObjectReg(cachet::Cachet_ContextRef cx, cachet::Type_ObjectId::Ref param_objectId);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useInt32Reg(cachet::Cachet_ContextRef cx, cachet::Type_Int32Id::Ref param_int32Id);
+friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_useNumberReg(cachet::Cachet_ContextRef cx, cachet::Type_NumberId::Ref param_numberId);
+friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useBooleanReg(cachet::Cachet_ContextRef cx, cachet::Type_BooleanId::Ref param_booleanId);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useStringReg(cachet::Cachet_ContextRef cx, cachet::Type_StringId::Ref param_stringId);
+friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useSymbolReg(cachet::Cachet_ContextRef cx, cachet::Type_SymbolId::Ref param_symbolId);
+friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useBigIntReg(cachet::Cachet_ContextRef cx, cachet::Type_BigIntId::Ref param_bigIntId);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useValueTagReg(cachet::Cachet_ContextRef cx, cachet::Type_ValueTagId::Ref param_valueTagId);
 friend void cachet::Impl_CacheIR::Fn_emitLoadInt32StubField(cachet::Cachet_ContextRef cx, cachet::Type_Int32Field::Ref param_int32Field, cachet::Type_Reg::Ref param_dstReg);
+friend void cachet::Impl_CacheIR::Fn_emitLoadObjectStubField(cachet::Cachet_ContextRef cx, cachet::Type_ObjectField::Ref param_objectField, cachet::Type_Reg::Ref param_dstReg);
 friend cachet::Type_Int32::Val cachet::Impl_CacheIR::Fn_readInt32Field(cachet::Cachet_ContextRef cx, cachet::Type_Int32Field::Ref param_int32Field);
 friend cachet::Type_String::Val cachet::Impl_CacheIR::Fn_readStringField(cachet::Cachet_ContextRef cx, cachet::Type_StringField::Ref param_stringField);
 friend cachet::Type_Shape::Val cachet::Impl_CacheIR::Fn_readShapeField(cachet::Cachet_ContextRef cx, cachet::Type_ShapeField::Ref param_shapeField);

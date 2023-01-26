@@ -492,10 +492,18 @@ ir MASM {
         MASM::setInt32(dstReg, srcInt32);
     }
 
+    op MovePtrImmGCPtrObject(object: Object, dstReg: Reg) {
+        MASM::setObject(dstReg, object);
+    }
+
     // this op corresponds to an overload of the MoveValue op
     // that takes an immediate Value operand
     op MoveValueImm(value: Value, dstReg: ValueReg) {
         MASM::setValue(dstReg, value);
+    }
+
+    op MoveValue(srcReg: ValueReg, dstReg: ValueReg) {
+        MASM::setValue(dstReg, MASM::getValue(srcReg));
     }
 
     op Cmp32Move32(condition: Condition, lhsReg: Reg, rhsReg: Reg, srcReg: Reg, dstReg: Reg) {
@@ -516,13 +524,42 @@ ir MASM {
         MASM::setBool(dstReg, MASM::getBool(srcReg));
     }
 
+    op MovePtrBoolImmWord(b: Bool, dstReg: Reg) {
+        MASM::setBool(dstReg, b);
+    }
+
     op Jump(label target: MASM) {
         goto target;
+    }
+
+    op Load32Address(address: Address, dstReg: Reg) {
+        let baseData = MASM::getData(Address::base(address));
+        let data = RegData::readData(baseData, Address::offset(address));
+        let value = RegData::toUnboxedValue(data);
+        let int32 = Value::toInt32(value);
+        MASM::setInt32(dstReg, int32);
     }
 
     op LoadTypedOrValueAddress(address: Address, dstReg: TypedOrValueReg) {
         let baseData = MASM::getData(Address::base(address));    
         let data = RegData::readData(baseData, Address::offset(address));
+        let value = RegData::toValue(data);
+
+        if TypedOrValueReg::hasValue(dstReg) {
+            MASM::setValue(TypedOrValueReg::toValueReg(dstReg), value);
+        } else {
+            assert TypedOrValueReg::hasTyped(dstReg);
+            MASM::loadUnboxedValue(value, TypedOrValueReg::type(dstReg),
+                TypedOrValueReg::toTypedReg(dstReg));
+        }
+    }
+
+    op LoadTypedOrValueBaseObjectElementIndex(index: BaseObjectElementIndex, dstReg: TypedOrValueReg) {
+        let baseIndex = BaseValueIndex::inner(BaseObjectElementIndex::inner(index));
+        let baseData = MASM::getData(BaseIndex::base(baseIndex));    
+        let offset = BaseIndex::getOffset(baseIndex);
+
+        let data = RegData::readData(baseData, offset);
         let value = RegData::toValue(data);
 
         if TypedOrValueReg::hasValue(dstReg) {
@@ -571,6 +608,16 @@ ir MASM {
         MASM::setObject(objectReg, Value::toObject(value));
     }
 
+    // Note: this is a no-op in Firefox since TaggedProtos
+    // can be directly treated as Objects without explicit
+    // unboxing.
+    op UnboxObjectProto(srcReg: Reg, destReg: Reg) {
+        let data = MASM::getData(srcReg);
+        let proto = RegData::toTaggedProto(data);
+        let object = TaggedProto::toObject(proto);
+        MASM::setObject(destReg, object);
+    }
+
     op FallibleUnboxBoolean(valueReg: ValueReg, boolReg: Reg, label failure: MASM) {
         let value = MASM::getValue(valueReg);
         let valueIsBool = Value::isBool(value);
@@ -609,6 +656,29 @@ ir MASM {
         let int32 = MASM::getInt32(srcReg);
         let double = Float64::fromInt32(int32);
         MASM::setDouble(destReg, double);
+    }
+
+    op ConvertInt32ValueToDouble(valueReg: ValueReg) {
+        let value = MASM::getValue(valueReg);
+
+        if !Value::isInt32(value) {
+            return;
+        }
+
+        let int32 = Value::toInt32(value);
+        let double = Float64::fromInt32(int32);
+        MASM::setValue(valueReg, Value::fromDouble(double));
+    }
+
+    op LoadObjectProto(objectReg: Reg, protoReg: Reg) {
+        let object = MASM::getObject(objectReg);
+
+        let shape = Object::shapeOf(object);
+        let baseShape = Shape::baseShapeOf(shape);
+        let proto = BaseShape::protoOf(baseShape);
+        let data = RegData::fromTaggedProto(proto);
+
+        MASM::setData(protoReg, data);
     }
 
     op SpectreBoundsCheck32Address(
@@ -767,6 +837,30 @@ ir MASM {
         }
     }
 
+    op BranchTestMagicBaseObjectElementIndex(
+        condition: Condition,
+        index: BaseObjectElementIndex,
+        label branch: MASM,
+    ) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+
+        let baseIndex = BaseValueIndex::inner(BaseObjectElementIndex::inner(index));
+        let baseData = MASM::getData(BaseIndex::base(baseIndex));    
+        let offset = BaseIndex::getOffset(baseIndex);
+
+        let data = RegData::readData(baseData, offset);
+        let value = RegData::toValue(data);
+        let valueIsMagic = Value::isMagic(value);
+
+        if condition == Condition::Equal && valueIsMagic {
+            goto branch;
+        }
+
+        if condition == Condition::NotEqual && !valueIsMagic {
+            goto branch;
+        }
+    }
+
     op BranchTestObjClass(
         condition: Condition, objectReg: Reg, class: Class, scratchReg: Reg, spectreRegToZero: Reg,
         label branch: MASM
@@ -865,6 +959,15 @@ ir MASM {
             }
         } else {
             assert false;
+        }
+    }
+
+    op BranchTestInt32Truthy(truthy: Bool, valueReg: ValueReg, label branch: MASM) {
+        let value = MASM::getValue(valueReg);
+        let int32 = Value::toInt32(value);
+
+        if (!truthy && int32 == 0_i32) || (truthy && int32 != 0_i32) {
+            goto branch;
         }
     }
 
@@ -1183,6 +1286,22 @@ ir MASM {
         MASM::setInt32(valueReg, result);
     }
 
+    op Not32(valueReg: Reg) {
+        let valueInt32 = MASM::getInt32(valueReg);
+        let result = ~valueInt32;
+
+        MASM::setInt32(valueReg, result);
+    }
+
+    op And32(srcReg: Reg, dstReg: Reg) {
+        let lhsInt32 = MASM::getInt32(srcReg);
+        let rhsInt32 = MASM::getInt32(dstReg);
+
+        let result = lhsInt32 & rhsInt32;
+
+        MASM::setInt32(dstReg, result);
+    }
+
     op Or32(srcReg: Reg, dstReg: Reg) {
         let lhsInt32 = MASM::getInt32(srcReg);
         let rhsInt32 = MASM::getInt32(dstReg);
@@ -1190,6 +1309,55 @@ ir MASM {
         let result = lhsInt32 | rhsInt32;
 
         MASM::setInt32(dstReg, result);
+    }
+
+    op Xor32(srcReg: Reg, dstReg: Reg) {
+        let lhsInt32 = MASM::getInt32(srcReg);
+        let rhsInt32 = MASM::getInt32(dstReg);
+
+        let result = lhsInt32 ^ rhsInt32;
+
+        MASM::setInt32(dstReg, result);
+    }
+
+    op FlexibleLshift32(shiftReg: Reg, srcDestReg: Reg) {
+        let shiftInt32 = MASM::getInt32(shiftReg) & 31_i32;
+        let srcInt32 = MASM::getInt32(srcDestReg);
+
+        let result = srcInt32 << shiftInt32;
+
+        MASM::setInt32(srcDestReg, result);
+    }
+
+    op FlexibleRshift32Arithmetic(shiftReg: Reg, srcDestReg: Reg) {
+        let shiftInt32 = MASM::getInt32(shiftReg) & 31_i32;
+        let srcInt32 = MASM::getInt32(srcDestReg);
+
+        let result = srcInt32 >> shiftInt32;
+
+        MASM::setInt32(srcDestReg, result);
+    }
+
+    op FlexibleRshift32(shiftReg: Reg, srcDestReg: Reg) {
+        let shiftInt32 = MASM::getInt32(shiftReg) & 31_i32;
+        let srcInt32 = MASM::getInt32(srcDestReg);
+
+        let result = ((srcInt32 as UInt32) >> (shiftInt32 as UInt32)) as Int32;
+
+        MASM::setInt32(srcDestReg, result);
+    }
+
+    op SplitTagForTest(valueReg: ValueReg, tagReg: Reg) {
+        let value = MASM::getValue(valueReg);
+        let tag = Value::typeOf(value);
+        MASM::setValueTag(tagReg, tag);
+    }
+
+    fn extractTag(valueReg: ValueReg, scratchReg: Reg) emits MASM -> Reg {
+        assert scratchReg != Reg::scratchReg();
+
+        emit MASM::SplitTagForTest(valueReg, scratchReg);
+        return scratchReg;
     }
 
     #[spec]
