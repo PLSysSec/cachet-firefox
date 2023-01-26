@@ -11,7 +11,9 @@ enum RegDataType {
     UnboxedValue,
     NativeObjectSlots,
     NativeObjectElements,
+    ArgumentsData,
     ValueTag,
+    TaggedProto,
     Class,
 }
 
@@ -109,6 +111,27 @@ impl RegData {
 
     unsafe fn toNativeObjectElementsUnchecked(data: RegData) -> NativeObjectElements;
 
+    fn isArgumentsData(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::ArgumentsData
+    }
+
+    fn fromArgumentsData(argsData: ArgumentsData) -> RegData {
+        let data = (unsafe { RegData::fromArgumentsDataUnchecked(argsData) });
+        assume RegData::isArgumentsData(data);
+        assume (unsafe { RegData::toArgumentsDataUnchecked(data) }) == argsData;
+        data
+    }
+
+    unsafe fn fromArgumentsDataUnchecked(argsData: ArgumentsData) -> RegData;
+
+    fn toArgumentsData(data: RegData) -> ArgumentsData {
+        assert RegData::isArgumentsData(data);
+        let argsData = (unsafe { RegData::toArgumentsDataUnchecked(data) });
+        assume (unsafe { RegData::fromArgumentsDataUnchecked(argsData) }) == data;
+        argsData
+    }
+
+    unsafe fn toArgumentsDataUnchecked(data: RegData) -> ArgumentsData;
 
     fn isValueTag(data: RegData) -> Bool {
         RegData::typeOf(data) == RegDataType::ValueTag
@@ -131,7 +154,28 @@ impl RegData {
     }
 
     unsafe fn toValueTypeUnchecked(data: RegData) -> ValueType;
+    
+    fn isTaggedProto(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::TaggedProto
+    }
 
+    fn fromTaggedProto(proto: TaggedProto) -> RegData {
+        let data = (unsafe { RegData::fromTaggedProtoUnchecked(proto) });
+        assume RegData::isTaggedProto(data);
+        assume (unsafe { RegData::toTaggedProtoUnchecked(data) }) == proto;
+        data
+    }
+
+    unsafe fn fromTaggedProtoUnchecked(proto: TaggedProto) -> RegData;
+
+    fn toTaggedProto(data: RegData) -> TaggedProto {
+        assert RegData::isTaggedProto(data);
+        let proto = (unsafe { RegData::toTaggedProtoUnchecked(data) });
+        assume (unsafe { RegData::fromTaggedProtoUnchecked(proto) }) == data;
+        proto
+    }
+
+    unsafe fn toTaggedProtoUnchecked(data: RegData) -> TaggedProto;
 
     fn isClass(data: RegData) -> Bool {
         RegData::typeOf(data) == RegDataType::Class
@@ -759,7 +803,11 @@ impl DataViewObject {
     }
 }
 
-struct ArgumentsObject <: NativeObject;
+struct ArgumentsObject;
+
+struct ArgumentsData {
+    numArgs: UInt32
+}
 
 struct UnmappedArgumentsObject <: ArgumentsObject;
 
@@ -826,6 +874,13 @@ struct BaseShape;
 
 impl BaseShape {
     fn classOf(baseShape: BaseShape) -> Class;
+
+    fn protoOf(baseShape: BaseShape) -> TaggedProto {
+        (unsafe { BaseShape::protoOfUnchecked(heap, baseShape) })
+    }
+
+    unsafe fn protoOfUnchecked(heap: Heap, baseShape: BaseShape) -> TaggedProto;
+
 }
 
 struct Class;
@@ -865,3 +920,39 @@ struct Atom <: String;
 struct Symbol;
 
 struct BigInt;
+
+#[spec]
+enum ProtoTag {
+    Null,
+    Lazy,
+    Object,
+}
+
+struct TaggedProto;
+
+impl TaggedProto {
+    #[spec]
+    fn tag(proto: TaggedProto) -> ProtoTag;
+
+    #[refined]
+    fn isNull(proto: TaggedProto) -> Bool {
+        TaggedProto::tag(proto) == ProtoTag::Null
+    }
+
+    #[refined]
+    fn isLazy(proto: TaggedProto) -> Bool {
+        TaggedProto::tag(proto) == ProtoTag::Lazy
+    }
+
+    #[refined]
+    fn isObject(proto: TaggedProto) -> Bool {
+        TaggedProto::tag(proto) == ProtoTag::Object
+    }
+
+    fn toObject(proto: TaggedProto) -> Object {
+        assert TaggedProto::isObject(proto);
+        (unsafe { TaggedProto::toObjectUnchecked(proto) })
+    }
+
+    unsafe fn toObjectUnchecked(proto: TaggedProto) -> Object;
+}
