@@ -1781,6 +1781,14 @@ impl<B: GfxBackend> Device<B> {
                 .allocate(&self.raw, &layout.raw, &layout.desc_count, 1)?;
         let mut desc_set = desc_sets.pop().unwrap();
 
+        // XXX(spinda): Because of the way the lifetime bounds are set up, the
+        // call to `write_descriptor_set` below requires that `desc_set` outlive
+        // `write_map`. Without the following line, since locals are dropped in
+        // reverse order of declaration, `desc_set` ends up getting dropped
+        // before `write_map`. To work around this, we give `write_map` a new
+        // lease on life.
+        let write_map = write_map;
+
         // Set the descriptor set's label for easier debugging.
         if let Some(label) = desc.label.as_ref() {
             unsafe {
