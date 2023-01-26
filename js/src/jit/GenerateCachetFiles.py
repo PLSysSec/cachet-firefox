@@ -15,7 +15,7 @@ from tempfile import TemporaryDirectory
 from collections import OrderedDict
 from mozbuild.preprocessor import Preprocessor
 
-def generate_cacheir_impl(c_out, cachet_src):
+def generate_cachet_impl(c_out, cachet_src):
     output_ext = Path(c_out.name).suffix
     with TemporaryDirectory() as dir:
         h_tmp = os.path.join(dir, "CachetGenerated.h")
