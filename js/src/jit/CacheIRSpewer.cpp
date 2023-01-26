@@ -177,6 +177,7 @@ bool jit::SpewCacheIRStubFields(JSContext* const cx, GenericPrinter& out,
   HashSet<BaseShape*> baseShapes(cx);
   HashSet<const JSClass*> classes(cx);
   HashSet<JSObject*> taggedProtos(cx);
+  HashSet<JSString*> strings(cx);
 
   while (true) {
     const StubField::Type fieldType(stubInfo->fieldType(field));
@@ -231,7 +232,14 @@ bool jit::SpewCacheIRStubFields(JSContext* const cx, GenericPrinter& out,
       case StubField::Type::String: {
         GCPtrString& stringField =
             stubInfo->getStubField<JSString*>(stubData, offset);
-        out.printf("%p\n", stringField.get());
+	JSString* const string(stringField.get());
+        out.printf("%p\n", string);
+        auto ptr = strings.lookupForAdd(string);
+        if (!ptr) {
+          if (!strings.add(ptr, string)) {
+            return false;
+          }
+        }
         break;
       }
       case StubField::Type::BaseScript: {
@@ -347,6 +355,15 @@ bool jit::SpewCacheIRStubFields(JSContext* const cx, GenericPrinter& out,
     }
   }
 
+  for (auto iter = strings.iter(); !iter.done(); iter.next()) {
+    JSString* const string(iter.get());
+    out.putChar('\n');
+
+    if (string->isAtom()) {
+      out.printf("StringIsAtom                  %p\n", string);
+    }
+  }
+
   return true;
 }
 
@@ -362,6 +379,10 @@ bool jit::SpewCacheIRStub(JSContext* const cx, GenericPrinter& out,
     const CacheKindSignature::Input input(sig.inputs[inputIndex]);
     out.printf("Input                         [%sId %s] %u\n",
                GetCacheTypeName(input.type), input.name, inputIndex);
+  }
+  if (sig.output) {
+    const MIRType outputType(MIRTypeFromCacheType(*sig.output));
+    out.printf("Output                        %s\n", StringFromMIRType(outputType));
   }
   out.printf("%%\n\n");
 
