@@ -532,11 +532,102 @@ Type_Int32::Val Fn_offset(Cachet_ContextRef cx, Type_Address::Ref param_address)
 
 };
 
+namespace Impl_Scale {
+
+inline Type_Scale::Ref Variant_TimesOne(Cachet_ContextRef cx) {
+  return TimesOne;
+}
+
+inline Type_Scale::Ref Variant_TimesTwo(Cachet_ContextRef cx) {
+  return TimesTwo;
+}
+
+inline Type_Scale::Ref Variant_TimesFour(Cachet_ContextRef cx) {
+  return TimesFour;
+}
+
+inline Type_Scale::Ref Variant_TimesEight(Cachet_ContextRef cx) {
+  return TimesEight;
+}
+
+};  // namespace Impl_Scale
+
+
+namespace Impl_BaseIndex {
+
+Type_Reg::Val Fn_base(Cachet_ContextRef cx, Type_BaseIndex::Ref param_baseIndex) {
+  return param_baseIndex.base;
+}
+
+Type_Reg::Val Fn_index(Cachet_ContextRef cx, Type_BaseIndex::Ref param_baseIndex) {
+  return param_baseIndex.index;
+}
+
+Type_Scale::Val Fn_scale(Cachet_ContextRef cx, Type_BaseIndex::Ref param_baseIndex) {
+  return param_baseIndex.scale;
+}
+
+Type_UInt32::Val Fn_offset(Cachet_ContextRef cx, Type_BaseIndex::Ref param_baseIndex) {
+  return param_baseIndex.offset;
+}
+
+Type_BaseIndex::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_Reg::Ref param_base, Type_Reg::Ref param_index, Type_Scale::Ref param_scale, Type_UInt32::Ref param_offset) {
+  return BaseIndex(param_base, param_index, param_scale, param_offset);
+}
+
+};  // namespace Impl_BaseIndex
+
+namespace Impl_BaseValueIndex {
+
+Type_BaseIndex::Val Fn_inner(Cachet_ContextRef cx, Type_BaseValueIndex::Ref param_baseValueIndex) {
+  return static_cast<BaseIndex>(param_baseValueIndex);
+}
+
+Type_BaseValueIndex::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_BaseIndex::Ref param_inner) {
+  return BaseValueIndex(param_inner.base, param_inner.index, param_inner.offset);
+}
+
+};  // namespace Impl_BaseValueIndex
+
+namespace Impl_BaseObjectElementIndex {
+
+Type_BaseValueIndex::Val Fn_inner(Cachet_ContextRef cx, Type_BaseObjectElementIndex::Ref param_baseObjectElementIndex) {
+  return static_cast<BaseValueIndex>(param_baseObjectElementIndex);
+}
+
+Type_BaseObjectElementIndex::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_BaseValueIndex::Ref param_inner) {
+  return BaseObjectElementIndex(param_inner.base, param_inner.index, param_inner.offset);
+}
+
+};  // namespace Impl_BaseObjectElementIndex
+
+namespace Impl_BaseObjectSlotIndex {
+
+Type_BaseValueIndex::Val Fn_inner(Cachet_ContextRef cx, Type_BaseObjectSlotIndex::Ref param_baseObjectSlotIndex) {
+  return static_cast<BaseValueIndex>(param_baseObjectSlotIndex);
+}
+
+Type_BaseObjectSlotIndex::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_BaseValueIndex::Ref param_inner) {
+  return BaseObjectSlotIndex(param_inner.base, param_inner.index);
+}
+
+};  // namespace Impl_BaseObjectSlotIndex
+
 
 namespace Impl_MASM {
 
+void EmitOp_AssumeUnreachable(Cachet_ContextRef cx, IR_MASM::OpsRef ops) {
+  ops.assumeUnreachable("Cachet unreachable");
+}
+
 void EmitOp_Mov(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                       Type_Reg::Ref param_srcReg, Type_Reg::Ref param_dstReg) {
+  ops.mov(param_srcReg, param_dstReg);
+}
+
+void EmitOp_MovData(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                    Type_Reg::Ref param_srcReg,
+                    Type_Reg::Ref param_dstReg) {
   ops.mov(param_srcReg, param_dstReg);
 }
 
@@ -577,6 +668,19 @@ void EmitOp_LoadPtrAddress(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   ops.loadPtr(param_address, param_dstReg);
 }
 
+void EmitOp_LoadValueBaseObjectElementIndex(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                            Type_BaseObjectElementIndex::Ref param_index,
+                                            Type_ValueReg::Ref param_dstReg) {
+  ops.loadValue(param_index, param_dstReg);
+}
+
+void EmitOp_TestObjectSet(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                          Type_Condition::Ref param_condition,
+                          Type_ValueReg::Ref param_valueReg,
+                          Type_Reg::Ref param_dstReg) {
+  ops.testObjectSet(param_condition, param_valueReg, param_dstReg);
+}
+
 void EmitOp_UnboxInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                           Type_ValueReg::Ref param_valueReg,
                           Type_Reg::Ref param_int32Reg) {
@@ -587,6 +691,21 @@ void EmitOp_UnboxObject(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                Type_ValueReg::Ref param_valueReg,
                                Type_Reg::Ref param_objectReg) {
   ops.unboxObject(param_valueReg, param_objectReg);
+}
+
+void EmitOp_ConvertInt32ToDouble(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                 Type_Reg::Ref param_srcReg,
+                                 Type_FloatReg::Ref param_destReg) {
+  ops.convertInt32ToDouble(param_srcReg, param_destReg);
+}
+
+void EmitOp_SpectreBoundsCheck32Address(Cachet_ContextRef cx,
+                                        IR_MASM::OpsRef ops,
+                                        Type_Reg::Ref param_indexReg,
+                                        Type_Address::Ref param_length,
+                                        Type_Reg::Ref param_maybeScratch,
+                                        IR_MASM::LabelRef param_failure) {
+  ops.spectreBoundsCheck32(param_indexReg, param_length, param_maybeScratch, param_failure);
 }
 
 void EmitOp_BranchTestNumber(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
@@ -628,6 +747,14 @@ void EmitOp_BranchTestObject(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                     Type_ValueReg::Ref param_valueReg,
                                     IR_MASM::LabelRef param_branch) {
   ops.branchTestObject(param_condition, param_valueReg, param_branch);
+}
+
+void EmitOp_BranchTestMagic(Cachet_ContextRef cx,
+                            IR_MASM::OpsRef ops,
+                            Type_Condition::Ref param_condition,
+                            Type_ValueReg::Ref param_valueReg,
+                            IR_MASM::LabelRef param_branch) {
+  ops.branchTestMagic(param_condition, param_valueReg, param_branch);
 }
 
 void EmitOp_BranchTestObjClass(Cachet_ContextRef cx,
@@ -866,6 +993,10 @@ Type_Bool::Val Impl_Value::Fn_toBoolUnchecked(Cachet_ContextRef cx, Type_Value::
   return param_value.toBoolean();
 }
 
+Type_Value::Val Impl_Value::Fn_getUndefinedUnchecked(Cachet_ContextRef cx) {
+  return JS::UndefinedValue();
+}
+
 Type_Value::Val Impl_Value::Fn_fromObjectUnchecked(Cachet_ContextRef cx,
                                                    Type_Object::Ref param_value) {
   return ObjectValue(*param_value);
@@ -956,13 +1087,13 @@ namespace Impl_NativeObjectElements {
 Type_UInt32::Val Fn_getLengthUnchecked(Cachet_ContextRef cx,
                                        Type_Heap::Ref param_heap,
                                        Type_NativeObjectElements::Ref param_elements) {
-  return *(Type_UInt32::Val *)((char *)param_elements + Impl_NativeObjectElements::Var_offsetOfLength());
+  return *(Type_UInt32::Val *)((char *)param_elements + Impl_NativeObjectElements::Var_offsetOfLength(cx));
 }
 
 Type_UInt32::Val Fn_getInitializedLengthUnchecked(Cachet_ContextRef cx,
                                                   Type_Heap::Ref param_heap,
                                                   Type_NativeObjectElements::Ref param_elements) {
-  return *(Type_UInt32::Val *)((char *)param_elements + Impl_NativeObjectElements::Var_offsetOfInitializedLength());
+  return *(Type_UInt32::Val *)((char *)param_elements + Impl_NativeObjectElements::Var_offsetOfInitializedLength(cx));
 }
 
 Type_Value::Val Fn_getElementUnchecked(Cachet_ContextRef cx,
