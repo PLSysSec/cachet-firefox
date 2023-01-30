@@ -2,34 +2,162 @@
 
 import "./MASM.cachet";
 
+enum OperandLocationKind {
+    Uninitialized,
+    PayloadReg,
+    ValueReg,
+}
+
+struct OperandLocation;
+
+impl OperandLocation {
+    fn kind(loc: OperandLocation) -> OperandLocationKind; 
+
+    fn newUninitialized() -> OperandLocation {
+        let loc = (unsafe { OperandLocation::newUninitializedUnchecked() });
+        assume OperandLocation::kind(loc) == OperandLocationKind::Uninitialized;
+        loc
+    }
+
+    unsafe fn newUninitializedUnchecked() -> OperandLocation;
+
+    fn setValueReg(out loc: OperandLocation, valueReg: ValueReg) {
+        (unsafe { OperandLocation::setValueRegUnchecked(out loc, valueReg) }); 
+        assume OperandLocation::kind(loc) == OperandLocationKind::ValueReg;
+        assume (unsafe { OperandLocation::getValueRegUnchecked(loc) } ) == valueReg;
+    }
+
+    unsafe fn setValueRegUnchecked(out loc: OperandLocation, valueReg: ValueReg);
+
+    fn getValueReg(loc: OperandLocation) -> ValueReg {
+        assert OperandLocation::kind(loc) == OperandLocationKind::ValueReg;
+        let valueReg = (unsafe { OperandLocation::getValueRegUnchecked(loc) });
+        valueReg
+    }
+
+    unsafe fn getValueRegUnchecked(loc: OperandLocation) -> ValueReg;
+
+    fn setPayloadReg(out loc: OperandLocation, reg: Reg, type: ValueType) {
+        (unsafe { OperandLocation::setPayloadRegUnchecked(out loc, reg, type) }); 
+        assume OperandLocation::kind(loc) == OperandLocationKind::PayloadReg;
+        assume (unsafe { OperandLocation::getPayloadRegUnchecked(loc) } ) == reg;
+        assume (unsafe { OperandLocation::getPayloadTypeUnchecked(loc) } ) == type;
+    }
+
+    unsafe fn setPayloadRegUnchecked(out loc: OperandLocation, reg: Reg, type: ValueType);
+
+    fn getPayloadReg(loc: OperandLocation) -> Reg {
+        assert OperandLocation::kind(loc) == OperandLocationKind::PayloadReg;
+        let reg = (unsafe { OperandLocation::getPayloadRegUnchecked(loc) });
+        reg
+    }
+
+    unsafe fn getPayloadRegUnchecked(loc: OperandLocation) -> Reg;
+
+    fn getPayloadType(loc: OperandLocation) -> ValueType {
+        assert OperandLocation::kind(loc) == OperandLocationKind::PayloadReg;
+        let type = (unsafe { OperandLocation::getPayloadTypeUnchecked(loc) });
+        type
+    }
+
+    unsafe fn getPayloadTypeUnchecked(loc: OperandLocation) -> ValueType;
+}
+
 struct OperandId;
 
 struct ValueId <: OperandId;
 struct ObjectId <: OperandId;
 struct Int32Id <: OperandId;
 
+struct TypedId <: OperandId;
+
+impl TypedId {
+    fn type(typedId: TypedId) -> ValueType;
+
+    fn isValueId(typedId: TypedId) -> Bool;
+
+    fn fromValueId(valueId: ValueId, type: ValueType) -> TypedId {
+        let typedId = (unsafe { TypedId::fromValueIdUnchecked(valueId, type) });
+        assume TypedId::isValueId(typedId);
+        assume TypedId::type(typedId) == type;
+        assume (unsafe { TypedId::toValueIdUnchecked(typedId) }) == valueId;
+        assume (valueId as OperandId) == (typedId as OperandId);
+        typedId
+    }
+
+    unsafe fn fromValueIdUnchecked(valueId: ValueId, type: ValueType) -> TypedId; 
+
+    fn toValueId(typedId: TypedId) -> ValueId {
+        assert TypedId::isValueId(typedId);
+        let type = TypedId::type(typedId);
+        let valueId = (unsafe { TypedId::toValueIdUnchecked(typedId) });
+        assume (unsafe { TypedId::fromValueIdUnchecked(valueId, type) }) == typedId; 
+        valueId
+    }
+
+    unsafe fn toValueIdUnchecked(typedId: TypedId) -> ValueId;
+
+    fn fromObjectId(objectId: ObjectId) -> TypedId {
+        let typedId = (unsafe { TypedId::fromObjectIdUnchecked(objectId) });
+        assume !TypedId::isValueId(typedId);
+        assume TypedId::type(typedId) == ValueType::Object;
+        assume (unsafe { TypedId::toObjectIdUnchecked(typedId) }) == objectId;
+        assume (objectId as OperandId) == (typedId as OperandId);
+        typedId
+    }
+
+    unsafe fn fromObjectIdUnchecked(objectId: ObjectId) -> TypedId;
+
+    fn toObjectId(typedId: TypedId) -> ObjectId {
+        assert !TypedId::isValueId(typedId);
+        assert TypedId::type(typedId) == ValueType::Object;
+        let objectId = (unsafe { TypedId::toObjectIdUnchecked(typedId) });
+        assume (unsafe { TypedId::fromObjectIdUnchecked(objectId) }) == typedId;
+        objectId
+    }
+
+    unsafe fn toObjectIdUnchecked(typedId: TypedId) -> ObjectId;
+
+    fn fromInt32Id(int32Id: Int32Id) -> TypedId {
+        let typedId = (unsafe { TypedId::fromInt32IdUnchecked(int32Id) });
+        assume !TypedId::isValueId(typedId);
+        assume TypedId::type(typedId) == ValueType::Int32;
+        assume (unsafe { TypedId::toInt32IdUnchecked(typedId) }) == int32Id;
+        assume (int32Id as OperandId) == (typedId as OperandId);
+        typedId
+    }
+
+    unsafe fn fromInt32IdUnchecked(int32Id: Int32Id) -> TypedId;
+
+    fn toInt32Id(typedId: TypedId) -> Int32Id {
+        assert !TypedId::isValueId(typedId);
+        assert TypedId::type(typedId) == ValueType::Int32;
+        let int32Id = (unsafe { TypedId::toInt32IdUnchecked(typedId) });
+        assume (unsafe { TypedId::fromInt32IdUnchecked(int32Id) }) == typedId;
+        int32Id
+    }
+
+    unsafe fn toInt32IdUnchecked(typedId: TypedId) -> Int32Id;
+}
+
 struct Int32Field;
 struct ShapeField;
 
 ir CacheIR emits MASM {
-    op GuardToObject(valueId: ValueId, objectId: ObjectId) {
+    op GuardToObject(valueId: ValueId) {
         let valueReg = CacheIR::useValueReg(valueId);
-        let objectReg = CacheIR::useObjectReg(objectId);
 
         CacheIR::addFailurePath(out label failure);
 
         emit MASM::BranchTestObject(Condition::NotEqual, valueReg, failure);
-        emit MASM::UnboxObject(valueReg, objectReg);
     }
 
-    op GuardToInt32(valueId: ValueId, int32Id: Int32Id) {
+    op GuardToInt32(valueId: ValueId) {
         let valueReg = CacheIR::useValueReg(valueId);
-        let int32Reg = CacheIR::useInt32Reg(int32Id);
 
         CacheIR::addFailurePath(out label failure);
 
         emit MASM::BranchTestInt32(Condition::NotEqual, valueReg, failure);
-        emit MASM::UnboxInt32(valueReg, int32Reg);
     }
 
     op Int32AddResult(lhsId: Int32Id, rhsId: Int32Id) {
@@ -49,14 +177,72 @@ ir CacheIR emits MASM {
     fn addFailurePath(out label failure: MASM);
 
     fn allocateReg() -> Reg;
+    fn allocateKnownReg(reg: Reg);
     fn releaseReg(reg: Reg);
 
     fn allocateValueReg() -> ValueReg;
     fn releaseValueReg(valueReg: ValueReg);
 
-    fn useValueReg(valueId: ValueId) -> ValueReg;
-    fn useObjectReg(id: ObjectId) -> Reg;
-    fn useInt32Reg(id: Int32Id) -> Reg;
+
+    fn getOperandLocation(id: OperandId) -> OperandLocation;
+    fn setOperandLocation(id: OperandId, loc: OperandLocation);
+
+    #[refined]
+    fn useReg(id: TypedId) emits MASM -> Reg {
+        let operandId = id as OperandId; 
+        let location = CacheIR::getOperandLocation(operandId);
+        let locationKind = OperandLocation::kind(location);
+
+        if locationKind == OperandLocationKind::PayloadReg {
+            return OperandLocation::getPayloadReg(location);
+        } else if locationKind == OperandLocationKind::ValueReg {
+            let valueReg = OperandLocation::getValueReg(location);
+            CacheIR::releaseValueReg(valueReg);
+            let reg = ValueReg::scratchReg(valueReg);
+            CacheIR::allocateKnownReg(reg);
+            emit MASM::UnboxNonDouble(valueReg, reg, TypedId::type(id));
+            OperandLocation::setPayloadReg(out location, reg, TypedId::type(id));
+            CacheIR::setOperandLocation(operandId, location);
+            return reg;
+        } else {
+            assert false;
+        }
+        return OperandLocation::getPayloadReg(location);
+    }
+
+    #[refined]
+    fn useValueReg(valueId: ValueId) emits MASM -> ValueReg {
+        let operandId = valueId as OperandId; 
+        let location = CacheIR::getOperandLocation(operandId);
+        let locationKind = OperandLocation::kind(location);
+
+        if locationKind == OperandLocationKind::ValueReg {
+            return OperandLocation::getValueReg(location);
+        } else if locationKind == OperandLocationKind::PayloadReg {
+            let reg = OperandLocation::getPayloadReg(location);
+            let valTy = OperandLocation::getPayloadType(location);
+            let valueReg = CacheIR::allocateValueReg();
+            emit MASM::TagValue(valTy, reg, valueReg);
+            OperandLocation::setValueReg(out location, valueReg);
+            CacheIR::releaseReg(reg);
+            return valueReg;
+        } else {
+            assert false;
+        }
+        return OperandLocation::getValueReg(location);
+    }
+
+    #[refined]
+    fn useObjectReg(id: ObjectId) emits MASM -> Reg {
+        let typedId = TypedId::fromObjectId(id);
+        CacheIR::useReg(typedId)
+    }
+
+    #[refined]
+    fn useInt32Reg(id: Int32Id) emits MASM -> Reg {
+        let typedId = TypedId::fromInt32Id(id);
+        CacheIR::useReg(typedId)
+    }
 
     var outputReg: ValueReg;
 

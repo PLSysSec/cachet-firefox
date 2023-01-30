@@ -9,6 +9,10 @@ struct ValueReg;
 // #[cfg(verify)]
 // type ValueReg = Reg;
 
+impl ValueReg {
+    fn scratchReg(valueReg: ValueReg) -> Reg;
+}
+
 enum Condition {
     Equal,
     NotEqual,
@@ -34,6 +38,29 @@ ir MASM {
     op UnboxInt32(valueReg: ValueReg, int32Reg: Reg) {
       let value = MASM::getValue(valueReg);
       MASM::setInt32(int32Reg, Value::toInt32(value)); 
+    }
+
+    op UnboxNonDouble(valueReg: ValueReg, dstReg: Reg, valTy: ValueType) {
+        assert valTy != ValueType::Double;
+
+        let value = MASM::getValue(valueReg);
+
+        if valTy == ValueType::Int32 {
+            let i = Value::toInt32(value);
+            MASM::setInt32(dstReg, i);
+        } else if valTy == ValueType::Bool {
+            let b = Value::toBool(value);
+            MASM::setBool(dstReg, b);
+        } else if valTy == ValueType::String {
+            let s = Value::toString(value);
+            MASM::setString(dstReg, s);
+        } else if valTy == ValueType::Symbol {
+            let s = Value::toSymbol(value);
+            MASM::setSymbol(dstReg, s);
+        } else if valTy == ValueType::BigInt {
+            let b = Value::toBigInt(value);
+            MASM::setBigInt(dstReg, b);
+        }
     }
 
     op BranchTestObject(condition: Condition, valueReg: ValueReg, label branch: MASM) {

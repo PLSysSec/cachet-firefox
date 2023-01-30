@@ -22,6 +22,7 @@ namespace js {
 namespace jit {
 
 class CacheIRCompiler;
+class OperandLocation;
 
 namespace cachet {
 
@@ -126,10 +127,37 @@ using Type_ValueReg = PrimitiveType<ValueOperand>;
 using Type_Reg = PrimitiveType<Register>;
 using Type_Condition = PrimitiveType<Assembler::Condition>;
 
+using Type_OperandLocation = PrimitiveType<OperandLocation>;
+
+enum class OperandLocationKind {
+  Uninitialized = 0,
+  PayloadReg,
+  ValueReg
+};
+
+using Type_OperandLocationKind = PrimitiveType<OperandLocationKind>;
+
 using Type_OperandId = PrimitiveType<OperandId>;
 using Type_ValueId = PrimitiveType<ValOperandId>;
 using Type_ObjectId = PrimitiveType<ObjOperandId>;
 using Type_Int32Id = PrimitiveType<Int32OperandId>;
+
+class TypedOperandIdW : public TypedOperandId {
+  bool isValueId_;
+
+ public:
+  TypedOperandIdW(TypedOperandId id, bool isValueId)
+      : TypedOperandId(id), isValueId_(isValueId) {}
+
+  bool operator==(const TypedOperandIdW& other) const { return id() == other.id() && type() == other.type(); }
+  bool operator!=(const TypedOperandIdW& other) const { return id() != other.id() || type() != other.type(); }
+
+  bool isValueId() {
+    return isValueId_;
+  }
+};
+
+using Type_TypedId = PrimitiveType<TypedOperandIdW>;
 
 using Type_Int32Field = PrimitiveType<uint32_t>;
 using Type_ShapeField = PrimitiveType<uint32_t>;

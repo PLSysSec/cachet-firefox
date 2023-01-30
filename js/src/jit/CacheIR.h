@@ -129,6 +129,9 @@ class OperandId {
   OperandId() : id_(InvalidId) {}
   uint16_t id() const { return id_; }
   bool valid() const { return id_ != InvalidId; }
+
+  bool operator==(const OperandId& other) const { return id_ == other.id_; }
+  bool operator!=(const OperandId& other) const { return id_ != other.id_; }
 };
 
 class ValOperandId : public OperandId {
@@ -217,6 +220,9 @@ class TypedOperandId : public OperandId {
       : OperandId(val.id()), type_(type) {}
 
   JSValueType type() const { return type_; }
+
+  bool operator==(const TypedOperandId& other) const { return id_ == other.id_ && type_ == other.type_; }
+  bool operator!=(const TypedOperandId& other) const { return id_ != other.id_ || type_ != other.type_; }
 };
 
 enum class CacheKind : uint8_t {
