@@ -115,6 +115,9 @@ using Type_Heap = Type_Unit;
 using Type_ValueType = PrimitiveType<JS::ValueType>;
 using Type_Value = GCType<JS::Value>;
 using Type_Object = GCType<JSObject*>;
+using Type_String = GCType<JSString*>;
+using Type_Symbol = GCType<JS::Symbol*>;
+using Type_BigInt = GCType<JS::BigInt*>;
 using Type_NativeObject = GCType<js::NativeObject*>;
 using Type_Shape = GCType<js::Shape*>;
 using Type_Class = PrimitiveType<const JSClass*>;
@@ -123,8 +126,10 @@ using Type_ValueReg = PrimitiveType<ValueOperand>;
 using Type_Reg = PrimitiveType<Register>;
 using Type_Condition = PrimitiveType<Assembler::Condition>;
 
+using Type_OperandId = PrimitiveType<OperandId>;
 using Type_ValueId = PrimitiveType<ValOperandId>;
 using Type_ObjectId = PrimitiveType<ObjOperandId>;
+using Type_Int32Id = PrimitiveType<Int32OperandId>;
 
 using Type_Int32Field = PrimitiveType<uint32_t>;
 using Type_ShapeField = PrimitiveType<uint32_t>;
@@ -136,7 +141,13 @@ inline Type_Heap::MutRef Var_heap(Cachet_ContextRef cx) {
 
 namespace IR_MASM {
   using LabelRef = Label*;
+  using LabelLocal = Label*;
+  using LabelMutRef = Label*&;
   using OpsRef = MacroAssembler&;
+
+  LabelLocal NewLabel(Cachet_ContextRef cx);
+  LabelMutRef ToLabelMutRef(LabelLocal& label);
+  LabelRef ToLabelRef(LabelLocal& label);
 }
 
 

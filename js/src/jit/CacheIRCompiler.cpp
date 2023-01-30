@@ -1558,16 +1558,16 @@ bool CacheIRCompiler::emitGuardToObject(ValOperandId inputId) {
     return true;
   }
 
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_GuardToObject(cachet::CachetContext {this, cx_}, inputId, ObjOperandId(inputId.id()));
+  // input.setPayloadReg(reg, JSVAL_TYPE_OBJECT);
+#else
   ValueOperand input = allocator.useValueRegister(masm, inputId);
 
   FailurePath* failure;
   if (!addFailurePath(&failure)) {
     return false;
   }
-#ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardToObject(cachet::CachetContext {this, cx_}, inputId, ObjOperandId(inputId.id()), failure->label());
-  // input.setPayloadReg(reg, JSVAL_TYPE_OBJECT);
-#else
   masm.branchTestObject(Assembler::NotEqual, input, failure->label());
 #endif
   return true;
@@ -2705,6 +2705,9 @@ bool CacheIRCompiler::emitDoublePowResult(NumberOperandId lhsId,
 bool CacheIRCompiler::emitInt32AddResult(Int32OperandId lhsId,
                                          Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_Int32AddResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
+#else
   AutoOutputRegister output(*this);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
 
@@ -2719,6 +2722,7 @@ bool CacheIRCompiler::emitInt32AddResult(Int32OperandId lhsId,
   masm.mov(rhs, scratch);
   masm.branchAdd32(Assembler::Overflow, lhs, scratch, failure->label());
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#endif
 
   return true;
 }

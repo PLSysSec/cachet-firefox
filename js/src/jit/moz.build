@@ -262,14 +262,14 @@ if CONFIG["JS_CACHET"]:
         "CachetGenerated.h",
         script="GenerateCachetFiles.py",
         entry_point="generate_cachet_impl",
-        inputs=["CacheIR.cachet"],
+        inputs=["cachet/CacheIR.cachet"],
     )
 
     GeneratedFile(
         "CachetGenerated.inc",
         script="GenerateCachetFiles.py",
         entry_point="generate_cachet_impl",
-        inputs=["CacheIR.cachet"],
+        inputs=["cachet/CacheIR.cachet"],
     )
 
 if CONFIG["JS_CACHET"]:

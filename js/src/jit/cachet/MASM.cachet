@@ -1,0 +1,137 @@
+// vim: set tw=99 ts=4 sts=4 sw=4 et:
+
+import "./JS.cachet";
+
+struct Reg;
+
+// #[cfg(cpp)]
+struct ValueReg;
+// #[cfg(verify)]
+// type ValueReg = Reg;
+
+enum Condition {
+    Equal,
+    NotEqual,
+    Overflow,
+    Zero,
+    NonZero,
+    Signed,
+    NotSigned,
+    GreaterThan,
+    LessThan,
+}
+
+ir MASM {
+    op Mov(srcReg: Reg, dstReg: Reg) {
+        MASM::setInt32(dstReg, MASM::getInt32(srcReg));
+    }
+
+    op UnboxObject(valueReg: ValueReg, objectReg: Reg) {
+        let value = MASM::getValue(valueReg);
+        MASM::setObject(objectReg, Value::toObject(value));
+    }
+
+    op UnboxInt32(valueReg: ValueReg, int32Reg: Reg) {
+      let value = MASM::getValue(valueReg);
+      MASM::setInt32(int32Reg, Value::toInt32(value)); 
+    }
+
+    op BranchTestObject(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        let value = MASM::getValue(valueReg);
+        let valueIsObject = Value::isObject(value);
+
+        if condition == Condition::Equal {
+            if valueIsObject {
+                goto branch;
+            }
+        }
+
+        if condition == Condition::NotEqual {
+            if !valueIsObject {
+                goto branch;
+            }
+        }
+    }
+
+    op BranchTestInt32(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        let value = MASM::getValue(valueReg);
+        let valueIsInt32 = Value::isInt32(value);
+
+        if condition == Condition::Equal {
+            if valueIsInt32 {
+                goto branch;
+            }
+        } else if condition == Condition::NotEqual {
+            if !valueIsInt32 {
+                goto branch;
+            }
+        } else {
+            assert false;
+        }
+    }
+
+    op TagValue(valTy: ValueType, payload: Reg, dest: ValueReg) {
+        // TODO: Don't have getters/setters for other types yet
+        if valTy == ValueType::Int32 {
+            let i = MASM::getInt32(payload);
+            let val = Value::fromInt32(i);
+            MASM::setValue(dest, val);
+        } else if valTy == ValueType::Bool {
+            let b = MASM::getBool(payload);
+            let val = Value::fromBool(b);
+            MASM::setValue(dest, val);
+        } else if valTy == ValueType::String {
+            let s = MASM::getString(payload);
+            let val = Value::fromString(s);
+            MASM::setValue(dest, val);
+        } else if valTy == ValueType::Symbol {
+            let s = MASM::getSymbol(payload);
+            let val = Value::fromSymbol(s);
+            MASM::setValue(dest, val);
+        } else if valTy == ValueType::BigInt {
+            let b = MASM::getBigInt(payload);
+            let val = Value::fromBigInt(b);
+            MASM::setValue(dest, val);
+        }
+    }
+
+    op BranchAdd32(condition: Condition, srcReg: Reg, dstReg: Reg, label branch: MASM) {
+        let lhsInt32 = MASM::getInt32(srcReg);
+        let rhsInt32 = MASM::getInt32(dstReg);
+
+        let result = lhsInt32 + rhsInt32;
+
+        assert condition == Condition::Overflow;
+        if lhsInt32 > 0_i32 && rhsInt32 > 0_i32 && result < 0_i32 {
+            goto branch;
+        }
+
+        if lhsInt32 < 0_i32 && rhsInt32 < 0_i32 && result > 0_i32 {
+            goto branch;
+        }
+
+        MASM::setInt32(dstReg, result);
+    }
+
+    fn getValue(valueReg: ValueReg) -> Value;
+    fn setValue(valueReg: ValueReg, value: Value);
+
+    fn getInt32(reg: Reg) -> Int32;
+    fn setInt32(reg: Reg, int32: Int32);
+
+    fn getObject(reg: Reg) -> Object;
+    fn setObject(reg: Reg, object: Object);
+
+    fn getBool(reg: Reg) -> Bool;
+    fn setBool(reg: Reg, bool: Bool);
+
+    fn getString(reg: Reg) -> String;
+    fn setString(reg: Reg, string: String);
+
+    fn getSymbol(reg: Reg) -> Symbol;
+    fn setSymbol(reg: Reg, symbol: Symbol);
+
+    fn getBigInt(reg: Reg) -> BigInt;
+    fn setBigInt(reg: Reg, bigInt: BigInt);
+}
+

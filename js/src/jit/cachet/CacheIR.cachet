@@ -1,0 +1,67 @@
+// vim: set tw=99 ts=4 sts=4 sw=4 et:
+
+import "./MASM.cachet";
+
+struct OperandId;
+
+struct ValueId <: OperandId;
+struct ObjectId <: OperandId;
+struct Int32Id <: OperandId;
+
+struct Int32Field;
+struct ShapeField;
+
+ir CacheIR emits MASM {
+    op GuardToObject(valueId: ValueId, objectId: ObjectId) {
+        let valueReg = CacheIR::useValueReg(valueId);
+        let objectReg = CacheIR::useObjectReg(objectId);
+
+        CacheIR::addFailurePath(out label failure);
+
+        emit MASM::BranchTestObject(Condition::NotEqual, valueReg, failure);
+        emit MASM::UnboxObject(valueReg, objectReg);
+    }
+
+    op GuardToInt32(valueId: ValueId, int32Id: Int32Id) {
+        let valueReg = CacheIR::useValueReg(valueId);
+        let int32Reg = CacheIR::useInt32Reg(int32Id);
+
+        CacheIR::addFailurePath(out label failure);
+
+        emit MASM::BranchTestInt32(Condition::NotEqual, valueReg, failure);
+        emit MASM::UnboxInt32(valueReg, int32Reg);
+    }
+
+    op Int32AddResult(lhsId: Int32Id, rhsId: Int32Id) {
+        let lhsReg = CacheIR::useInt32Reg(lhsId);
+        let rhsReg = CacheIR::useInt32Reg(rhsId);
+        let scratchReg = CacheIR::allocateReg();
+
+        CacheIR::addFailurePath(out label failure);
+
+        emit MASM::Mov(rhsReg, scratchReg);
+        emit MASM::BranchAdd32(Condition::Overflow, lhsReg, scratchReg, failure);
+        emit MASM::TagValue(ValueType::Int32, scratchReg, CacheIR::outputReg);
+
+        CacheIR::releaseReg(scratchReg);
+    }
+
+    fn addFailurePath(out label failure: MASM);
+
+    fn allocateReg() -> Reg;
+    fn releaseReg(reg: Reg);
+
+    fn allocateValueReg() -> ValueReg;
+    fn releaseValueReg(valueReg: ValueReg);
+
+    fn useValueReg(valueId: ValueId) -> ValueReg;
+    fn useObjectReg(id: ObjectId) -> Reg;
+    fn useInt32Reg(id: Int32Id) -> Reg;
+
+    var outputReg: ValueReg;
+
+    fn readInt32Field(int32Field: Int32Field) -> Int32;
+    fn readShapeField(shapeField: ShapeField) -> Shape;
+
+    fn objectGuardNeedsSpectreMitigations(objectId: ObjectId) -> Bool;
+}

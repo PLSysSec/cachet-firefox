@@ -22,7 +22,8 @@ def generate_cachet_impl(c_out, cachet_src):
         inc_tmp = os.path.join(dir, "CachetGenerated.inc")
         bpl_tmp = os.path.join(dir, "unused.bpl")
 
-        p = subprocess.Popen(["cachet-compiler", cachet_src, h_tmp, inc_tmp, bpl_tmp], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p = subprocess.Popen(["cachet-compiler", cachet_src, "--cpp-decls", h_tmp, "--cpp-defs",
+            inc_tmp, "--bpl", bpl_tmp], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         stdout, stderr = p.communicate()
         stdout = six.ensure_text(stdout)
