@@ -12688,11 +12688,13 @@ static bool SetContextOptions(JSContext* cx, const OptionParser& op) {
     }
   }
 
-#if defined(JS_CACHEIR_SPEW)
-  if (const char* str = op.getStringOption("cache-ir-spew-dir-path")) {
-    jit::JitOptions.cacheIrSpewDirPath = str;
-  }
-#endif
+// XXX(abhishekc-sharma): this causes a crash when the option
+// is not passed on the CLI.
+//#if defined(JS_CACHEIR_SPEW)
+//  if (const char* str = op.getStringOption("cache-ir-spew-dir-path")) {
+//    jit::JitOptions.cacheIrSpewDirPath = str;
+//  }
+//#endif
 
   if (const char* str = op.getStringOption("spectre-mitigations")) {
     if (strcmp(str, "on") == 0) {
