@@ -453,6 +453,10 @@ bool IonCacheIRCompiler::emitGuardCompartment(ObjOperandId objId,
 bool IonCacheIRCompiler::emitGuardAnyClass(ObjOperandId objId,
                                            uint32_t claspOffset) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_GuardAnyClass(cachet::CachetContext {this, cx_}, objId, claspOffset);
+#else
   Register obj = allocator.useRegister(masm, objId);
   AutoScratchRegister scratch(allocator, masm);
 
@@ -470,7 +474,7 @@ bool IonCacheIRCompiler::emitGuardAnyClass(ObjOperandId objId,
     masm.branchTestObjClassNoSpectreMitigations(Assembler::NotEqual, obj, clasp,
                                                 scratch, failure->label());
   }
-
+#endif
   return true;
 }
 

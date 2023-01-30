@@ -7,6 +7,8 @@ var mut heap: Heap;
 enum RegDataType {
     Value,
     UnboxedValue,
+    ValueTag,
+    Class,
 }
 
 #[spec]
@@ -59,6 +61,52 @@ impl RegData {
 
     unsafe fn toUnboxedValueUnchecked(data: RegData) -> Value;
 
+    fn isValueTag(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::ValueTag
+    }
+
+    fn fromValueType(valTy: ValueType) -> RegData {
+        let data = (unsafe { RegData::fromValueTypeUnchecked(valTy) });
+        assume RegData::isValueTag(data);
+        assume (unsafe { RegData::toValueTypeUnchecked(data) }) == valTy;
+        data
+    }
+
+    unsafe fn fromValueTypeUnchecked(valTy: ValueType) -> RegData;
+
+    fn toValueType(data: RegData) -> ValueType {
+        assert RegData::isValueTag(data);
+        let valTy = (unsafe { RegData::toValueTypeUnchecked(data) });
+        assume (unsafe { RegData::fromValueTypeUnchecked(valTy) }) == data;
+        valTy
+    }
+
+    unsafe fn toValueTypeUnchecked(data: RegData) -> ValueType;
+
+
+    fn isClass(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::Class
+    }
+
+    fn fromClass(class: Class) -> RegData {
+        let data = (unsafe { RegData::fromClassUnchecked(class) });
+        assume RegData::isClass(data);
+        assume (unsafe { RegData::toClassUnchecked(data) }) == class;
+        data
+    }
+
+    unsafe fn fromClassUnchecked(class: Class) -> RegData;
+
+    fn toClass(data: RegData) -> Class {
+        assert RegData::isClass(data);
+        let class = (unsafe { RegData::toClassUnchecked(data) });
+        assume (unsafe { RegData::fromClassUnchecked(class) }) == data;
+        class
+    }
+
+    unsafe fn toClassUnchecked(data: RegData) -> Class;
+
+
     #[spec]
     fn readData(data: RegData, offset: Int64) -> RegData {
         if RegData::isUnboxedValue(data) {
@@ -71,6 +119,50 @@ impl RegData {
     }
 }
 
+enum JSValueType {
+  Double,
+  Int32,
+  Bool,
+  Undefined,
+  Null,
+  Magic,
+  String,
+  Symbol,
+  PrivateGCThing,
+  BigInt,
+  Object,
+  Unknown,
+}
+
+impl JSValueType {
+    #[refined]
+    fn fromValueType(valTy: ValueType) -> JSValueType {
+        if valTy == ValueType::Double {
+            return JSValueType::Double;
+        } else if valTy == ValueType::Int32 {
+            return JSValueType::Int32;
+        } else if valTy == ValueType::Bool {
+            return JSValueType::Bool;
+        } else if valTy == ValueType::Undefined {
+            return JSValueType::Undefined;
+        } else if valTy == ValueType::Null {
+            return JSValueType::Null;
+        } else if valTy == ValueType::Magic {
+            return JSValueType::Magic;
+        } else if valTy == ValueType::String {
+            return JSValueType::String;
+        } else if valTy == ValueType::Symbol {
+            return JSValueType::Symbol;
+        } else if valTy == ValueType::PrivateGCThing {
+            return JSValueType::PrivateGCThing;
+        } else if valTy == ValueType::BigInt {
+            return JSValueType::BigInt;
+        }
+
+        assert valTy == ValueType::Object;
+        return JSValueType::Object;
+    }
+}
 
 enum ValueType {
   Double,
@@ -84,7 +176,6 @@ enum ValueType {
   PrivateGCThing,
   BigInt,
   Object,
-  Unknown,
 }
 
 struct Value;
@@ -356,19 +447,156 @@ struct NativeObjectSlots;
 
 struct NativeObjectElements;
 
+struct JSFunction <: NativeObject;
+
+impl JSFunction {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(JSFunction::rawClass);
+        JSFunction::rawClass
+    }
+}
+
+struct ArrayObject <: NativeObject;
+
+impl ArrayObject {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(ArrayObject::rawClass);
+        ArrayObject::rawClass
+    }
+}
+
+struct PlainObject <: NativeObject;
+
+impl PlainObject {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(PlainObject::rawClass);
+        PlainObject::rawClass
+    }
+}
+
+struct ArrayBufferObjectMaybeShared <: NativeObject;
+
+struct ArrayBufferObject <: ArrayBufferObjectMaybeShared;
+
+impl ArrayBufferObject {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(ArrayBufferObject::rawClass);
+        ArrayBufferObject::rawClass
+    }
+}
+
+struct SharedArrayBufferObject <: ArrayBufferObjectMaybeShared;
+
+impl SharedArrayBufferObject {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(SharedArrayBufferObject::rawClass);
+        SharedArrayBufferObject::rawClass
+    }
+}
+
+struct ArrayBufferViewObject <: NativeObject;
+
+struct DataViewObject <: ArrayBufferViewObject;
+
+impl DataViewObject {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(DataViewObject::rawClass);
+        DataViewObject::rawClass
+    }
+}
+
+struct ArgumentsObject <: NativeObject;
+
+struct UnmappedArgumentsObject <: ArgumentsObject;
+
+impl UnmappedArgumentsObject {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(UnmappedArgumentsObject::rawClass);
+        UnmappedArgumentsObject::rawClass
+    }
+}
+
+struct MappedArgumentsObject <: ArgumentsObject;
+
+impl MappedArgumentsObject {
+    var rawClass: Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(MappedArgumentsObject::rawClass);
+        MappedArgumentsObject::rawClass
+    }
+}
+
+struct SetObject <: NativeObject;
+
+impl SetObject {
+    var rawClass: Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(SetObject::rawClass);
+        SetObject::rawClass
+    }
+}
+
+struct MapObject <: NativeObject;
+
+impl MapObject {
+    var rawClass: Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(MapObject::rawClass);
+        MapObject::rawClass
+    }
+}
+
 struct Shape;
 
 impl Shape {
-    fn classOf(shape: Shape) -> Class;
+    fn baseShapeOf(shape: Shape) -> BaseShape;
+
+    fn classOf(shape: Shape) -> Class {
+        let baseShape = Shape::baseShapeOf(shape);
+        BaseShape::classOf(baseShape)
+    }
 
     fn hasFixedSlot(shape: Shape, slot: UInt32) -> Bool;
+}
+
+struct BaseShape;
+
+impl BaseShape {
+    fn classOf(baseShape: BaseShape) -> Class;
 }
 
 struct Class;
 
 impl Class {
+    var rawFunctionClass: Class;
+    var rawExtendedFunctionClass: Class;
+
+    fn windowProxyClass() -> Class;
+
     fn isNativeObject(class: Class) -> Bool;
     fn isProxyObject(class: Class) -> Bool;
+
+    fn isArgumentsObject(class: Class) -> Bool {
+        class == MappedArgumentsObject::class() ||
+            class == UnmappedArgumentsObject::class()
+    }
 }
 
 struct String;

@@ -15,6 +15,61 @@ namespace jit {
 
 namespace cachet {
 
+namespace Impl_JSValueType {
+
+inline Type_JSValueType::Ref Variant_Double(Cachet_ContextRef cx) {
+  return JSVAL_TYPE_DOUBLE;
+}
+
+inline Type_JSValueType::Ref Variant_Int32(Cachet_ContextRef cx) {
+  return JSVAL_TYPE_INT32;
+}
+
+inline Type_JSValueType::Ref Variant_Bool(Cachet_ContextRef cx) {
+  return JSVAL_TYPE_BOOLEAN;
+}
+
+inline Type_JSValueType::Ref Variant_Undefined(Cachet_ContextRef cx) {
+  return JSVAL_TYPE_UNDEFINED;
+}
+
+inline Type_JSValueType::Ref Variant_Null(Cachet_ContextRef cx) {
+  return JSVAL_TYPE_NULL;
+}
+
+inline Type_JSValueType::Ref Variant_Magic(Cachet_ContextRef cx) {
+  return JSVAL_TYPE_MAGIC;
+}
+
+inline Type_JSValueType::Ref Variant_String(Cachet_ContextRef cx) {
+  return JSVAL_TYPE_STRING;
+}
+
+inline Type_JSValueType::Ref Variant_Symbol(Cachet_ContextRef cx) {
+  return JSVAL_TYPE_SYMBOL;
+}
+
+inline Type_JSValueType::Ref Variant_PrivateGCThing(Cachet_ContextRef cx) {
+  return JSVAL_TYPE_PRIVATE_GCTHING;
+}
+
+inline Type_JSValueType::Ref Variant_BigInt(Cachet_ContextRef cx) {
+  return JSVAL_TYPE_BIGINT;
+}
+
+inline Type_JSValueType::Ref Variant_Object(Cachet_ContextRef cx) {
+  return JSVAL_TYPE_OBJECT;
+}
+
+inline Type_JSValueType::Ref Variant_Unknown(Cachet_ContextRef cx) {
+  return JSVAL_TYPE_UNKNOWN;
+}
+
+Type_JSValueType::Val Fn_fromValueType(Cachet_ContextRef cx, Type_ValueType::Ref param_valTy) {
+  return JSValueType(param_valTy);
+}
+
+};  // namespace Impl_JSValueType
 
 namespace Impl_ValueType {
 
@@ -131,7 +186,7 @@ Type_Condition::Ref Variant_LessThan(Cachet_ContextRef cx) {
   return Assembler::Condition::LessThan;
 }
 
-};  // namespace Impl_ValueType
+};  // namespace Impl_Condition
 
 namespace Impl_Address {
 Type_Address::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_Reg::Ref param_base, Type_Int32::Ref param_offset) {
@@ -181,11 +236,50 @@ void EmitOp_LoadValueAddress(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   ops.loadValue(param_address, param_dstReg);
 }
 
-void EmitOp_BranchTestInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+void EmitOp_UnboxInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                          Type_ValueReg::Ref param_valueReg,
+                          Type_Reg::Ref param_int32Reg) {
+  ops.unboxInt32(param_valueReg, param_int32Reg);
+}
+
+void EmitOp_UnboxObject(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                               Type_ValueReg::Ref param_valueReg,
+                               Type_Reg::Ref param_objectReg) {
+  ops.unboxObject(param_valueReg, param_objectReg);
+}
+
+void EmitOp_BranchTestNumber(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                     Type_Condition::Ref param_condition,
                                     Type_ValueReg::Ref param_valueReg,
                                     IR_MASM::LabelRef param_branch) {
-  ops.branchTestInt32(param_condition, param_valueReg, param_branch);
+  ops.branchTestNumber(param_condition, param_valueReg, param_branch);
+}
+
+void EmitOp_BranchTestNumberTag(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                            Type_Condition::Ref param_condition,
+                            Type_Reg::Ref param_tagReg,
+                            IR_MASM::LabelRef param_branch) {
+  ops.branchTestNumber(param_condition, param_tagReg, param_branch);
+}
+
+void EmitOp_BranchTestBoolean(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Condition::Ref param_condition, Type_ValueReg::Ref param_valueReg, IR_MASM::LabelRef param_branch) {
+  ops.branchTestBoolean(param_condition, param_valueReg, param_branch);
+}
+
+void EmitOp_BranchTestString(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Condition::Ref param_condition, Type_ValueReg::Ref param_valueReg, IR_MASM::LabelRef param_branch) {
+  ops.branchTestString(param_condition, param_valueReg, param_branch);
+}
+
+void EmitOp_BranchTestSymbol(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Condition::Ref param_condition, Type_ValueReg::Ref param_valueReg, IR_MASM::LabelRef param_branch) {
+  ops.branchTestSymbol(param_condition, param_valueReg, param_branch);
+}
+
+void EmitOp_BranchTestBigInt(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Condition::Ref param_condition, Type_ValueReg::Ref param_valueReg, IR_MASM::LabelRef param_branch) {
+  ops.branchTestBigInt(param_condition, param_valueReg, param_branch);
+}
+
+void EmitOp_BranchTestNull(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Condition::Ref param_condition, Type_ValueReg::Ref param_valueReg, IR_MASM::LabelRef param_branch) {
+  ops.branchTestNull(param_condition, param_valueReg, param_branch);
 }
 
 void EmitOp_BranchTestObject(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
@@ -195,16 +289,29 @@ void EmitOp_BranchTestObject(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   ops.branchTestObject(param_condition, param_valueReg, param_branch);
 }
 
-void EmitOp_UnboxInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
-                          Type_ValueReg::Ref param_valueReg,
-                          Type_Reg::Ref param_int32Reg) {
-  ops.unboxInt32(param_valueReg, param_int32Reg); 
+void EmitOp_BranchTestObjClass(Cachet_ContextRef cx,
+                                    IR_MASM::OpsRef ops,
+                                    Type_Condition::Ref param_condition,
+                                    Type_Reg::Ref param_objectReg,
+                                    Type_Class::Ref param_class,
+                                    Type_Reg::Ref param_scratchReg,
+                                    Type_Reg::Ref param_spectreRegToZero,
+                                    IR_MASM::LabelRef param_branch) {
+  ops.branchTestObjClass(param_condition, param_objectReg, param_class,
+                         param_scratchReg, param_spectreRegToZero,
+                         param_branch);
 }
 
-void EmitOp_UnboxObject(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
-                               Type_ValueReg::Ref param_valueReg,
-                               Type_Reg::Ref param_objectReg) {
-  ops.unboxObject(param_valueReg, param_objectReg);
+void EmitOp_BranchTestObjClassNoSpectreMitigations(Cachet_ContextRef cx,
+                                    IR_MASM::OpsRef ops,
+                                    Type_Condition::Ref param_condition,
+                                    Type_Reg::Ref param_objectReg,
+                                    Type_Class::Ref param_class,
+                                    Type_Reg::Ref param_scratchReg,
+                                    IR_MASM::LabelRef param_branch) {
+  ops.branchTestObjClassNoSpectreMitigations(param_condition, param_objectReg,
+                                             param_class, param_scratchReg,
+                                             param_branch);
 }
 
 void EmitOp_BranchTestObjectShape(Cachet_ContextRef cx,
@@ -228,16 +335,18 @@ void EmitOp_BranchTestObjectShapeNoSpectreMitigations(
                                              param_shape, param_branch);
 }
 
-void EmitOp_LoadObjectFixedSlot(Cachet_ContextRef cx,
-                                       IR_MASM::OpsRef ops,
-                                       Type_Reg::Ref param_objectReg,
-                                       Type_Int32::Ref param_slot,
-                                       Type_ValueReg::Ref param_outputReg) {
-  ops.loadTypedOrValue(Address(param_objectReg, param_slot), param_outputReg);
+void EmitOp_BranchTestUndefined(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                    Type_Condition::Ref param_condition,
+                                    Type_ValueReg::Ref param_valueReg,
+                                    IR_MASM::LabelRef param_branch) {
+  ops.branchTestUndefined(param_condition, param_valueReg, param_branch);
 }
 
-void EmitOp_BranchTestNull(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Condition::Ref param_condition, Type_ValueReg::Ref param_valueReg, IR_MASM::LabelRef param_branch) {
-  ops.branchTestNull(param_condition, param_valueReg, param_branch);
+void EmitOp_BranchTestInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                    Type_Condition::Ref param_condition,
+                                    Type_ValueReg::Ref param_valueReg,
+                                    IR_MASM::LabelRef param_branch) {
+  ops.branchTestInt32(param_condition, param_valueReg, param_branch);
 }
 
 void EmitOp_BranchTest32(Cachet_ContextRef cx,
@@ -258,9 +367,45 @@ void EmitOp_BranchTest32Imm(Cachet_ContextRef cx,
   ops.branchTest32(param_condition, param_lhsReg, Imm32(param_rhsInt32), param_branch);
 }
 
-void EmitOp_TagValue(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_ValueType::Ref param_valTy,
+void EmitOp_Branch32Imm(Cachet_ContextRef cx,
+                        IR_MASM::OpsRef ops,
+                        Type_Condition::Ref param_condition,
+                        Type_Reg::Ref param_lhsReg,
+                        Type_Int32::Ref param_rhsInt32,
+                        IR_MASM::LabelRef param_branch) {
+  ops.branch32(param_condition, param_lhsReg, Imm32(param_rhsInt32), param_branch);
+}
+
+void EmitOp_Branch32Tag(Cachet_ContextRef cx,
+                        IR_MASM::OpsRef ops,
+                        Type_Condition::Ref param_condition,
+                        Type_Reg::Ref param_lhsReg,
+                        Type_Reg::Ref param_rhsReg,
+                        IR_MASM::LabelRef param_branch) {
+  ops.branch32(param_condition, param_lhsReg, param_rhsReg, param_branch);
+}
+
+void EmitOp_BranchIfNonNativeObj(Cachet_ContextRef cx,
+                                  IR_MASM::OpsRef ops,
+                                  Type_Reg::Ref param_objectReg,
+                                  Type_Reg::Ref param_scratchReg,
+                                  IR_MASM::LabelRef param_branch) {
+  ops.branchIfNonNativeObj(param_objectReg, param_scratchReg, param_branch);
+}
+
+void EmitOp_BranchTestObjectIsProxy(Cachet_ContextRef cx,
+                                    IR_MASM::OpsRef ops,
+                                    Type_Bool::Ref param_proxy,
+                                    Type_Reg::Ref param_objectReg,
+                                    Type_Reg::Ref param_scratchReg,
+                                    IR_MASM::LabelRef param_branch) {
+  ops.branchTestObjectIsProxy(param_proxy, param_objectReg, param_scratchReg, param_branch);
+}
+
+
+void EmitOp_TagValue(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_JSValueType::Ref param_valTy,
                       Type_Reg::Ref param_payload, Type_ValueReg::Ref param_dest) {
-  ops.tagValue(JSValueType(param_valTy), param_payload, param_dest);
+  ops.tagValue(param_valTy, param_payload, param_dest);
 }
 
 void EmitOp_BranchAdd32(Cachet_ContextRef cx,
@@ -414,22 +559,124 @@ Type_Value::Val Impl_NativeObject::Fn_getFixedSlotUnchecked(
   return param_nativeObject->getFixedSlot(param_slot);
 }
 
-Type_Class::Val Impl_Shape::Fn_classOf(Cachet_ContextRef cx,
-                                       Type_Shape::Ref param_shape) {
-  return param_shape->getObjectClass();
+namespace Impl_JSFunction {
+
+inline Type_Class::Ref Var_rawClass(Cachet_ContextRef cx) {
+  return &JSFunction::class_;
 }
 
-Type_Bool::Val Impl_Shape::Fn_hasFixedSlot(Cachet_ContextRef cx,
+};  // namespace Impl_JSFunction
+
+namespace Impl_ArrayObject {
+
+inline Type_Class::Ref Var_rawClass(Cachet_ContextRef cx) {
+  return &ArrayObject::class_;
+}
+
+};  // namespace Impl_ArrayObject
+
+namespace Impl_PlainObject {
+
+inline Type_Class::Ref Var_rawClass(Cachet_ContextRef cx) {
+  return &PlainObject::class_;
+}
+
+};  // namespace Impl_PlainObject
+
+namespace Impl_ArrayBufferObject {
+
+inline Type_Class::Ref Var_rawClass(Cachet_ContextRef cx) {
+  return &ArrayBufferObject::class_;
+}
+
+};  // namespace Impl_ArrayBufferObject
+
+namespace Impl_SharedArrayBufferObject {
+
+inline Type_Class::Ref Var_rawClass(Cachet_ContextRef cx) {
+  return &SharedArrayBufferObject::class_;
+}
+
+};  // namespace Impl_SharedArrayBufferObject
+
+namespace Impl_DataViewObject {
+
+inline Type_Class::Ref Var_rawClass(Cachet_ContextRef cx) {
+  return &DataViewObject::class_;
+}
+
+};  // namespace Impl_DataViewObject
+
+namespace Impl_UnmappedArgumentsObject {
+
+inline Type_Class::Ref Var_rawClass(Cachet_ContextRef cx) {
+  return &UnmappedArgumentsObject::class_;
+}
+
+};  // namespace Impl_UnmappedArgumentsObject
+
+namespace Impl_MappedArgumentsObject {
+
+inline Type_Class::Ref Var_rawClass(Cachet_ContextRef cx) {
+  return &MappedArgumentsObject::class_;
+}
+
+};  // namespace Impl_MappedArgumentsObject
+
+namespace Impl_SetObject {
+
+inline Type_Class::Ref Var_rawClass(Cachet_ContextRef cx) {
+  return &SetObject::class_;
+}
+
+};  // namespace Impl_SetObject
+
+namespace Impl_MapObject {
+
+inline Type_Class::Ref Var_rawClass(Cachet_ContextRef cx) {
+  return &MapObject::class_;
+}
+
+};  // namespace Impl_MapObject
+
+namespace Impl_Shape {
+
+Type_BaseShape::Val Fn_baseShapeOf(Cachet_ContextRef cx, Type_Shape::Ref param_shape) {
+  return param_shape->base();
+}
+
+Type_Bool::Val Fn_hasFixedSlot(Cachet_ContextRef cx,
                                            Type_Shape::Ref param_shape,
                                            Type_UInt32::Ref param_slot) {
   return param_slot >= 0 &&
          param_slot < Type_UInt32::Val(param_shape->numFixedSlots());
 }
 
-Type_Bool::Val Impl_Class::Fn_isNativeObject(Cachet_ContextRef cx,
-                                             Type_Class::Ref param_class) {
+}; // namespace Impl_Shape
+
+namespace Impl_BaseShape {
+
+Type_Class::Val Fn_classOf(Cachet_ContextRef cx, Type_BaseShape::Ref param_baseShape) {
+  return param_baseShape->clasp();
+}
+
+};  // namespace Impl_BaseShape
+
+namespace Impl_Class {
+
+Type_Class::Val Fn_windowProxyClass(Cachet_ContextRef cx) {
+  return cx.js_ctx->runtime()->maybeWindowProxyClass();
+}
+
+Type_Bool::Val Fn_isNativeObject(Cachet_ContextRef cx, Type_Class::Ref param_class) {
   return param_class->isNativeObject();
 }
+
+Type_Bool::Val Fn_isProxyObject(Cachet_ContextRef cx, Type_Class::Ref param_class) {
+  return param_class->isProxyObject();
+}
+
+};  // namespace Impl_Class
 
 namespace Impl_OperandLocationKind {
 
@@ -465,16 +712,16 @@ Type_ValueReg::Val Fn_getValueRegUnchecked(Cachet_ContextRef cx, Type_OperandLoc
   return param_loc.valueReg();
 }
 
-void Fn_setPayloadRegUnchecked(Cachet_ContextRef cx, Type_OperandLocation::MutRef param_loc, Type_Reg::Ref param_reg, Type_ValueType::Ref param_type) {
-  param_loc.setPayloadReg(param_reg, JSValueType(param_type));
+void Fn_setPayloadRegUnchecked(Cachet_ContextRef cx, Type_OperandLocation::MutRef param_loc, Type_Reg::Ref param_reg, Type_JSValueType::Ref param_type) {
+  param_loc.setPayloadReg(param_reg, param_type);
 }
 
 Type_Reg::Val Fn_getPayloadRegUnchecked(Cachet_ContextRef cx, Type_OperandLocation::Ref param_loc) {
   return param_loc.payloadReg();
 }
 
-Type_ValueType::Val Fn_getPayloadTypeUnchecked(Cachet_ContextRef cx, Type_OperandLocation::Ref param_loc) {
-  return Type_ValueType::Val(param_loc.payloadType());
+Type_JSValueType::Val Fn_getPayloadTypeUnchecked(Cachet_ContextRef cx, Type_OperandLocation::Ref param_loc) {
+  return param_loc.payloadType();
 }
 
 }
@@ -491,22 +738,30 @@ inline Type_OperandId::Val Impl_Int32Id::To_OperandId(Type_Int32Id::Val in) {
   return static_cast<Type_OperandId::Val>(in);
 }
 
+inline Type_OperandId::Val Impl_BooleanId::To_OperandId(Type_BooleanId::Val in) {
+  return static_cast<Type_OperandId::Val>(in);
+}
+
+inline Type_OperandId::Val Impl_ValueTagId::To_OperandId(Type_ValueTagId::Val in) {
+  return static_cast<Type_OperandId::Val>(in);
+}
+
 namespace Impl_TypedId {
 
 inline Type_OperandId::Val To_OperandId(Type_TypedId::Val in) {
   return static_cast<Type_OperandId::Val>(in);
 }
 
-Type_ValueType::Val Fn_type(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
-  return Type_ValueType::Val(param_typedId.type());
+Type_JSValueType::Val Fn_type(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
+  return param_typedId.type();
 }
 
 Type_Bool::Val Fn_isValueId(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
   return param_typedId.isValueId();
 }
 
-Type_TypedId::Val Fn_fromValueIdUnchecked(Cachet_ContextRef cx, Type_ValueId::Ref param_valueId, Type_ValueType::Ref param_type) {
-  return TypedOperandIdW(TypedOperandId(param_valueId, JSValueType(param_type)), true);
+Type_TypedId::Val Fn_fromValueIdUnchecked(Cachet_ContextRef cx, Type_ValueId::Ref param_valueId, Type_JSValueType::Ref param_type) {
+  return TypedOperandIdW(TypedOperandId(param_valueId, param_type), true);
 }
 
 Type_ValueId::Val Fn_toValueIdUnchecked(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
@@ -529,13 +784,77 @@ Type_Int32Id::Val Fn_toInt32IdUnchecked(Cachet_ContextRef cx, Type_TypedId::Ref 
   return Type_Int32Id::Val(param_typedId.id());
 }
 
+Type_TypedId::Val Fn_fromBooleanIdUnchecked(Cachet_ContextRef cx, Type_BooleanId::Ref param_booleanId) {
+  return TypedOperandIdW(TypedOperandId(param_booleanId), false);
 }
+
+Type_BooleanId::Val Fn_toBooleanIdUnchecked(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
+  return Type_BooleanId::Val(param_typedId.id());
+}
+
+Type_TypedId::Val Fn_fromValueTagIdUnchecked(Cachet_ContextRef cx, Type_ValueTagId::Ref param_valueTagId) {
+  return TypedOperandIdW(TypedOperandId(param_valueTagId), false);
+}
+
+Type_ValueTagId::Val Fn_toValueTagIdUnchecked(Cachet_ContextRef cx, Type_TypedId::Ref param_typedId) {
+  return Type_ValueTagId::Val(param_typedId.id());
+}
+
+}
+
+namespace Impl_GuardClassKind {
+
+inline Type_GuardClassKind::Ref Variant_Array(Cachet_ContextRef cx) {
+  return GuardClassKind::Array;
+}
+
+inline Type_GuardClassKind::Ref Variant_ArrayBuffer(Cachet_ContextRef cx) {
+  return GuardClassKind::ArrayBuffer;
+}
+
+inline Type_GuardClassKind::Ref Variant_SharedArrayBuffer(Cachet_ContextRef cx) {
+  return GuardClassKind::SharedArrayBuffer;
+}
+
+inline Type_GuardClassKind::Ref Variant_DataView(Cachet_ContextRef cx) {
+  return GuardClassKind::DataView;
+}
+
+inline Type_GuardClassKind::Ref Variant_MappedArguments(Cachet_ContextRef cx) {
+  return GuardClassKind::MappedArguments;
+}
+
+inline Type_GuardClassKind::Ref Variant_UnmappedArguments(Cachet_ContextRef cx) {
+  return GuardClassKind::UnmappedArguments;
+}
+
+inline Type_GuardClassKind::Ref Variant_WindowProxy(Cachet_ContextRef cx) {
+  return GuardClassKind::WindowProxy;
+}
+
+inline Type_GuardClassKind::Ref Variant_JSFunction(Cachet_ContextRef cx) {
+  return GuardClassKind::JSFunction;
+}
+
+inline Type_GuardClassKind::Ref Variant_Set(Cachet_ContextRef cx) {
+  return GuardClassKind::Set;
+}
+
+inline Type_GuardClassKind::Ref Variant_Map(Cachet_ContextRef cx) {
+  return GuardClassKind::Map;
+}
+
+};  // namespace Impl_GuardClassKind
 
 void Impl_CacheIR::Fn_addFailurePath(Cachet_ContextRef cx, IR_MASM::LabelMutRef failure) {
   FailurePath* failurePath;
   // TODO: use this result in some way
   cx.compiler->addFailurePath(&failurePath);
   failure = failurePath->label();
+}
+
+Type_JSValueType::Ref Impl_CacheIR::Fn_knownType(Cachet_ContextRef cx, Type_ValueId::Ref param_valueId) {
+  return cx.compiler->allocator.knownType(param_valueId);
 }
 
 Type_ValueReg::Val Impl_CacheIR::Fn_allocateValueReg(Cachet_ContextRef cx) {
@@ -581,6 +900,11 @@ Type_Reg::Val Impl_CacheIR::Fn_useInt32Reg(Cachet_ContextRef cx,
     return cx.compiler->allocator.useRegister(cx.compiler->masm, param_int32Id);
 }
 
+Type_Reg::Val Impl_CacheIR::Fn_useValueTagReg(Cachet_ContextRef cx,
+                                            Type_ValueTagId::Ref param_valueTagId) {
+    return cx.compiler->allocator.useRegister(cx.compiler->masm, param_valueTagId);
+}
+
 void Impl_CacheIR::Fn_emitLoadInt32StubField(
     Cachet_ContextRef cx,
     Type_Int32Field::Ref param_int32Field,
@@ -599,6 +923,12 @@ Type_Shape::Val Impl_CacheIR::Fn_readShapeField(
     Cachet_ContextRef cx,
     Type_ShapeField::Ref param_shapeField) {
   return cx.compiler->shapeStubField(param_shapeField);
+}
+
+Type_Class::Val Impl_CacheIR::Fn_readClassField(
+    Cachet_ContextRef cx,
+    Type_ClassField::Ref param_classField) {
+  return cx.compiler->classStubField(param_classField);
 }
 
 Type_Bool::Val Impl_CacheIR::Fn_objectGuardNeedsSpectreMitigations(

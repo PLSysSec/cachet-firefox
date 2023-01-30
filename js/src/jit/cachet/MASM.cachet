@@ -64,6 +64,10 @@ ir MASM {
         }
     }
 
+    op MoveBool(srcReg: Reg, dstReg: Reg) {
+        MASM::setBool(dstReg, MASM::getBool(srcReg));
+    }
+
     op Jump(label target: MASM) {
       goto target;
     }
@@ -80,31 +84,159 @@ ir MASM {
         MASM::setObject(objectReg, Value::toObject(value));
     }
 
+    op FallibleUnboxBoolean(valueReg: ValueReg, boolReg: Reg, label failure: MASM) {
+        let value = MASM::getValue(valueReg);
+        let valueIsBool = Value::isBool(value);
+
+        if !valueIsBool {
+            goto failure;
+        }
+
+        let bool = Value::toBool(value);
+        MASM::setBool(boolReg, bool);
+    }
+
     op UnboxInt32(valueReg: ValueReg, int32Reg: Reg) {
       let value = MASM::getValue(valueReg);
       MASM::setInt32(int32Reg, Value::toInt32(value)); 
     }
 
-    op UnboxNonDouble(valueReg: ValueReg, dstReg: Reg, valTy: ValueType) {
-        assert valTy != ValueType::Double;
+    op UnboxNonDouble(valueReg: ValueReg, dstReg: Reg, valTy: JSValueType) {
+        assert valTy != JSValueType::Double;
 
         let value = MASM::getValue(valueReg);
 
-        if valTy == ValueType::Int32 {
+        if valTy == JSValueType::Int32 {
             let i = Value::toInt32(value);
             MASM::setInt32(dstReg, i);
-        } else if valTy == ValueType::Bool {
+        } else if valTy == JSValueType::Bool {
             let b = Value::toBool(value);
             MASM::setBool(dstReg, b);
-        } else if valTy == ValueType::String {
+        } else if valTy == JSValueType::String {
             let s = Value::toString(value);
             MASM::setString(dstReg, s);
-        } else if valTy == ValueType::Symbol {
+        } else if valTy == JSValueType::Symbol {
             let s = Value::toSymbol(value);
             MASM::setSymbol(dstReg, s);
-        } else if valTy == ValueType::BigInt {
+        } else if valTy == JSValueType::BigInt {
             let b = Value::toBigInt(value);
             MASM::setBigInt(dstReg, b);
+        }
+
+        assert false;
+    }
+
+    // NOTE: This Op needs to be implemented as a Phantom Op on the
+    // C++ side since Firefox implicitly reinterprets booleans
+    // as int32 within registers.
+    op CastBoolToInt32(int32Reg: Reg) {
+        let bool = MASM::getBool(int32Reg);
+        if bool {
+            MASM::setInt32(int32Reg, 1_i32);
+        } else {
+            MASM::setInt32(int32Reg, 0_i32);
+        }
+    }
+
+    op BranchTestNumber(
+        condition: Condition,
+        valueReg: ValueReg,
+        label branch: MASM,
+    ) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        let value = MASM::getValue(valueReg);
+
+        let valueIsNumber = Value::isInt32(value) || Value::isDouble(value);
+
+        if condition == Condition::Equal && valueIsNumber {
+            goto branch;
+        } else if condition == Condition::NotEqual && !valueIsNumber {
+            goto branch;
+        }
+    }
+
+    op BranchTestNumberTag(
+        condition: Condition,
+        tagReg: Reg,
+        label branch: MASM,
+    ) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+
+        let tag = MASM::getValueTag(tagReg);
+
+        let valueIsNumber = tag == ValueType::Int32 || tag == ValueType::Double;
+
+        if condition == Condition::Equal && valueIsNumber {
+            goto branch;
+        } else if condition == Condition::NotEqual && !valueIsNumber {
+            goto branch;
+        }
+    }
+
+    op BranchTestBoolean(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        let value = MASM::getValue(valueReg);
+        let valueIsBool = Value::isBool(value);
+
+        if condition == Condition::Equal && valueIsBool {
+            goto branch;
+        } else if condition == Condition::NotEqual && !valueIsBool {
+            goto branch;
+        }
+    }
+
+    op BranchTestString(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        let value = MASM::getValue(valueReg);
+        let valueIsString = Value::isString(value);
+
+        if condition == Condition::Equal && valueIsString {
+            goto branch;
+        } else if condition == Condition::NotEqual && !valueIsString {
+            goto branch;
+        }
+    }
+
+    op BranchTestSymbol(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        let value = MASM::getValue(valueReg);
+        let valueIsSymbol = Value::isSymbol(value);
+
+        if condition == Condition::Equal && valueIsSymbol {
+            goto branch;
+        } else if condition == Condition::NotEqual && !valueIsSymbol {
+            goto branch;
+        }
+    }
+
+    op BranchTestBigInt(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        let value = MASM::getValue(valueReg);
+        let valueIsBigInt = Value::isBigInt(value);
+
+        if condition == Condition::Equal && valueIsBigInt {
+            goto branch;
+        } else if condition == Condition::NotEqual && !valueIsBigInt {
+            goto branch;
+        }
+    }
+
+    op BranchTestNull(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+
+        let value = MASM::getValue(valueReg);
+        let valueIsNull = Value::isNull(value);
+
+        if condition == Condition::Equal {
+            if valueIsNull {
+                goto branch;
+            }
+        }
+
+        if condition == Condition::NotEqual {
+            if !valueIsNull {
+                goto branch;
+            }
         }
     }
 
@@ -122,6 +254,46 @@ ir MASM {
             if !valueIsObject {
                 goto branch;
             }
+        }
+    }
+
+    op BranchTestObjClass(
+        condition: Condition, objectReg: Reg, class: Class, scratchReg: Reg, spectreRegToZero: Reg,
+        label branch: MASM
+    ) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        assert scratchReg != spectreRegToZero;
+
+        let object = MASM::getObject(objectReg);
+        let shape = Object::shapeOf(object);
+        MASM::setData(scratchReg, RegData::fromClass(class));
+
+        let objectHasClass = Shape::classOf(shape) == class;
+
+        if condition == Condition::Equal && objectHasClass {
+            goto branch;
+        } else if condition == Condition::NotEqual && !objectHasClass {
+            goto branch;
+        }
+
+        MASM::setInt32(scratchReg, 0_i32);
+    }
+
+    op BranchTestObjClassNoSpectreMitigations(
+        condition: Condition, objectReg: Reg, class: Class, scratchReg: Reg, label branch: MASM
+    ) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+
+        let object = MASM::getObject(objectReg);
+        let shape = Object::shapeOf(object);
+        MASM::setData(scratchReg, RegData::fromClass(class));
+
+        let objectHasClass = Shape::classOf(shape) == class;
+
+        if condition == Condition::Equal && objectHasClass {
+            goto branch;
+        } else if condition == Condition::NotEqual && !objectHasClass {
+            goto branch;
         }
     }
 
@@ -150,6 +322,21 @@ ir MASM {
         if condition == Condition::Equal && objectHasShape {
             goto branch;
         } else if condition == Condition::NotEqual && !objectHasShape {
+            goto branch;
+        }
+    }
+
+    op BranchTestUndefined(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+
+        let value = MASM::getValue(valueReg);
+        let valueIsUndefined = Value::isUndefined(value);
+
+        if condition == Condition::Equal && valueIsUndefined{
+            goto branch;
+        }
+
+        if condition == Condition::NotEqual && !valueIsUndefined {
             goto branch;
         }
     }
@@ -234,29 +421,92 @@ ir MASM {
       }
     }
 
-    op TagValue(valTy: ValueType, payload: Reg, dest: ValueReg) {
+    op Branch32Tag(condition: Condition, lhsReg: Reg, rhsReg: Reg, label branch: MASM) {
+        assert (
+            condition == Condition::Equal || condition == Condition::NotEqual
+        );
+
+        let lhsTag = MASM::getValueTag(lhsReg);
+        let rhsTag = MASM::getValueTag(rhsReg);
+
+        if condition == Condition::Equal && lhsTag == rhsTag {
+            goto branch;
+        } else if condition == Condition::NotEqual && lhsTag != rhsTag {
+            goto branch;
+        }
+    }
+
+    // NOTE: This Op needs to be implemented on the C++ to delegate to the
+    // appropriate overload of Branch32Imm since Cachet doesn't have overloading.
+    op Branch32Imm(condition: Condition, lhsReg: Reg, rhsInt32: Int32, label branch: MASM) {
+        assert (
+            condition == Condition::Equal ||
+            condition == Condition::NotEqual ||
+            condition == Condition::LessThan
+        );
+
+        let lhsInt32 = MASM::getInt32(lhsReg);
+
+        if condition == Condition::Equal && lhsInt32 == rhsInt32 {
+            goto branch;
+        } else if condition == Condition::NotEqual && lhsInt32 != rhsInt32 {
+            goto branch;
+        } else if condition == Condition::LessThan && lhsInt32 < rhsInt32 {
+            goto branch;
+        }
+    }
+
+    op BranchIfNonNativeObj(objectReg: Reg, scratchReg: Reg, label branch: MASM) {
+        let object = MASM::getObject(objectReg);
+        let shape = Object::shapeOf(object);
+        let class = Shape::classOf(shape);
+        MASM::setData(scratchReg, RegData::fromClass(class));
+        let objectIsNative = Class::isNativeObject(class);
+
+        if !objectIsNative {
+            goto branch;
+        }
+    }
+
+    op BranchTestObjectIsProxy(proxy: Bool, objectReg: Reg, scratchReg: Reg, label branch: MASM) {
+        let object = MASM::getObject(objectReg);
+        let shape = Object::shapeOf(object);
+        let class = Shape::classOf(shape);
+        MASM::setData(scratchReg, RegData::fromClass(class));
+        let objectIsProxy = Class::isProxyObject(class);
+
+        if !proxy && !objectIsProxy {
+            goto branch;
+        } else if proxy && objectIsProxy {
+            goto branch;
+        }
+    }
+
+    op TagValue(valTy: JSValueType, payload: Reg, dest: ValueReg) {
         // TODO: Don't have getters/setters for other types yet
-        if valTy == ValueType::Int32 {
+        if valTy == JSValueType::Int32 {
             let i = MASM::getInt32(payload);
             let val = Value::fromInt32(i);
             MASM::setValue(dest, val);
-        } else if valTy == ValueType::Bool {
+        } else if valTy == JSValueType::Bool {
             let b = MASM::getBool(payload);
             let val = Value::fromBool(b);
             MASM::setValue(dest, val);
-        } else if valTy == ValueType::String {
+        } else if valTy == JSValueType::String {
             let s = MASM::getString(payload);
             let val = Value::fromString(s);
             MASM::setValue(dest, val);
-        } else if valTy == ValueType::Symbol {
+        } else if valTy == JSValueType::Symbol {
             let s = MASM::getSymbol(payload);
             let val = Value::fromSymbol(s);
             MASM::setValue(dest, val);
-        } else if valTy == ValueType::BigInt {
+        } else if valTy == JSValueType::BigInt {
             let b = MASM::getBigInt(payload);
             let val = Value::fromBigInt(b);
             MASM::setValue(dest, val);
         }
+
+        assert false;
     }
 
     op BranchAdd32(condition: Condition, srcReg: Reg, dstReg: Reg, label branch: MASM) {
@@ -379,6 +629,16 @@ ir MASM {
     fn getData(reg: Reg) -> RegData;
     #[spec]
     fn setData(reg: Reg, data: RegData);
+
+    #[spec]
+    fn getValueTag(reg: Reg) -> ValueType {
+        RegData::toValueType(MASM::getData(reg))
+    }
+
+    #[spec]
+    fn setValueTag(reg:Reg, tag: ValueType) {
+        MASM::setData(reg, RegData::fromValueType(tag));
+    }
 
     fn getValue(valueReg: ValueReg) -> Value;
     fn setValue(valueReg: ValueReg, value: Value);
