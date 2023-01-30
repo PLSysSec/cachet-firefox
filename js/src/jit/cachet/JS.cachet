@@ -236,6 +236,10 @@ impl NativeObject {
     unsafe fn getFixedSlotUnchecked(heap: Heap, nativeObject: NativeObject, slot: Int32) -> Value;
 }
 
+struct NativeObjectSlots;
+
+struct NativeObjectElements;
+
 struct Shape;
 
 impl Shape {

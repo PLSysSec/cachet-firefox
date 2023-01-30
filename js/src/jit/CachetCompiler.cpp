@@ -147,6 +147,15 @@ void EmitOp_Move32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   ops.move32(Imm32(int32), param_dstReg); 
 }
 
+void EmitOp_Cmp32Move32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                    Type_Condition::Ref param_condition,
+                    Type_Reg::Ref param_lhsReg,
+                    Type_Reg::Ref param_rhsReg,
+                    Type_Reg::Ref param_srcReg,
+                    Type_Reg::Ref param_dstReg) {
+
+  ops.cmp32Move32(param_condition, param_lhsReg, param_rhsReg, param_srcReg, param_dstReg);
+}
 
 void EmitOp_BranchTestInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                     Type_Condition::Ref param_condition,
@@ -207,6 +216,15 @@ void EmitOp_BranchTestNull(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Condi
   ops.branchTestNull(param_condition, param_valueReg, param_branch);
 }
 
+void EmitOp_BranchTest32Imm(Cachet_ContextRef cx,
+                            IR_MASM::OpsRef ops,
+                            Type_Condition::Ref param_condition,
+                            Type_Reg::Ref param_lhsReg,
+                            Type_Int32::Ref param_rhsInt32,
+                            IR_MASM::LabelRef param_branch) {
+  ops.branchTest32(param_condition, param_lhsReg, Imm32(param_rhsInt32), param_branch);
+}
+
 void EmitOp_TagValue(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_ValueType::Ref param_valTy,
                       Type_Reg::Ref param_payload, Type_ValueReg::Ref param_dest) {
   ops.tagValue(JSValueType(param_valTy), param_payload, param_dest);
@@ -220,6 +238,12 @@ void EmitOp_BranchAdd32(Cachet_ContextRef cx,
                                          IR_MASM::LabelRef param_branch) {
   ops.branchAdd32(param_condition, param_srcReg, param_dstReg,
                          param_branch);
+}
+
+void EmitOp_Neg32(Cachet_ContextRef cx,
+                  IR_MASM::OpsRef ops,
+                  Type_Reg::Ref param_valueReg) {
+  ops.neg32(param_valueReg);
 }
 
 };  // namespace Impl_MASM
@@ -503,6 +527,14 @@ Type_Reg::Val Impl_CacheIR::Fn_useInt32Reg(Cachet_ContextRef cx,
   } else {
     return cx.compiler->allocator.useRegister(cx.compiler->masm, param_int32Id);
   }
+}
+
+void Impl_CacheIR::Fn_emitLoadInt32StubField(
+    Cachet_ContextRef cx,
+    Type_Int32Field::Ref param_int32Field,
+    Type_Reg::Ref param_dstReg) {
+  StubFieldOffset val(param_int32Field, StubField::Type::RawInt32);
+  cx.compiler->emitLoadStubField(val, param_dstReg);
 }
 
 Type_Int32::Val Impl_CacheIR::Fn_readInt32Field(

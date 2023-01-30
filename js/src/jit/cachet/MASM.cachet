@@ -30,8 +30,22 @@ ir MASM {
         MASM::setInt32(dstReg, MASM::getInt32(srcReg));
     }
 
-    op Move32(int32: Int32, dstReg: Reg) {
-        MASM::setInt32(dstReg, int32);
+    op Move32Imm32(srcInt32: Int32, dstReg: Reg) {
+        MASM::setInt32(dstReg, srcInt32);
+    }
+
+    op Cmp32Move32(condition: Condition, lhsReg: Reg, rhsReg: Reg, srcReg: Reg, dstReg: Reg) {
+        assert (condition == Condition::GreaterThan || condition == Condition::LessThan);
+
+        let lhsInt32 = MASM::getInt32(lhsReg);
+        let rhsInt32 = MASM::getInt32(rhsReg);
+        let srcInt32 = MASM::getInt32(srcReg);
+
+        if condition == Condition::GreaterThan && lhsInt32 > rhsInt32 {
+            MASM::setInt32(dstReg, srcInt32);
+        } else if condition == Condition::LessThan && lhsInt32 < rhsInt32 {
+            MASM::setInt32(dstReg, srcInt32);
+        }
     }
 
     op UnboxObject(valueReg: ValueReg, objectReg: Reg) {
@@ -101,6 +115,37 @@ ir MASM {
         }
     }
 
+    op BranchTest32Imm(condition: Condition, lhsReg: Reg, rhsInt32: Int32, label branch: MASM) {
+      let lhsInt32 = MASM::getInt32(lhsReg);
+
+      let result = lhsInt32 & rhsInt32;
+
+      assert (
+        condition == Condition::Zero ||
+        condition == Condition::NonZero ||
+        condition == Condition::Signed ||
+        condition == Condition::NotSigned
+      );
+
+      if condition == Condition::Zero {
+        if result == 0_i32 {
+          goto branch;
+        }
+      } else if condition == Condition::NonZero {
+        if result != 0_i32 {
+          goto branch;
+        }
+      } else if condition == Condition::Signed {
+        if result < 0_i32 {
+          goto branch;
+        }
+      } else if condition == Condition::NotSigned {
+        if result > 0_i32 {
+          goto branch;
+        }
+      }
+    }
+
     op TagValue(valTy: ValueType, payload: Reg, dest: ValueReg) {
         // TODO: Don't have getters/setters for other types yet
         if valTy == ValueType::Int32 {
@@ -142,6 +187,13 @@ ir MASM {
         }
 
         MASM::setInt32(dstReg, result);
+    }
+
+    op Neg32(valueReg: Reg) {
+      let valueInt32 = MASM::getInt32(valueReg);
+      let result = -valueInt32;
+
+      MASM::setInt32(valueReg, result);
     }
 
     fn getValue(valueReg: ValueReg) -> Value;

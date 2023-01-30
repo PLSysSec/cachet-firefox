@@ -751,6 +751,7 @@ friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_defineInt32Reg(cachet::Cac
 friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_useValueReg(cachet::Cachet_ContextRef cx, cachet::Type_ValueId::Ref param_valueId);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useObjectReg(cachet::Cachet_ContextRef cx, cachet::Type_ObjectId::Ref param_objectId);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useInt32Reg(cachet::Cachet_ContextRef cx, cachet::Type_Int32Id::Ref param_int32Id);
+friend void cachet::Impl_CacheIR::Fn_emitLoadInt32StubField(cachet::Cachet_ContextRef cx, cachet::Type_Int32Field::Ref param_int32Field, cachet::Type_Reg::Ref param_dstReg);
 friend cachet::Type_Int32::Val cachet::Impl_CacheIR::Fn_readInt32Field(cachet::Cachet_ContextRef cx, cachet::Type_Int32Field::Ref param_int32Field);
 friend cachet::Type_Shape::Val cachet::Impl_CacheIR::Fn_readShapeField(cachet::Cachet_ContextRef cx, cachet::Type_ShapeField::Ref param_shapeField);
 friend cachet::Type_Bool::Val cachet::Impl_CacheIR::Fn_objectGuardNeedsSpectreMitigations(cachet::Cachet_ContextRef cx, cachet::Type_ObjectId::Ref param_objectId);

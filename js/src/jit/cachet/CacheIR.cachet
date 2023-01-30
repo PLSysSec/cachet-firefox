@@ -162,9 +162,8 @@ ir CacheIR emits MASM {
 
     op LoadInt32Constant(valField: Int32Field, resultId: Int32Id) {
         let resultReg = CacheIR::defineInt32Reg(resultId);
-        let val = CacheIR::readInt32Field(valField);
 
-        emit MASM::Move32(val, resultReg);
+        CacheIR::emitLoadInt32StubField(valField, resultReg);
     }
 
     op Int32AddResult(lhsId: Int32Id, rhsId: Int32Id) {
@@ -179,6 +178,35 @@ ir CacheIR emits MASM {
         emit MASM::TagValue(ValueType::Int32, scratchReg, CacheIR::outputReg);
 
         CacheIR::releaseReg(scratchReg);
+    }
+
+    op Int32NegationResult(inputId: Int32Id) {
+      let inputReg = CacheIR::useInt32Reg(inputId);
+      let scratchReg = CacheIR::allocateReg();
+
+      CacheIR::addFailurePath(out label failure);
+
+      emit MASM::BranchTest32Imm(Condition::Zero, inputReg, 0_i32, failure);
+      emit MASM::Mov(inputReg, scratchReg);
+      emit MASM::Neg32(scratchReg);
+      emit MASM::TagValue(ValueType::Int32, scratchReg, CacheIR::outputReg);
+
+      CacheIR::releaseReg(scratchReg);
+    }
+
+    op Int32MinMax(isMax: Bool, firstId: Int32Id, secondId: Int32Id, resultId: Int32Id) {
+        let firstReg = CacheIR::useInt32Reg(firstId);
+        let secondReg = CacheIR::useInt32Reg(secondId);
+        let resultReg = CacheIR::defineInt32Reg(resultId);
+
+        emit MASM::Mov(firstReg, resultReg);
+        if isMax {
+            emit MASM::Cmp32Move32(Condition::GreaterThan, secondReg,
+                firstReg, secondReg, resultReg);
+        } else {
+            emit MASM::Cmp32Move32(Condition::LessThan, secondReg,
+                firstReg, secondReg, resultReg);
+        }
     }
 
     fn addFailurePath(out label failure: MASM);
@@ -260,6 +288,11 @@ ir CacheIR emits MASM {
     }
 
     var outputReg: ValueReg;
+
+    #[refined]
+    fn emitLoadInt32StubField(int32Field: Int32Field, dstReg: Reg) emits MASM {
+       emit MASM::Move32Imm32(CacheIR::readInt32Field(int32Field), dstReg); 
+    }
 
     fn readInt32Field(int32Field: Int32Field) -> Int32;
     fn readShapeField(shapeField: ShapeField) -> Shape;
