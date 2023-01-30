@@ -30,6 +30,10 @@ ir MASM {
         MASM::setInt32(dstReg, MASM::getInt32(srcReg));
     }
 
+    op Move32(int32: Int32, dstReg: Reg) {
+        MASM::setInt32(dstReg, int32);
+    }
+
     op UnboxObject(valueReg: ValueReg, objectReg: Reg) {
         let value = MASM::getValue(valueReg);
         MASM::setObject(objectReg, Value::toObject(value));
