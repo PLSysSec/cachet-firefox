@@ -123,9 +123,8 @@ class OperandId {
   static const uint16_t InvalidId = UINT16_MAX;
   uint16_t id_;
 
-  explicit OperandId(uint16_t id) : id_(id) { MOZ_ASSERT(valid()); }
-
  public:
+  explicit OperandId(uint16_t id) : id_(id) { MOZ_ASSERT(valid()); }
   OperandId() : id_(InvalidId) {}
   uint16_t id() const { return id_; }
   bool valid() const { return id_ != InvalidId; }

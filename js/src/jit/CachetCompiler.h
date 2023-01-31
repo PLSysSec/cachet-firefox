@@ -190,32 +190,17 @@ using Type_ValueId = PrimitiveType<ValOperandId>;
 using Type_ObjectId = PrimitiveType<ObjOperandId>;
 using Type_Int32Id = PrimitiveType<Int32OperandId>;
 using Type_NumberId = PrimitiveType<NumberOperandId>;
-using Type_BooleanId = PrimitiveType<BooleanOperandId>;
+using Type_BoolId = PrimitiveType<BooleanOperandId>;
 using Type_StringId = PrimitiveType<StringOperandId>;
 using Type_SymbolId = PrimitiveType<SymbolOperandId>;
 using Type_BigIntId = PrimitiveType<BigIntOperandId>;
 using Type_ValueTagId = PrimitiveType<ValueTagOperandId>;
-
-class TypedOperandIdW : public TypedOperandId {
-  bool isValueId_;
-
- public:
-  TypedOperandIdW(TypedOperandId id, bool isValueId)
-      : TypedOperandId(id), isValueId_(isValueId) {}
-
-  bool operator==(const TypedOperandIdW& other) const { return id() == other.id() && type() == other.type(); }
-  bool operator!=(const TypedOperandIdW& other) const { return id() != other.id() || type() != other.type(); }
-
-  bool isValueId() {
-    return isValueId_;
-  }
-};
-
-using Type_TypedId = PrimitiveType<TypedOperandIdW>;
+using Type_TypedId = PrimitiveType<TypedOperandId>;
 
 using Type_Int32Field = PrimitiveType<uint32_t>;
 using Type_ObjectField = PrimitiveType<uint32_t>;
 using Type_StringField = PrimitiveType<uint32_t>;
+using Type_SymbolField = PrimitiveType<uint32_t>;
 using Type_ShapeField = PrimitiveType<uint32_t>;
 using Type_ClassField = PrimitiveType<uint32_t>;
 
