@@ -45,11 +45,6 @@ struct PrimitiveType {
     return std::forward<U>(x);
   }
 
-  template <typename U>
-  static U&& Fields(U&& x) {
-    return std::forward<U>(x);
-  }
-
   static MutRef ToMutRef(Local& local) {
     return local;
   }

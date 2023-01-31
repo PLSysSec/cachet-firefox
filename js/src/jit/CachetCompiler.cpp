@@ -518,16 +518,17 @@ Type_Condition::Ref Variant_LessThan(Cachet_ContextRef cx) {
 };  // namespace Impl_Condition
 
 namespace Impl_Address {
+
+Type_Reg::Ref Field_base(Cachet_ContextRef cx, Type_Address::Ref in) {
+  return in.base;
+}
+
+Type_Int32::Ref Field_offset(Cachet_ContextRef cx, Type_Address::Ref in) {
+  return in.offset;
+}
+
 Type_Address::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_Reg::Ref param_base, Type_Int32::Ref param_offset) {
   return Address(param_base, param_offset);
-}
-
-Type_Reg::Val Fn_base(Cachet_ContextRef cx, Type_Address::Ref param_address) {
-  return param_address.base;
-}
-
-Type_Int32::Val Fn_offset(Cachet_ContextRef cx, Type_Address::Ref param_address) {
-  return param_address.offset;
 }
 
 };
@@ -555,20 +556,20 @@ inline Type_Scale::Ref Variant_TimesEight(Cachet_ContextRef cx) {
 
 namespace Impl_BaseIndex {
 
-Type_Reg::Val Fn_base(Cachet_ContextRef cx, Type_BaseIndex::Ref param_baseIndex) {
-  return param_baseIndex.base;
+Type_Reg::Ref Field_base(Cachet_ContextRef cx, Type_BaseIndex::Ref in) {
+  return in.base;
 }
 
-Type_Reg::Val Fn_index(Cachet_ContextRef cx, Type_BaseIndex::Ref param_baseIndex) {
-  return param_baseIndex.index;
+Type_Reg::Ref Field_index(Cachet_ContextRef cx, Type_BaseIndex::Ref in) {
+  return in.index;
 }
 
-Type_Scale::Val Fn_scale(Cachet_ContextRef cx, Type_BaseIndex::Ref param_baseIndex) {
-  return param_baseIndex.scale;
+Type_Scale::Ref Field_scale(Cachet_ContextRef cx, Type_BaseIndex::Ref in) {
+  return in.scale;
 }
 
-Type_UInt32::Val Fn_offset(Cachet_ContextRef cx, Type_BaseIndex::Ref param_baseIndex) {
-  return param_baseIndex.offset;
+Type_UInt32::Ref Field_offset(Cachet_ContextRef cx, Type_BaseIndex::Ref in) {
+  return in.offset;
 }
 
 Type_BaseIndex::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_Reg::Ref param_base, Type_Reg::Ref param_index, Type_Scale::Ref param_scale, Type_UInt32::Ref param_offset) {
@@ -579,8 +580,8 @@ Type_BaseIndex::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_Reg::Ref param_ba
 
 namespace Impl_BaseValueIndex {
 
-Type_BaseIndex::Val Fn_inner(Cachet_ContextRef cx, Type_BaseValueIndex::Ref param_baseValueIndex) {
-  return static_cast<BaseIndex>(param_baseValueIndex);
+Type_BaseIndex::Ref Field_inner(Cachet_ContextRef cx, Type_BaseValueIndex::Ref in) {
+  return static_cast<BaseIndex>(in);
 }
 
 Type_BaseValueIndex::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_BaseIndex::Ref param_inner) {
@@ -591,8 +592,8 @@ Type_BaseValueIndex::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_BaseIndex::R
 
 namespace Impl_BaseObjectElementIndex {
 
-Type_BaseValueIndex::Val Fn_inner(Cachet_ContextRef cx, Type_BaseObjectElementIndex::Ref param_baseObjectElementIndex) {
-  return static_cast<BaseValueIndex>(param_baseObjectElementIndex);
+Type_BaseValueIndex::Ref Field_inner(Cachet_ContextRef cx, Type_BaseObjectElementIndex::Ref in) {
+  return static_cast<BaseValueIndex>(in);
 }
 
 Type_BaseObjectElementIndex::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_BaseValueIndex::Ref param_inner) {
@@ -603,8 +604,8 @@ Type_BaseObjectElementIndex::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_Base
 
 namespace Impl_BaseObjectSlotIndex {
 
-Type_BaseValueIndex::Val Fn_inner(Cachet_ContextRef cx, Type_BaseObjectSlotIndex::Ref param_baseObjectSlotIndex) {
-  return static_cast<BaseValueIndex>(param_baseObjectSlotIndex);
+Type_BaseValueIndex::Ref Field_inner(Cachet_ContextRef cx, Type_BaseObjectSlotIndex::Ref in) {
+  return static_cast<BaseValueIndex>(in);
 }
 
 Type_BaseObjectSlotIndex::Val Fn_newUnchecked(Cachet_ContextRef cx, Type_BaseValueIndex::Ref param_inner) {

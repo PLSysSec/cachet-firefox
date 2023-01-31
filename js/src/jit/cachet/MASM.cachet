@@ -342,20 +342,20 @@ enum Condition {
     LessThan,
 }
 
-struct Address;
+struct Address {
+    base: Reg,
+    offset: Int32,
+}
 
 impl Address {
     fn new(base: Reg, offset: Int32) -> Address {
         let address = (unsafe { Address::newUnchecked(base, offset) } );
-        assume Address::base(address) == base;
-        assume Address::offset(address) == offset;
+        assume address.base == base;
+        assume address.offset == offset;
         address
     }
 
     unsafe fn newUnchecked(base: Reg, offset: Int32) -> Address;
-
-    fn base(address: Address) -> Reg;
-    fn offset(address: Address) -> Int32;
 }
 
 enum Scale {
@@ -367,20 +367,20 @@ enum Scale {
 
 var ValueScale: Scale = Scale::TimesEight;
 
-struct BaseIndex;
+struct BaseIndex {
+    base: Reg,
+    index: Reg,
+    scale: Scale,
+    offset: UInt32,
+}
 
 impl BaseIndex {
-    fn base(baseIndex: BaseIndex) -> Reg;
-    fn index(baseIndex: BaseIndex) -> Reg;
-    fn scale(baseIndex: BaseIndex) -> Scale;
-    fn offset(baseIndex: BaseIndex) -> UInt32;
-
     fn new(base: Reg, index: Reg, scale: Scale, offset: UInt32) -> BaseIndex {
         let baseIndex = (unsafe { BaseIndex::newUnchecked(base, index, scale, offset) } );
-        assume BaseIndex::base(baseIndex) == base;
-        assume BaseIndex::index(baseIndex) == index;
-        assume BaseIndex::scale(baseIndex) == scale;
-        assume BaseIndex::offset(baseIndex) == offset;
+        assume baseIndex.base == base;
+        assume baseIndex.index == index;
+        assume baseIndex.scale == scale;
+        assume baseIndex.offset == offset;
         baseIndex
     }    
 
@@ -388,59 +388,59 @@ impl BaseIndex {
 
     #[spec]
     fn getOffset(baseIndex: BaseIndex) -> Int64 {
-        let index = (MASM::getInt32(BaseIndex::index(baseIndex)) as UInt32) as Int64;
-        if BaseIndex::scale(baseIndex) == Scale::TimesOne {
-            return index * 1_i64 + BaseIndex::offset(baseIndex);
-        } else if BaseIndex::scale(baseIndex) == Scale::TimesTwo {
-            return index * 2_i64 + BaseIndex::offset(baseIndex);
-        } else if BaseIndex::scale(baseIndex) == Scale::TimesFour {
-            return index * 4_i64 + BaseIndex::offset(baseIndex);
+        let index = (MASM::getInt32(baseIndex.index) as UInt32) as Int64;
+        if baseIndex.scale == Scale::TimesOne {
+            return index * 1_i64 + baseIndex.offset;
+        } else if baseIndex.scale == Scale::TimesTwo {
+            return index * 2_i64 + baseIndex.offset;
+        } else if baseIndex.scale == Scale::TimesFour {
+            return index * 4_i64 + baseIndex.offset;
         } else {
-            assert BaseIndex::scale(baseIndex) == Scale::TimesEight;
-            return index * 8_i64 + BaseIndex::offset(baseIndex);
+            assert baseIndex.scale == Scale::TimesEight;
+            return index * 8_i64 + baseIndex.offset;
         }
     }
 }
 
-struct BaseValueIndex;
+struct BaseValueIndex {
+    inner: BaseIndex,
+}
 
 impl BaseValueIndex {
-    fn inner(baseValueIndex: BaseValueIndex) -> BaseIndex;
-
     fn new(base: Reg, index: Reg, offset: UInt32) -> BaseValueIndex {
         let inner = BaseIndex::new(base, index, ValueScale, offset);
         let baseValueIndex = (unsafe { BaseValueIndex::newUnchecked(inner) } );
-        assume BaseValueIndex::inner(baseValueIndex) == inner;
+        assume baseValueIndex.inner == inner;
         baseValueIndex
     }
 
     unsafe fn newUnchecked(inner: BaseIndex) -> BaseValueIndex;
 }
 
-struct BaseObjectElementIndex;
+struct BaseObjectElementIndex {
+    inner: BaseValueIndex,
+}
 
 impl BaseObjectElementIndex {
-    fn inner(baseObjectElementIndex: BaseObjectElementIndex) -> BaseValueIndex;
-
     fn new(base: Reg, index: Reg, offset: UInt32) -> BaseObjectElementIndex {
         let inner = BaseValueIndex::new(base, index, offset);
         let baseObjectElementIndex = (unsafe { BaseObjectElementIndex::newUnchecked(inner) } );
-        assume BaseObjectElementIndex::inner(baseObjectElementIndex) == inner;
+        assume baseObjectElementIndex.inner == inner;
         baseObjectElementIndex
     }
 
     unsafe fn newUnchecked(inner: BaseValueIndex) -> BaseObjectElementIndex;
 }
 
-struct BaseObjectSlotIndex;
+struct BaseObjectSlotIndex {
+    inner: BaseValueIndex,
+}
 
 impl BaseObjectSlotIndex {
-    fn inner(baseObjectSlotIndex: BaseObjectSlotIndex) -> BaseValueIndex;
-
     fn new(base: Reg, index: Reg) -> BaseObjectSlotIndex {
         let inner = BaseValueIndex::new(base, index, 0_u32);
         let baseObjectSlotIndex = (unsafe { BaseObjectSlotIndex::newUnchecked(inner) } );
-        assume BaseObjectSlotIndex::inner(baseObjectSlotIndex) == inner;
+        assume baseObjectSlotIndex.inner == inner;
         baseObjectSlotIndex
     }
 
@@ -533,16 +533,16 @@ ir MASM {
     }
 
     op Load32Address(address: Address, dstReg: Reg) {
-        let baseData = MASM::getData(Address::base(address));
-        let data = RegData::readData(baseData, Address::offset(address));
+        let baseData = MASM::getData(address.base);
+        let data = RegData::readData(baseData, address.offset);
         let value = RegData::toUnboxedValue(data);
         let int32 = Value::toInt32(value);
         MASM::setInt32(dstReg, int32);
     }
 
     op LoadTypedOrValueAddress(address: Address, dstReg: TypedOrValueReg) {
-        let baseData = MASM::getData(Address::base(address));    
-        let data = RegData::readData(baseData, Address::offset(address));
+        let baseData = MASM::getData(address.base);    
+        let data = RegData::readData(baseData, address.offset);
         let value = RegData::toValue(data);
 
         if TypedOrValueReg::hasValue(dstReg) {
@@ -555,8 +555,8 @@ ir MASM {
     }
 
     op LoadTypedOrValueBaseObjectElementIndex(index: BaseObjectElementIndex, dstReg: TypedOrValueReg) {
-        let baseIndex = BaseValueIndex::inner(BaseObjectElementIndex::inner(index));
-        let baseData = MASM::getData(BaseIndex::base(baseIndex));    
+        let baseIndex = index.inner.inner;
+        let baseData = MASM::getData(baseIndex.base);    
         let offset = BaseIndex::getOffset(baseIndex);
 
         let data = RegData::readData(baseData, offset);
@@ -572,15 +572,15 @@ ir MASM {
     }
 
     op LoadPtrAddress(address: Address, dstReg: Reg) {
-        let baseData = MASM::getData(Address::base(address));
-        let data = RegData::readData(baseData, Address::offset(address));
+        let baseData = MASM::getData(address.base);
+        let data = RegData::readData(baseData, address.offset);
         MASM::setData(dstReg, data);
     }
 
     op LoadValueBaseObjectElementIndex(index: BaseObjectElementIndex, dstReg: ValueReg) {
-        let baseValueIndex = BaseObjectElementIndex::inner(index);
-        let baseIndex = BaseValueIndex::inner(baseValueIndex);
-        let baseData = MASM::getData(BaseIndex::base(baseIndex));    
+        let baseValueIndex = index.inner;
+        let baseIndex = baseValueIndex.inner;
+        let baseData = MASM::getData(baseIndex.base);    
         let offset = BaseIndex::getOffset(baseIndex);
 
         let data = RegData::readData(baseData, offset);
@@ -687,13 +687,13 @@ ir MASM {
         maybeScratch: Reg,
         label failure: MASM
     ) {
-        assert indexReg != Address::base(length);
-        assert Address::base(length) != maybeScratch;
+        assert indexReg != length.base;
+        assert length.base != maybeScratch;
         assert indexReg != maybeScratch;
 
         let index = MASM::getInt32(indexReg) as UInt32;
-        let baseData = MASM::getData(Address::base(length));
-        let data = RegData::readData(baseData, Address::offset(length));
+        let baseData = MASM::getData(length.base);
+        let data = RegData::readData(baseData, length.offset);
         let length = Value::toInt32(RegData::toUnboxedValue(data)) as UInt32;
 
         if index >= length {
@@ -844,8 +844,8 @@ ir MASM {
     ) {
         assert condition == Condition::Equal || condition == Condition::NotEqual;
 
-        let baseIndex = BaseValueIndex::inner(BaseObjectElementIndex::inner(index));
-        let baseData = MASM::getData(BaseIndex::base(baseIndex));    
+        let baseIndex = index.inner.inner;
+        let baseData = MASM::getData(baseIndex.base);    
         let offset = BaseIndex::getOffset(baseIndex);
 
         let data = RegData::readData(baseData, offset);
@@ -1079,8 +1079,8 @@ ir MASM {
         );
 
 
-        let baseData = MASM::getData(Address::base(address));
-        let data = RegData::readData(baseData, Address::offset(address));
+        let baseData = MASM::getData(address.base);
+        let data = RegData::readData(baseData, address.offset);
         let lhsInt32 = Value::toInt32(RegData::toUnboxedValue(data));
 
         if condition == Condition::Equal && lhsInt32 == rhsInt32 {
