@@ -1581,9 +1581,9 @@ bool CacheIRCompiler::emitGuardToObject(ValOperandId inputId) {
 bool CacheIRCompiler::emitGuardIsNullOrUndefined(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
-//#ifdef JS_CACHET
-//  cachet::Impl_CacheIR::Op_GuardIsNullOrUndefined(cachet::CachetContext {this, cx_}, inputId);
-//#else
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_GuardIsNullOrUndefined(cachet::CachetContext {this, cx_}, inputId);
+#else
   JSValueType knownType = allocator.knownType(inputId);
   if (knownType == JSVAL_TYPE_UNDEFINED || knownType == JSVAL_TYPE_NULL) {
     return true;
@@ -1600,7 +1600,7 @@ bool CacheIRCompiler::emitGuardIsNullOrUndefined(ValOperandId inputId) {
   masm.branchTestUndefined(Assembler::NotEqual, input, failure->label());
 
   masm.bind(&success);
-//#endif
+#endif
   return true;
 }
 
@@ -2832,9 +2832,9 @@ bool CacheIRCompiler::emitInt32SubResult(Int32OperandId lhsId,
 bool CacheIRCompiler::emitInt32MulResult(Int32OperandId lhsId,
                                          Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
-//#ifdef JS_CACHET
-//  cachet::Impl_CacheIR::Op_Int32MulResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-//#else
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_Int32MulResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
+#else
   AutoOutputRegister output(*this);
   Register lhs = allocator.useRegister(masm, lhsId);
   Register rhs = allocator.useRegister(masm, rhsId);
@@ -2860,7 +2860,7 @@ bool CacheIRCompiler::emitInt32MulResult(Int32OperandId lhsId,
 
   masm.bind(&done);
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
-//#endif
+#endif
   return true;
 }
 
@@ -3723,9 +3723,9 @@ bool CacheIRCompiler::emitGuardIndexIsValidUpdateOrAdd(ObjOperandId objId,
 bool CacheIRCompiler::emitGuardTagNotEqual(ValueTagOperandId lhsId,
                                            ValueTagOperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
-//#ifdef JS_CACHET
-//  cachet::Impl_CacheIR::Op_GuardTagNotEqual(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-//#else
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_GuardTagNotEqual(cachet::CachetContext {this, cx_}, lhsId, rhsId);
+#else
   Register lhs = allocator.useRegister(masm, lhsId);
   Register rhs = allocator.useRegister(masm, rhsId);
 
@@ -3744,7 +3744,7 @@ bool CacheIRCompiler::emitGuardTagNotEqual(ValueTagOperandId lhsId,
   masm.jump(failure->label());
 
   masm.bind(&done);
-//#endif
+#endif
   return true;
 }
 
@@ -3944,9 +3944,9 @@ bool CacheIRCompiler::emitGuardArgumentsObjectFlags(ObjOperandId objId,
 bool CacheIRCompiler::emitLoadDenseElementHoleResult(ObjOperandId objId,
                                                      Int32OperandId indexId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
-//#ifdef JS_CACHET
-//  cachet::Impl_CacheIR::Op_LoadDenseElementHoleResult(cachet::CachetContext {this, cx_}, objId, indexId);
-//#else
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_LoadDenseElementHoleResult(cachet::CachetContext {this, cx_}, objId, indexId);
+#else
   AutoOutputRegister output(*this);
   Register obj = allocator.useRegister(masm, objId);
   Register index = allocator.useRegister(masm, indexId);
@@ -3979,7 +3979,7 @@ bool CacheIRCompiler::emitLoadDenseElementHoleResult(ObjOperandId objId,
   masm.moveValue(UndefinedValue(), output.valueReg());
 
   masm.bind(&done);
-//#endif
+#endif
   return true;
 }
 
@@ -6108,9 +6108,9 @@ bool CacheIRCompiler::emitLoadTypeOfObjectResult(ObjOperandId objId) {
 
 bool CacheIRCompiler::emitLoadInt32TruthyResult(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
-//#ifdef JS_CACHET
-//  cachet::Impl_CacheIR::Op_LoadIntTruthyResult(cachet::CachetContext {this, cx_}, inputId);
-//#else
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_LoadInt32TruthyResult(cachet::CachetContext {this, cx_}, inputId);
+#else
   AutoOutputRegister output(*this);
   ValueOperand val = allocator.useValueRegister(masm, inputId);
 
@@ -6123,7 +6123,7 @@ bool CacheIRCompiler::emitLoadInt32TruthyResult(ValOperandId inputId) {
   masm.moveValue(BooleanValue(false), output.valueReg());
 
   masm.bind(&done);
-//#endif
+#endif
   return true;
 }
 

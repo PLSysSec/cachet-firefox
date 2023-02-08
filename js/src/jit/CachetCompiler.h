@@ -30,6 +30,7 @@ namespace jit {
 
 class CacheIRCompiler;
 class OperandLocation;
+class FailurePath;
 
 namespace cachet {
 
@@ -211,15 +212,17 @@ inline Type_Heap::MutRef Var_heap(Cachet_ContextRef cx) {
   return heap;
 }
 
+using Type_FailurePath = PrimitiveType<js::jit::FailurePath*>;
+
 namespace IR_MASM {
   using LabelRef = Label*;
-  using LabelLocal = Label*;
-  using LabelMutRef = Label*&;
+  using LabelLocal = Label;
+  using LabelMutRef = Label*;
   using OpsRef = MacroAssembler&;
 
   LabelLocal NewLabel(Cachet_ContextRef cx);
   LabelMutRef ToLabelMutRef(LabelLocal& label);
-  LabelRef ToLabelRef(LabelLocal label);
+  LabelRef ToLabelRef(LabelLocal& label);
 
   IR_MASM::OpsRef GetOutput(Cachet_ContextRef cx);
   

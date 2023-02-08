@@ -1085,15 +1085,15 @@ IR_MASM::OpsRef IR_MASM::GetOutput(Cachet_ContextRef cx) {
 }
 
 IR_MASM::LabelLocal IR_MASM::NewLabel(Cachet_ContextRef cx) {
-  return nullptr;
+  return Label();
 }
 
 IR_MASM::LabelMutRef IR_MASM::ToLabelMutRef(IR_MASM::LabelLocal& label) {
-  return label;
+  return &label;
 }
 
-IR_MASM::LabelRef IR_MASM::ToLabelRef(IR_MASM::LabelLocal label) {
-  return label;
+IR_MASM::LabelRef IR_MASM::ToLabelRef(IR_MASM::LabelLocal& label) {
+  return &label;
 }
 
 void IR_MASM::BindLabel(Cachet_ContextRef cx, OpsRef ops, IR_MASM::LabelMutRef label) {
@@ -1645,11 +1645,19 @@ inline Type_GuardClassKind::Ref Variant_Map(Cachet_ContextRef cx) {
 
 };  // namespace Impl_GuardClassKind
 
-void Impl_CacheIR::Fn_addFailurePath(Cachet_ContextRef cx, IR_MASM::LabelMutRef failure) {
+namespace Impl_FailurePath {
+
+IR_MASM::LabelRef Field_label_(Cachet_ContextRef cx, Type_FailurePath::Ref in) {
+  return in->label();
+}
+
+};  // namespace Impl_FailurePath
+
+Type_FailurePath::Val Impl_CacheIR::Fn_addFailurePath(Cachet_ContextRef cx) {
   FailurePath* failurePath;
   // TODO: use this result in some way
   cx.compiler->addFailurePath(&failurePath);
-  failure = failurePath->label();
+  return failurePath;
 }
 
 Type_JSValueType::Ref Impl_CacheIR::Fn_knownType(Cachet_ContextRef cx, Type_ValueId::Ref param_valueId) {

@@ -743,7 +743,7 @@ friend cachet::IR_MASM::OpsRef cachet::IR_MASM::GetOutput(cachet::Cachet_Context
 friend cachet::IR_MASM::OpsRef cachet::IR_CacheIR::GetOutput(cachet::Cachet_ContextRef cx);
 friend cachet::Type_TypedOrValueReg::Ref cachet::Impl_CacheIR::Var_outputReg(cachet::Cachet_ContextRef cx);
 friend cachet::Type_JSValueType::Ref cachet::Impl_CacheIR::Fn_knownType(cachet::Cachet_ContextRef cx, cachet::Type_ValueId::Ref param_valueId);
-friend void cachet::Impl_CacheIR::Fn_addFailurePath(cachet::Cachet_ContextRef cx, cachet::IR_MASM::LabelMutRef failure);
+friend cachet::Type_FailurePath::Val cachet::Impl_CacheIR::Fn_addFailurePath(cachet::Cachet_ContextRef cx);
 friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_allocateValueReg(cachet::Cachet_ContextRef cx);
 friend void cachet::Impl_CacheIR::Fn_releaseValueReg(cachet::Cachet_ContextRef cx, cachet::Type_ValueReg::Ref param_valueReg);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_allocateReg(cachet::Cachet_ContextRef cx);
