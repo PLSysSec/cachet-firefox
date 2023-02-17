@@ -5,6 +5,7 @@ import "./MASM.cachet";
 enum OperandLocationKind {
     Uninitialized,
     PayloadReg,
+    FloatReg,
     ValueReg,
 }
 
@@ -61,7 +62,22 @@ impl OperandLocation {
     }
 
     unsafe fn getPayloadTypeUnchecked(loc: OperandLocation) -> JSValueType;
+    
+    fn setFloatReg(out loc: OperandLocation, floatReg: FloatReg) {
+        (unsafe { OperandLocation::setFloatRegUnchecked(out loc, floatReg) }); 
+        assume OperandLocation::kind(loc) == OperandLocationKind::FloatReg;
+        assume (unsafe { OperandLocation::getFloatRegUnchecked(loc) } ) == floatReg;
+    }
 
+    unsafe fn setFloatRegUnchecked(out loc: OperandLocation, floatReg: FloatReg);
+
+    fn getFloatReg(loc: OperandLocation) -> FloatReg {
+        assert OperandLocation::kind(loc) == OperandLocationKind::ValueReg;
+        let floatReg = (unsafe { OperandLocation::getFloatRegUnchecked(loc) });
+        floatReg
+    }
+
+    unsafe fn getFloatRegUnchecked(loc: OperandLocation) -> FloatReg;
 }
 
 struct OperandId;
@@ -111,6 +127,15 @@ impl OperandId {
 
     fn toValueTagId(operandId: OperandId) -> ValueTagId {
         ValueTagId::fromId(OperandId::id(operandId))
+    }
+
+    fn toIntPtrId(operandId: OperandId) -> IntPtrId {
+        IntPtrId::fromId(OperandId::id(operandId))
+    }
+
+    #[spec]
+    fn toRawId(operandId: OperandId) -> RawId {
+        RawId::fromId(OperandId::id(operandId))
     }
 }
 
@@ -222,6 +247,33 @@ impl ValueTagId {
     unsafe fn fromIdUnchecked(id: UInt16) -> ValueTagId;
 }
 
+struct IntPtrId <: OperandId;
+
+impl IntPtrId {
+    fn fromId(id: UInt16) -> IntPtrId {
+        let intPtrId = unsafe { IntPtrId::fromIdUnchecked(id) };
+        assume OperandId::id(intPtrId) == id;
+        intPtrId
+    }
+
+    unsafe fn fromIdUnchecked(id: UInt16) -> IntPtrId;
+}
+
+// TODO(spinda): This isn't an actual `OperandId` subtype on the C++ side.
+// Figure out what this maps to.
+#[spec]
+struct RawId <: OperandId;
+
+impl RawId {
+    fn fromId(id: UInt16) -> RawId {
+        let rawId = unsafe { RawId::fromIdUnchecked(id) };
+        assume OperandId::id(rawId) == id;
+        rawId
+    }
+
+    unsafe fn fromIdUnchecked(id: UInt16) -> RawId;
+}
+
 struct TypedId <: OperandId;
 
 impl TypedId {
@@ -306,10 +358,10 @@ impl Int32Field {
     fn fromOffset(offset: UInt32) -> Int32Field;
 }
 
-struct ObjectField;
+struct IntPtrField;
 
-impl ObjectField {
-    fn fromOffset(offset: UInt32) -> ObjectField;
+impl IntPtrField {
+    fn fromOffset(offset: UInt32) -> IntPtrField;
 }
 
 struct ShapeField;
@@ -318,10 +370,23 @@ impl ShapeField {
     fn fromOffset(offset: UInt32) -> ShapeField;
 }
 
+// FIXME(spinda): Not a real field type.
 struct ClassField;
 
 impl ClassField {
     fn fromOffset(offset: UInt32) -> ClassField;
+}
+
+struct GetterSetterField;
+
+impl GetterSetterField {
+    fn fromOffset(offset: UInt32) -> GetterSetterField;
+}
+
+struct ObjectField;
+
+impl ObjectField {
+    fn fromOffset(offset: UInt32) -> ObjectField;
 }
 
 struct SymbolField;
@@ -336,8 +401,39 @@ impl StringField {
     fn fromOffset(offset: UInt32) -> StringField;
 }
 
+struct BaseScriptField;
+
+impl BaseScriptField {
+    fn fromOffset(offset: UInt32) -> BaseScriptField;
+}
+
+struct IdField;
+
+impl IdField {
+    fn fromOffset(offset: UInt32) -> IdField;
+}
+
+struct AllocSiteField;
+
+impl AllocSiteField {
+    fn fromOffset(offset: UInt32) -> AllocSiteField;
+}
+
+struct Int64Field;
+
+impl Int64Field {
+    fn fromOffset(offset: UInt32) -> Int64Field;
+}
+
+struct ValueField;
+
+impl ValueField {
+    fn fromOffset(offset: UInt32) -> ValueField;
+}
+
 enum GuardClassKind {
     Array,
+    PlainObject,
     ArrayBuffer,
     SharedArrayBuffer,
     DataView,
@@ -354,7 +450,7 @@ struct FailurePath {
 }
 
 ir CacheIR emits MASM {
-    // ops from CacheIRCompiler
+    op ReturnFromIC() {}
 
     op GuardIsNumber(inputId: ValueId) {
         let knownType = CacheIR::knownType(inputId);
@@ -366,18 +462,6 @@ ir CacheIR emits MASM {
         let inputReg = CacheIR::useValueId(inputId);
         let failure = CacheIR::addFailurePath();
         emit MASM::BranchTestNumber(Condition::NotEqual, inputReg, failure.label_);
-    }
-
-    op GuardToObject(inputId: ValueId) {
-        if CacheIR::knownType(inputId) == JSValueType::Object {
-            return;
-        }
-
-        let inputReg = CacheIR::useValueId(inputId);
-
-        let failure = CacheIR::addFailurePath();
-
-        emit MASM::BranchTestObject(Condition::NotEqual, inputReg, failure.label_);
     }
 
     op GuardIsNullOrUndefined(inputId: ValueId) {
@@ -396,7 +480,7 @@ ir CacheIR emits MASM {
         bind success;
     }
 
-    op GuardIsNull(inputId: ValueId){
+    op GuardIsNull(inputId: ValueId) {
         if CacheIR::knownType(inputId) == JSValueType::Null {
             return;
         }
@@ -416,86 +500,37 @@ ir CacheIR emits MASM {
         emit MASM::BranchTestUndefined(Condition::NotEqual, inputReg, failure.label_);
     }
 
-    op GuardBooleanToInt32(inputId: ValueId, resultId: Int32Id) {
-        let resultReg = CacheIR::defineInt32Id(resultId);
-
-        if CacheIR::knownType(inputId) == JSValueType::Bool {
-            let boolId = BoolId::fromId(OperandId::id(inputId));
-            let inputReg = CacheIR::useBoolId(boolId);
-            emit MASM::MovData(inputReg, resultReg);
-            emit MASM::CastBoolToInt32(resultReg);
-            return;
-        }
-
-        let inputReg = CacheIR::useValueId(inputId);
+    op GuardIsNativeObject(objectId: ObjectId) {
+        let objectReg = CacheIR::useObjectId(objectId);
+        let scratchReg = CacheIR::allocateReg();
 
         let failure = CacheIR::addFailurePath();
-        emit MASM::FallibleUnboxBoolean(inputReg, resultReg, failure.label_);
-        emit MASM::CastBoolToInt32(resultReg);
+
+        emit MASM::BranchIfNonNativeObj(objectReg, scratchReg, failure.label_);
+
+        CacheIR::releaseReg(scratchReg);
     }
 
-    op GuardToString(inputId: ValueId) {
-        if CacheIR::knownType(inputId) == JSValueType::String {
-            return;
-        }
-
-        let inputReg = CacheIR::useValueId(inputId);
-
+    op GuardIsProxy(objectId: ObjectId) {
+        let objectReg = CacheIR::useObjectId(objectId);
+        let scratchReg = CacheIR::allocateReg();
         let failure = CacheIR::addFailurePath();
 
-        emit MASM::BranchTestString(Condition::NotEqual, inputReg, failure.label_);
+        emit MASM::BranchTestObjectIsProxy(false, objectReg, scratchReg, failure.label_);
+
+        CacheIR::releaseReg(scratchReg);
     }
 
-    op GuardToSymbol(inputId: ValueId) {
-        if CacheIR::knownType(inputId) == JSValueType::Symbol {
-            return;
-        }
-
-        let inputReg = CacheIR::useValueId(inputId);
-
+    op GuardInt32IsNonNegative(indexId: Int32Id) {
+        let indexReg = CacheIR::useInt32Id(indexId);
         let failure = CacheIR::addFailurePath();
-
-        emit MASM::BranchTestSymbol(Condition::NotEqual, inputReg, failure.label_);
-    }
-
-    op GuardToBigInt(inputId: ValueId) {
-        if CacheIR::knownType(inputId) == JSValueType::BigInt {
-            return;
-        }
-
-        let inputReg = CacheIR::useValueId(inputId);
-
-        let failure = CacheIR::addFailurePath();
-
-        emit MASM::BranchTestBigInt(Condition::NotEqual, inputReg, failure.label_);
-    }
-
-    op GuardToBoolean(inputId: ValueId) {
-        if CacheIR::knownType(inputId) == JSValueType::Bool {
-            return;
-        }
-        let inputReg = CacheIR::useValueId(inputId);
-
-        let failure = CacheIR::addFailurePath();
-
-        emit MASM::BranchTestBoolean(Condition::NotEqual, inputReg, failure.label_);
-    }
-
-    op GuardToInt32(inputId: ValueId) {
-        if CacheIR::knownType(inputId) == JSValueType::Int32 {
-            return;
-        }
-        let inputReg = CacheIR::useValueId(inputId);
-
-        let failure = CacheIR::addFailurePath();
-
-        emit MASM::BranchTestInt32(Condition::NotEqual, inputReg, failure.label_);
+        emit MASM::Branch32Imm(Condition::LessThan, indexReg, 0_i32, failure.label_);
     }
 
     /*op GuardToInt32Index(inputId: ValueId, resultId: Int32Id) {
-        let outputReg = CacheIR::defineInt32Reg(resultId);
+        let outputReg = CacheIR::defineInt32Id(resultId);
 
-        let inputReg = CacheIR::useValueReg(inputId);
+        let inputReg = CacheIR::useValueId(inputId);
 
         let failure = CacheIR::addFailurePath();
 
@@ -508,7 +543,7 @@ ir CacheIR emits MASM {
             label notInt32: MASM;
             emit MASM::BranchTestInt32Tag(Condition::NotEqual, tagReg, notInt32);
             {
-                CacheIR::releaseReg(tagReg);
+                CacheIR::releaseScratchReg();
                 emit MASM::UnboxInt32(inputReg, outputReg);
                 emit MASM::Jump(done);
                 CacheIR::allocateScratchReg();
@@ -517,18 +552,29 @@ ir CacheIR emits MASM {
 
             emit MASM::BranchTestDoubleTag(Condition::NotEqual, tagReg, failure.label_);
             {
-                CacheIR::releaseReg(tagReg);
-                let floatReg = CacheIR::allocateAvailableFloatReg(FloatReg::floatReg0());
+                CacheIR::releaseScratchReg();
+                let floatReg = CacheIR::allocateAutoScratchFloatReg(failure);
 
-                emit MASM::UnboxDouble(inputReg, floatReg);
-                emit MASM::ConvertDoubleToInt32(floatReg, outputReg, failure.label_, false);
+                emit MASM::UnboxDouble(inputReg, floatReg.reg);
+                emit MASM::ConvertDoubleToInt32(floatReg.reg, outputReg, floatReg.failure, false);
                 CacheIR::allocateScratchReg();
             }
-            CacheIR::releaseReg(tagReg);
+            CacheIR::releaseScratchReg();
         }
 
         bind done;
     }*/
+
+    op IsObjectResult(inputId: ValueId) {
+        let scratchReg = CacheIR::allocateReg();
+        let valueReg = CacheIR::useValueId(inputId);
+
+        emit MASM::TestObjectSet(Condition::Equal, valueReg, scratchReg);
+        emit MASM::TagValue(JSValueType::Bool, scratchReg,
+                TypedOrValueReg::toValueReg(CacheIR::outputReg));
+
+        CacheIR::releaseReg(scratchReg);
+    }
 
     op GuardNonDoubleType(inputId: ValueId, type: ValueType) {
         if CacheIR::knownType(inputId) == JSValueType::fromValueType(type) {
@@ -601,25 +647,184 @@ ir CacheIR emits MASM {
         CacheIR::releaseReg(scratchReg);
     }
 
-    op GuardIsNativeObject(objectId: ObjectId) {
+    op GuardBooleanToInt32(inputId: ValueId, resultId: Int32Id) {
+        let resultReg = CacheIR::defineInt32Id(resultId);
+
+        if CacheIR::knownType(inputId) == JSValueType::Bool {
+            let boolId = BoolId::fromId(OperandId::id(inputId));
+            let inputReg = CacheIR::useBoolId(boolId);
+            emit MASM::MovData(inputReg, resultReg);
+            emit MASM::CastBoolToInt32(resultReg);
+            return;
+        }
+
+        let inputReg = CacheIR::useValueId(inputId);
+
+        let failure = CacheIR::addFailurePath();
+        emit MASM::FallibleUnboxBoolean(inputReg, resultReg, failure.label_);
+        emit MASM::CastBoolToInt32(resultReg);
+    }
+
+    op GuardToObject(inputId: ValueId) {
+        if CacheIR::knownType(inputId) == JSValueType::Object {
+            return;
+        }
+
+        let inputReg = CacheIR::useValueId(inputId);
+
+        let failure = CacheIR::addFailurePath();
+
+        emit MASM::BranchTestObject(Condition::NotEqual, inputReg, failure.label_);
+    }
+
+    op GuardShape(objectId: ObjectId, shapeField: ShapeField) {
         let objectReg = CacheIR::useObjectId(objectId);
+        let shape = CacheIR::readShapeField(shapeField);
         let scratchReg = CacheIR::allocateReg();
 
         let failure = CacheIR::addFailurePath();
 
-        emit MASM::BranchIfNonNativeObj(objectReg, scratchReg, failure.label_);
+        let needsSpectreMitigations = CacheIR::objectGuardNeedsSpectreMitigations(objectId);
+
+        if needsSpectreMitigations {
+            emit MASM::BranchTestObjectShape(
+                    Condition::NotEqual, objectReg, shape, scratchReg, objectReg, failure.label_
+                    );
+            CacheIR::releaseReg(scratchReg);
+        } else {
+            CacheIR::releaseReg(scratchReg);
+            emit MASM::BranchTestObjectShapeNoSpectreMitigations(
+                    Condition::NotEqual, objectReg, shape, failure.label_
+                    );
+        }
+    }
+
+    op GuardAnyClass(objectId: ObjectId, classField: ClassField) {
+        let objectReg = CacheIR::useObjectId(objectId);
+        let scratchReg = CacheIR::allocateReg();
+        let class = CacheIR::readClassField(classField);
+
+        let failure = CacheIR::addFailurePath();
+
+        let needsSpectreMitigations = CacheIR::objectGuardNeedsSpectreMitigations(objectId);
+
+        if needsSpectreMitigations {
+            emit MASM::BranchTestObjClass(
+                Condition::NotEqual, objectReg, class, scratchReg, objectReg, failure.label_
+            );
+        } else {
+            emit MASM::BranchTestObjClassNoSpectreMitigations(
+                Condition::NotEqual, objectReg, class, scratchReg, failure.label_
+            );
+        }
 
         CacheIR::releaseReg(scratchReg);
     }
 
-    op GuardIsProxy(objectId: ObjectId) {
-        let objectReg = CacheIR::useObjectId(objectId);
-        let scratchReg = CacheIR::allocateReg();
+    op GuardFixedSlotValue(objId: ObjectId,
+                           offsetOffset: Int32Field,
+                           valOffset: ValueField) {
+        let obj = CacheIR::useObjectId(objId);
+        let offset = CacheIR::allocateReg();
+        let scratchVal = CacheIR::allocateValueReg();
+
         let failure = CacheIR::addFailurePath();
 
-        emit MASM::BranchTestObjectIsProxy(false, objectReg, scratchReg, failure.label_);
+        CacheIR::emitLoadInt32StubField(offsetOffset, offset);
+        CacheIR::emitLoadValueStubField(valOffset, scratchVal);
 
-        CacheIR::releaseReg(scratchReg);
+        let slotVal = BaseIndex::new(obj, offset, Scale::TimesOne, 0_u32);
+        emit MASM::BranchTestValue(
+            Condition::NotEqual, slotVal, scratchVal, failure.label_
+        );
+
+        CacheIR::releaseReg(offset);
+        CacheIR::releaseValueReg(scratchVal);
+    }
+
+    op GuardDynamicSlotValue(objId: ObjectId,
+                           offsetOffset: Int32Field,
+                           valOffset: ValueField) {
+        let obj = CacheIR::useObjectId(objId);
+        let objSlots = CacheIR::allocateReg();
+        let offset = CacheIR::allocateReg();
+        let scratchVal = CacheIR::allocateValueReg();
+
+        let failure = CacheIR::addFailurePath();
+
+        let objOffsetAddr = Address::new(obj, NativeObject::offsetOfSlots as Int32);
+        emit MASM::LoadPtrAddress(objOffsetAddr, objSlots);
+
+        CacheIR::emitLoadInt32StubField(offsetOffset, offset);
+        CacheIR::emitLoadValueStubField(valOffset, scratchVal);
+
+        let slotVal = BaseIndex::new(objSlots, offset, Scale::TimesOne, 0_u32);
+        emit MASM::BranchTestValue(
+            Condition::NotEqual, slotVal, scratchVal, failure.label_
+        );
+
+        CacheIR::releaseReg(objSlots);
+        CacheIR::releaseReg(offset);
+        CacheIR::releaseValueReg(scratchVal);
+    }
+
+    op GuardToString(inputId: ValueId) {
+        if CacheIR::knownType(inputId) == JSValueType::String {
+            return;
+        }
+
+        let inputReg = CacheIR::useValueId(inputId);
+
+        let failure = CacheIR::addFailurePath();
+
+        emit MASM::BranchTestString(Condition::NotEqual, inputReg, failure.label_);
+    }
+
+    op GuardToSymbol(inputId: ValueId) {
+        if CacheIR::knownType(inputId) == JSValueType::Symbol {
+            return;
+        }
+
+        let inputReg = CacheIR::useValueId(inputId);
+
+        let failure = CacheIR::addFailurePath();
+
+        emit MASM::BranchTestSymbol(Condition::NotEqual, inputReg, failure.label_);
+    }
+
+    op GuardToInt32(inputId: ValueId) {
+        if CacheIR::knownType(inputId) == JSValueType::Int32 {
+            return;
+        }
+        let inputReg = CacheIR::useValueId(inputId);
+
+        let failure = CacheIR::addFailurePath();
+
+        emit MASM::BranchTestInt32(Condition::NotEqual, inputReg, failure.label_);
+    }
+
+    op GuardToBoolean(inputId: ValueId) {
+        if CacheIR::knownType(inputId) == JSValueType::Bool {
+            return;
+        }
+
+        let inputReg = CacheIR::useValueId(inputId);
+
+        let failure = CacheIR::addFailurePath();
+
+        emit MASM::BranchTestBoolean(Condition::NotEqual, inputReg, failure.label_);
+    }
+
+    op GuardToBigInt(inputId: ValueId) {
+        if CacheIR::knownType(inputId) == JSValueType::BigInt {
+            return;
+        }
+
+        let inputReg = CacheIR::useValueId(inputId);
+
+        let failure = CacheIR::addFailurePath();
+
+        emit MASM::BranchTestBigInt(Condition::NotEqual, inputReg, failure.label_);
     }
 
     op GuardNoDenseElements(objectId: ObjectId) {
@@ -639,28 +844,6 @@ ir CacheIR emits MASM {
         CacheIR::releaseReg(scratchReg);
     }
 
-    op BooleanToNumber(booleanId: BoolId, resultId: NumberId) {
-        let booleanReg = CacheIR::useBoolId(booleanId);
-        let resultReg = CacheIR::defineNumberId(resultId);
-
-        emit MASM::CastBoolToInt32(booleanReg);
-        emit MASM::TagValue(JSValueType::Int32, booleanReg, resultReg);
-    }
-
-    op LoadProto(objectId: ObjectId, resultId: ObjectId) {
-        let objectReg = CacheIR::useObjectId(objectId);
-        let resultReg = CacheIR::defineObjectId(resultId);
-
-        emit MASM::LoadObjectProto(objectReg, resultReg);
-        emit MASM::UnboxObjectProto(resultReg, resultReg);
-    }
-
-    op GuardInt32IsNonNegative(indexId: Int32Id) {
-        let indexReg = CacheIR::useInt32Id(indexId);
-        let failure = CacheIR::addFailurePath();
-        emit MASM::Branch32Imm(Condition::LessThan, indexReg, 0_i32, failure.label_);
-    }
-
     op GuardTagNotEqual(lhsId: ValueTagId, rhsId: ValueTagId) {
         let lhsReg = CacheIR::useValueTagId(lhsId);
         let rhsReg = CacheIR::useValueTagId(rhsId);
@@ -677,6 +860,82 @@ ir CacheIR emits MASM {
         emit MASM::Jump(failure.label_);
 
         bind done;
+    }
+
+    op GuardSpecificAtom(strId: StringId, stringField: StringField) {
+        let strReg = CacheIR::useStringId(strId);
+        let scratchReg = CacheIR::allocateReg();
+
+        let atom = String::asAtom(CacheIR::readStringField(stringField));
+
+        let failure = CacheIR::addFailurePath();
+
+        let volatileRegs = LiveRegSet::new(
+            GeneralRegSet::volatile(), CacheIR::liveVolatileFloatRegs()
+        );
+        LiveRegSet::takeReg(out volatileRegs, volatileRegs, scratchReg);
+
+        emit MASM::GuardSpecificAtom(strReg, atom, scratchReg, volatileRegs, failure.label_);
+
+        CacheIR::releaseReg(scratchReg);
+    }
+
+    op BooleanToNumber(boolId: BoolId, resultId: NumberId) {
+        let boolReg = CacheIR::useBoolId(boolId);
+        let resultReg = CacheIR::defineNumberId(resultId);
+
+        emit MASM::CastBoolToInt32(boolReg);
+        emit MASM::TagValue(JSValueType::Int32, boolReg, resultReg);
+    }
+
+    op LoadObject(resultId: ObjectId, objField: ObjectField) {
+        let resultReg = CacheIR::defineObjectId(resultId);
+        CacheIR::emitLoadObjectStubField(objField, resultReg);
+    }
+
+    op LoadObjectResult(objId: ObjectId) {
+        let objectReg = CacheIR::useObjectId(objId);
+        CacheIR::emitStoreResult(objectReg, JSValueType::Object, CacheIR::outputReg);
+    }
+
+    op LoadProto(objectId: ObjectId, resultId: ObjectId) {
+        let objectReg = CacheIR::useObjectId(objectId);
+        let resultReg = CacheIR::defineObjectId(resultId);
+
+        emit MASM::LoadObjectProto(objectReg, resultReg);
+        emit MASM::UnboxObjectProto(resultReg, resultReg);
+    }
+
+    op LoadValueTag(valId: ValueId, resultId: ValueTagId) {
+        let valReg = CacheIR::useValueId(valId);
+        let resultReg = CacheIR::defineValueTagId(resultId);
+
+        let tagReg = MASM::extractTag(valReg, resultReg);
+        if(tagReg != resultReg) {
+            emit MASM::Mov(tagReg, resultReg);
+        }
+    }
+
+    op LoadFixedSlotResult(objectId: ObjectId, slotField: Int32Field) {
+        let objectReg = CacheIR::useObjectId(objectId);
+        let slotOffset = CacheIR::readInt32Field(slotField);
+
+        emit MASM::LoadTypedOrValueAddress(Address::new(objectReg, slotOffset), CacheIR::outputReg);
+    }
+
+    op LoadDynamicSlotResult(objectId: ObjectId, slotField: Int32Field) {
+        let objectReg = CacheIR::useObjectId(objectId);
+        let slotOffset = CacheIR::readInt32Field(slotField);
+
+        let scratchReg = CacheIR::allocateReg();
+        emit MASM::LoadPtrAddress(
+            Address::new(objectReg, NativeObject::offsetOfSlots as Int32), scratchReg
+        );
+        emit MASM::LoadTypedOrValueAddress(
+            Address::new(scratchReg, slotOffset), CacheIR::outputReg
+        );
+
+        CacheIR::releaseReg(scratchReg);
     }
 
     op LoadDenseElementResult(objectId: ObjectId, indexId: Int32Id) {
@@ -742,40 +1001,89 @@ ir CacheIR emits MASM {
         CacheIR::releaseReg(scratchReg1);
     }
 
-    op IsObjectResult(inputId: ValueId) {
+    op LoadInt32ArrayLengthResult(objectId: ObjectId) {
+        let objectReg = CacheIR::useObjectId(objectId);
         let scratchReg = CacheIR::allocateReg();
-        let valueReg = CacheIR::useValueId(inputId);
 
-        emit MASM::TestObjectSet(Condition::Equal, valueReg, scratchReg);
-        emit MASM::TagValue(JSValueType::Bool, scratchReg,
+        let failure = CacheIR::addFailurePath();
+
+        emit MASM::LoadPtrAddress(
+            Address::new(objectReg, NativeObject::offsetOfElements as Int32), scratchReg
+        );
+        emit MASM::Load32Address(
+            Address::new(scratchReg, NativeObjectElements::offsetOfLength), scratchReg
+        );
+
+        emit MASM::BranchTest32(Condition::Signed, scratchReg, scratchReg, failure.label_);
+        emit MASM::TagValue(JSValueType::Int32, scratchReg,
                 TypedOrValueReg::toValueReg(CacheIR::outputReg));
 
         CacheIR::releaseReg(scratchReg);
     }
 
-    op Int32MinMax(isMax: Bool, firstId: Int32Id, secondId: Int32Id, resultId: Int32Id) {
-        let firstReg = CacheIR::useInt32Id(firstId);
-        let secondReg = CacheIR::useInt32Id(secondId);
-        let resultReg = CacheIR::defineInt32Id(resultId);
+    op LoadArgumentsObjectLengthResult(objectId: ObjectId) {
+        let objectReg = CacheIR::useObjectId(objectId);
+        let argObjLengthReg = CacheIR::allocateReg();
 
-        emit MASM::Mov(firstReg, resultReg);
-        if isMax {
-            emit MASM::Cmp32Move32(Condition::GreaterThan, secondReg,
-                firstReg, secondReg, resultReg);
-        } else {
-            emit MASM::Cmp32Move32(Condition::LessThan, secondReg,
-                firstReg, secondReg, resultReg);
-        }
+        let failure = CacheIR::addFailurePath();
+
+        emit MASM::LoadArgumentsObjectLength(objectReg, argObjLengthReg, failure.label_);
+        emit MASM::TagValue(JSValueType::Int32, argObjLengthReg,
+                TypedOrValueReg::toValueReg(CacheIR::outputReg));
+
+        CacheIR::releaseReg(argObjLengthReg);
     }
 
-    op LoadObjectResult(objId: ObjectId) {
-        let objectReg = CacheIR::useObjectId(objId);
-        CacheIR::emitStoreResult(objectReg, JSValueType::Object, CacheIR::outputReg);
+    op LoadArgumentsObjectArgResult(objId: ObjectId, indexId: Int32Id) {
+        let objReg = CacheIR::useObjectId(objId);
+        let indexReg = CacheIR::useInt32Id(indexId);
+
+        let scratchReg = CacheIR::allocateReg();
+
+        let failure = CacheIR::addFailurePath();
+
+        emit MASM::LoadArgumentsObjectElement(objReg, indexReg,
+                TypedOrValueReg::toValueReg(CacheIR::outputReg), scratchReg, failure.label_);
+
+        CacheIR::releaseReg(scratchReg);
     }
 
-    op LoadObject(resultId: ObjectId, objField: ObjectField) {
-        let resultReg = CacheIR::defineObjectId(resultId);
-        CacheIR::emitLoadObjectStubField(objField, resultReg);
+    op LoadInstanceOfObjectResult(lhsId: ValueId, protoId: ObjectId) {
+        let lhsReg = CacheIR::useValueId(lhsId);
+        let protoReg = CacheIR::useObjectId(protoId);
+        let scratchReg = CacheIR::allocateReg();
+
+        let failure = CacheIR::addFailurePath();
+
+        label returnFalse: MASM;
+        label returnTrue: MASM;
+        label done: MASM;
+
+        emit MASM::FallibleUnboxObject(lhsReg, scratchReg, failure.label_);
+        emit MASM::LoadObjectProto(scratchReg, scratchReg);
+
+        label loopHead: MASM;
+        bind loopHead;
+
+        emit MASM::BranchTestNullProto(scratchReg, returnFalse);
+        emit MASM::BranchTestLazyProto(scratchReg, failure.label_);
+        emit MASM::UnboxObjectProto(scratchReg, scratchReg);
+        emit MASM::BranchObject(Condition::Equal, scratchReg, protoReg, returnTrue);
+
+        emit MASM::LoadObjectProto(scratchReg, scratchReg);
+        //emit MASM::StoreBool(true, protoReg); <-- uncomment to induce error
+        emit MASM::Jump(loopHead);
+
+        bind returnFalse;
+        CacheIR::emitStoreBool(false, CacheIR::outputReg);
+        emit MASM::Jump(done);
+
+        bind returnTrue;
+        CacheIR::emitStoreBool(true, CacheIR::outputReg);
+
+        bind done;
+
+        CacheIR::releaseReg(scratchReg);
     }
 
     op LoadStringResult(stringId: StringId) {
@@ -796,38 +1104,13 @@ ir CacheIR emits MASM {
                 TypedOrValueReg::toValueReg(CacheIR::outputReg));
     }
 
-    op LoadValueTag(valId: ValueId, resultId: ValueTagId) {
-        let valReg = CacheIR::useValueId(valId);
-        let resultReg = CacheIR::defineValueTagId(resultId);
-
-        let tagReg = MASM::extractTag(valReg, resultReg);
-        if(tagReg != resultReg) {
-            emit MASM::Mov(tagReg, resultReg);
-        }
-    }
-
     op LoadBooleanResult(bool: Bool) {
         CacheIR::emitStoreBool(bool, CacheIR::outputReg);
     }
 
-    op LoadInt32ArrayLengthResult(objectId: ObjectId) {
-        let objectReg = CacheIR::useObjectId(objectId);
-        let scratchReg = CacheIR::allocateReg();
-
-        let failure = CacheIR::addFailurePath();
-
-        emit MASM::LoadPtrAddress(
-            Address::new(objectReg, NativeObject::offsetOfElements as Int32), scratchReg
-        );
-        emit MASM::Load32Address(
-            Address::new(scratchReg, NativeObjectElements::offsetOfLength), scratchReg
-        );
-
-        emit MASM::BranchTest32(Condition::Signed, scratchReg, scratchReg, failure.label_);
-        emit MASM::TagValue(JSValueType::Int32, scratchReg,
-                TypedOrValueReg::toValueReg(CacheIR::outputReg));
-
-        CacheIR::releaseReg(scratchReg);
+    op LoadUndefinedResult() {
+        let value = Value::getUndefined();
+        emit MASM::MoveValueImm(value, TypedOrValueReg::toValueReg(CacheIR::outputReg));
     }
 
     op LoadBigIntResult(bigIntId: BigIntId) {
@@ -874,90 +1157,82 @@ ir CacheIR emits MASM {
         bind done;
     }
 
-    // ops from IonCacheIRCompiler
-
-    op GuardShape(objectId: ObjectId, shapeField: ShapeField) {
-        let objectReg = CacheIR::useObjectId(objectId);
-        let shape = CacheIR::readShapeField(shapeField);
-
+    op CompareNullUndefinedResult(jsop: JSOp, isUndefined: Bool, inputId: ValueId) {
+        let inputReg = CacheIR::useValueId(inputId);
         let scratchReg = CacheIR::allocateReg();
-        let failure = CacheIR::addFailurePath();
 
-        let needsSpectreMitigations = CacheIR::objectGuardNeedsSpectreMitigations(objectId);
+        if JSOp::isStrictEqualityOp(jsop) {
+            if isUndefined {
+                emit MASM::TestUndefinedSet(Condition::fromJSOp(jsop, false), inputReg, scratchReg);    
+            } else {
+                emit MASM::TestNullSet(Condition::fromJSOp(jsop, false), inputReg, scratchReg);
+            }
 
-        if needsSpectreMitigations {
-            emit MASM::BranchTestObjectShape(
-                    Condition::NotEqual, objectReg, shape, scratchReg, objectReg, failure.label_
-                    );
-            CacheIR::releaseReg(scratchReg);
-        } else {
-            CacheIR::releaseReg(scratchReg);
-            emit MASM::BranchTestObjectShapeNoSpectreMitigations(
-                    Condition::NotEqual, objectReg, shape, failure.label_
-                    );
-        }
-    }
-
-    op GuardAnyClass(objectId: ObjectId, classField: ClassField) {
-        let objectReg = CacheIR::useObjectId(objectId);
-        let scratchReg = CacheIR::allocateReg();
-        let class = CacheIR::readClassField(classField);
-
-        let failure = CacheIR::addFailurePath();
-
-        let needsSpectreMitigations = CacheIR::objectGuardNeedsSpectreMitigations(objectId);
-
-        if needsSpectreMitigations {
-            emit MASM::BranchTestObjClass(
-                Condition::NotEqual, objectReg, class, scratchReg, objectReg, failure.label_
-            );
-        } else {
-            emit MASM::BranchTestObjClassNoSpectreMitigations(
-                Condition::NotEqual, objectReg, class, scratchReg, failure.label_
-            );
+            CacheIR::emitStoreResult(scratchReg, JSValueType::Bool, CacheIR::outputReg);
+            return;
         }
 
-        CacheIR::releaseReg(scratchReg);
-    }
-
-    op GuardSpecificAtom(strId: StringId, stringField: StringField) {
-        let strReg = CacheIR::useStringId(strId);
-        let scratchReg = CacheIR::allocateReg();
-
-        let atom = String::asAtom(CacheIR::readStringField(stringField));
-
         let failure = CacheIR::addFailurePath();
+        
+        assert JSOp::isLooseEqualityOp(jsop);
 
-        let volatileRegs = LiveRegSet::new(
-            GeneralRegSet::newVolatile(), CacheIR::liveVolatileFloatRegs()
-        );
-        LiveRegSet::takeReg(out volatileRegs, volatileRegs, scratchReg);
+        label nullOrLikeUndefined: MASM;
+        label notNullOrLikeUndefined: MASM;
+        label done: MASM;
 
-        emit MASM::GuardSpecificAtom(strReg, atom, scratchReg, volatileRegs, failure.label_);
+        {
+            let tagReg = CacheIR::allocateScratchReg();
+            emit MASM::SplitTagForTest(inputReg, tagReg);
+
+            if isUndefined {
+                emit MASM::BranchTestUndefinedTag(Condition::Equal, tagReg, nullOrLikeUndefined);
+                emit MASM::BranchTestNullTag(Condition::Equal, tagReg, nullOrLikeUndefined);
+            } else {
+                emit MASM::BranchTestNullTag(Condition::Equal, tagReg, nullOrLikeUndefined);
+                emit MASM::BranchTestUndefinedTag(Condition::Equal, tagReg, nullOrLikeUndefined);
+            }
+            emit MASM::BranchTestObjectTag(Condition::NotEqual, tagReg, notNullOrLikeUndefined);
+
+            {
+                CacheIR::releaseScratchReg();
+
+                emit MASM::UnboxObject(inputReg, scratchReg);
+                emit MASM::BranchIfObjectEmulatesUndefined(scratchReg, scratchReg, failure.label_, nullOrLikeUndefined);
+                emit MASM::Jump(notNullOrLikeUndefined);
+
+                CacheIR::allocateScratchReg();
+            }
+
+            CacheIR::releaseScratchReg();
+        }
+
+        bind nullOrLikeUndefined;
+        CacheIR::emitStoreBool(jsop == JSOp::Eq, CacheIR::outputReg);
+        emit MASM::Jump(done);
+
+        bind notNullOrLikeUndefined;
+        CacheIR::emitStoreBool(jsop == JSOp::Ne, CacheIR::outputReg);
+
+        bind done;
 
         CacheIR::releaseReg(scratchReg);
     }
+ 
+    op CompareInt32Result(jsop: JSOp, lhsId: Int32Id, rhsId: Int32Id) {
+        let lhsReg = CacheIR::useInt32Id(lhsId);
+        let rhsReg = CacheIR::useInt32Id(rhsId);
 
-    op LoadFixedSlotResult(objectId: ObjectId, slotField: Int32Field) {
-        let objectReg = CacheIR::useObjectId(objectId);
-        let slotOffset = CacheIR::readInt32Field(slotField);
+        label ifTrue: MASM;
+        label done: MASM;
 
-        emit MASM::LoadTypedOrValueAddress(Address::new(objectReg, slotOffset), CacheIR::outputReg);
-    }
+        emit MASM::Branch32(Condition::fromJSOp(jsop, true), lhsReg, rhsReg, ifTrue);
+        CacheIR::emitStoreBool(false, CacheIR::outputReg);
+        emit MASM::Jump(done);
 
-    op LoadDynamicSlotResult(objectId: ObjectId, slotField: Int32Field) {
-        let objectReg = CacheIR::useObjectId(objectId);
-        let slotOffset = CacheIR::readInt32Field(slotField);
+        bind ifTrue;
+        CacheIR::emitStoreBool(true, CacheIR::outputReg);
+        bind done;
 
-        let scratchReg = CacheIR::allocateReg();
-        emit MASM::LoadPtrAddress(
-            Address::new(objectReg, NativeObject::offsetOfSlots as Int32), scratchReg
-        );
-        emit MASM::LoadTypedOrValueAddress(
-            Address::new(scratchReg, slotOffset), CacheIR::outputReg
-        );
-
-        CacheIR::releaseReg(scratchReg);
     }
 
     op Int32AddResult(lhsId: Int32Id, rhsId: Int32Id) {
@@ -1045,7 +1320,7 @@ ir CacheIR emits MASM {
 
         CacheIR::releaseReg(scratchReg);
     }
-    
+
     op Int32BitAndResult(lhsId: Int32Id, rhsId: Int32Id) {
         let lhsReg = CacheIR::useInt32Id(lhsId);
         let rhsReg = CacheIR::useInt32Id(rhsId);
@@ -1091,7 +1366,7 @@ ir CacheIR emits MASM {
 
         let failure = CacheIR::addFailurePath();
 
-        emit MASM::BranchTest32Imm(Condition::Zero, inputReg, 0_i32, failure.label_);
+        emit MASM::BranchTest32Imm(Condition::Zero, inputReg, 2147483647_i32, failure.label_);
         emit MASM::Mov(inputReg, scratchReg);
         emit MASM::Neg32(scratchReg);
         emit MASM::TagValue(JSValueType::Int32, scratchReg,
@@ -1140,6 +1415,21 @@ ir CacheIR emits MASM {
         CacheIR::releaseReg(scratchReg);
     }
 
+    op Int32MinMax(isMax: Bool, firstId: Int32Id, secondId: Int32Id, resultId: Int32Id) {
+        let firstReg = CacheIR::useInt32Id(firstId);
+        let secondReg = CacheIR::useInt32Id(secondId);
+        let resultReg = CacheIR::defineInt32Id(resultId);
+
+        emit MASM::Mov(firstReg, resultReg);
+        if isMax {
+            emit MASM::Cmp32Move32(Condition::GreaterThan, secondReg,
+                firstReg, secondReg, resultReg);
+        } else {
+            emit MASM::Cmp32Move32(Condition::LessThan, secondReg,
+                firstReg, secondReg, resultReg);
+        }
+    }
+
     fn emitStoreBool(b: Bool, outputReg: TypedOrValueReg) emits MASM {
         if TypedOrValueReg::hasValue(outputReg) {
             let value = Value::fromBool(b);
@@ -1167,13 +1457,47 @@ ir CacheIR emits MASM {
         reg != Reg::R11
     }
 
+    fn allocateValueReg() -> ValueReg;
+    fn releaseValueReg(valueReg: ValueReg);
+
     fn allocateReg() -> Reg;
     // SAFETY: does not check that reg is an allocatable register
     unsafe fn allocateKnownReg(reg: Reg);
     fn releaseReg(reg: Reg);
 
-    fn allocateValueReg() -> ValueReg;
-    fn releaseValueReg(valueReg: ValueReg);
+    // Register allocated by ScratchScope
+    #[refined]
+    fn allocateScratchReg() -> Reg {
+        // safe because we want to allocate the scratch register
+        unsafe { CacheIR::allocateKnownReg(Reg::scratchReg()); }
+        Reg::scratchReg()
+    }
+
+    #[refined]
+    fn releaseScratchReg() {
+        CacheIR::releaseReg(Reg::scratchReg());
+    }
+
+    #[spec]
+    fn allocateAvailableFloatReg(floatReg: FloatReg) -> FloatReg;
+    #[spec]
+    fn releaseFloatReg(floatReg: FloatReg);
+
+    // Register allocated by AutoScratchFloatRegister
+    //#[refined]
+    //fn allocateAutoScratchFloatReg(failure: FailurePath) -> AutoScratchFloatReg {
+    //    CacheIR::allocateAvailableFloatReg(FloatReg::floatReg0());
+    //    let floatReg = unsafe { CacheIR::allocateAutoScratchFloatRegUnchecked(failure) };
+    //    assume floatReg.reg == FloatReg::floatReg0();
+    //    floatReg
+    //}
+
+    //unsafe fn allocateAutoScratchFloatRegUnchecked(failure: FailurePath) -> AutoScratchFloatReg;
+
+    //#[refined]
+    //fn releaseAutoScratchFloatReg(floatReg: AutoScratchFloatReg) {
+    //    CacheIR::releaseFloatReg(floatReg.reg);
+    //}
 
     fn defineValueId(valueId: ValueId) -> ValueReg;
     fn defineTypedId(typedId: TypedId) -> Reg;
@@ -1363,7 +1687,12 @@ ir CacheIR emits MASM {
 
     #[refined]
     fn emitLoadInt32StubField(int32Field: Int32Field, dstReg: Reg) emits MASM {
-       emit MASM::Move32Imm32(CacheIR::readInt32Field(int32Field), dstReg); 
+       emit MASM::Move32Imm32(CacheIR::readInt32Field(int32Field), dstReg);
+    }
+
+    #[refined]
+    fn emitLoadValueStubField(valueField: ValueField, dstReg: ValueReg) emits MASM {
+       emit MASM::MoveValueImm(CacheIR::readValueField(valueField), dstReg);
     }
 
     #[refined]
@@ -1376,12 +1705,99 @@ ir CacheIR emits MASM {
     fn readStringField(stringField: StringField) -> String;
     fn readShapeField(shapeField: ShapeField) -> Shape;
     fn readClassField(classField: ClassField) -> Class;
+    fn readInt64Field(int64Field: Int64Field) -> Int64;
+    fn readValueField(valueField: ValueField) -> Value;
 
     fn objectGuardNeedsSpectreMitigations(objectId: ObjectId) -> Bool;
 
-    fn liveFloatRegSet() -> FloatRegSet;
+    var mut liveFloatRegSet: FloatRegSet;
 
     fn liveVolatileFloatRegs() -> FloatRegSet {
-        FloatRegSet::newIntersect(CacheIR::liveFloatRegSet(), FloatRegSet::newVolatile())
+        FloatRegSet::intersect(CacheIR::liveFloatRegSet, FloatRegSet::volatile())
     }
 }
+
+//spec struct RegAllocState;
+
+//impl CacheIR {
+    //spec var mut regAllocState: RegAllocState;
+
+    //spec var mut allocatedRegs: Set<Reg>;
+    //spec var mut allocatedValueRegs: Set<ValueReg>;
+
+    //#[reads(CacheIR::regAllocState)]
+    //#[writes(CacheIR::regAllocState)]
+    //fn allocateReg() -> Reg;
+
+    //refine fn allocateReg() -> Reg {
+        //let reg = raw CacheIR::allocateReg();
+        //assume !Set::contains(CacheIR::allocatedRegs, reg);
+        //CacheIR::allocatedRegs = Set::add(CacheIR::allocatedRegs, reg);
+        //reg
+    //}
+
+    //#[writes(CacheIR::regAllocState)]
+    //fn releaseReg(reg: Reg);
+
+    //refine fn releaseReg(reg: Reg) {
+        //raw CacheIR::releaseReg(reg);
+        //CacheIR::allocatedRegs = Set::remove(CacheIR::allocatedRegs, reg);
+    //}
+
+    //#[reads(CacheIR::regAllocState)]
+    //#[writes(CacheIR::regAllocState)]
+    //fn allocateValueReg() -> ValueReg;
+
+    //refine fn allocateValueReg() -> ValueReg {
+        //let valueReg = raw CacheIR::allocateValueReg();
+        //assume !Set::contains(CacheIR::allocatedValueRegs, valueReg);
+        //CacheIR::allocatedValueRegs = Set::add(CacheIR::allocatedValueRegs, valueReg);
+        //valueReg
+    //}
+
+    //#[writes(CacheIR::regAllocState)]
+    //fn releaseValueReg(valueReg: ValueReg);
+
+    //refine fn releaseValueReg(valueReg: ValueReg) {
+        //raw CacheIR::releaseValueReg(valueReg);
+        //CacheIR::allocatedValueRegs = Set::remove(CacheIR::allocatedValueRegs, valueReg);
+    //}
+//}
+
+// interpreter version:
+//ir CacheIR {
+    //op LoadInstanceOfObjectResult(lhsId: ValueId, protoId: ObjectId) {
+        //CacheIR::getFailurePath(out label failure);
+
+        //let lhs = CacheIR::getValue(lhsId);
+        //let proto = CacheIR::getObject(protoId);
+
+        //if !Value::isObject(lhs) {
+            //goto failure;
+        //}
+        //let mut currentObject = Value::toObject(lhs);
+        //let mut currentProto = Object::getProto(currentObject);
+
+        //loop {
+            //if Value::isNull(currentProto) {
+                //CacheIR::setOutput(Value::fromBool(false));
+                //return;
+            //}
+            //if Value::isMagic(currentProto) {
+                //goto failure;
+            //}
+
+            //if !Value::isObject(currentProto) {
+                //CacheIR::setOutput(Value::fromBool(false));
+                //return;
+            //}
+            //currentObject = Value::toObject(currentProto);
+            //if currentObject == proto {
+                //CacheIR::setOutput(Value::fromBool(true));
+                //return;
+            //}
+
+            //currentProto = Object::getProto(currentObject);
+        //}
+    //}
+//}

@@ -3,8 +3,6 @@
 struct Heap;
 var mut heap: Heap;
 
-fn EqualStringsHelperPure(str1: String, str2: String) -> Bool;
-
 #[spec]
 enum RegDataType {
     Value,
@@ -15,6 +13,7 @@ enum RegDataType {
     ValueTag,
     TaggedProto,
     Class,
+    StackIndex,
 }
 
 #[spec]
@@ -199,12 +198,39 @@ impl RegData {
 
     unsafe fn toClassUnchecked(data: RegData) -> Class;
 
+    fn isStackIndex(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::StackIndex
+    }
+
+    fn fromStackIndex(index: UInt64) -> RegData {
+        let data = (unsafe { RegData::fromStackIndexUnchecked(index) });
+        assume RegData::isStackIndex(data);
+        assume (unsafe { RegData::toStackIndexUnchecked(data) }) == index;
+        data
+    }
+
+    unsafe fn fromStackIndexUnchecked(index: UInt64) -> RegData;
+
+    fn toStackIndex(data: RegData) -> UInt64 {
+        assert RegData::isStackIndex(data);
+        let index = (unsafe { RegData::toStackIndexUnchecked(data) });
+        assume (unsafe { RegData::fromStackIndexUnchecked(index) }) == data;
+        index
+    }
+
+    unsafe fn toStackIndexUnchecked(data: RegData) -> UInt64;
 
     #[spec]
     fn readData(data: RegData, offset: Int64) -> RegData {
         if RegData::isUnboxedValue(data) {
             let value = RegData::toUnboxedValue(data);
             return Value::readData(value, offset);
+        } else if RegData::isNativeObjectSlots(data) {
+            let slots = RegData::toNativeObjectSlots(data);
+            return NativeObjectSlots::readData(slots, offset);
+        } else if RegData::isNativeObjectElements(data) {
+            let elements = RegData::toNativeObjectElements(data);
+            return NativeObjectElements::readData(elements, offset);
         }
 
         assert false;
@@ -243,20 +269,28 @@ enum MIRType {
     Shape,
 }
 
+struct Float32;
 struct Float64;
 
 impl Float64 {
     fn isNegativeZero(float64: Float64) -> Bool;
-    fn isNan(float64: Float64) -> Bool;
+    fn isNaN(float64: Float64) -> Bool;
 
-    fn isSafeInt32(float64: Float64) -> Bool;
+    fn isSafeInt32(float64: Float64) -> Bool {
+       let result = unsafe { Float64::isSafeInt32Unchecked(float64) };
+       if result {
+           assume !Float64::isNegativeZero(float64);
+           assume !Float64::isNaN(float64);
+       }
+       result
+    }
+
+    unsafe fn isSafeInt32Unchecked(float64: Float64) -> Bool;
 
     fn fromInt32(int32: Int32) -> Float64 {
        let float64 = (unsafe { Float64::fromInt32Unchecked(int32) });
-       assume !Float64::isNegativeZero(float64);
-       assume !Float64::isNan(float64);
-       assume Float64::isSafeInt32(float64);
        assume (unsafe { Float64::toInt32Unchecked(float64) }) == int32;
+       assume Float64::isSafeInt32(float64);
 
        float64
     }
@@ -275,6 +309,8 @@ impl Float64 {
 
     unsafe fn toInt32Unchecked(float64: Float64) -> Int32;
 }
+
+struct Simd128;
 
 enum JSValueType {
   Double,
@@ -368,6 +404,8 @@ impl Value {
 
     fn typeOf(value: Value) -> ValueType;
 
+    // ...
+
     fn isDouble(value: Value) -> Bool {
         Value::typeOf(value) == ValueType::Double
     }
@@ -412,6 +450,18 @@ impl Value {
 
     unsafe fn toInt32Unchecked(value: Value) -> Int32;
 
+    fn isNumber(value: Value) -> Bool {
+        Value::isDouble(value) || Value::isInt32(value)
+    }
+
+    fn toNumber(value: Value) -> Float64 {
+        assert Value::isNumber(value);
+        if Value::isInt32(value) {
+            return Float64::fromInt32(Value::toInt32(value));
+        }
+        Value::toDouble(value)
+    }
+
     fn isBool(value: Value) -> Bool {
         Value::typeOf(value) == ValueType::Bool
     }
@@ -438,10 +488,6 @@ impl Value {
         Value::typeOf(value) == ValueType::Null
     }
 
-    fn isUndefined(value: Value) -> Bool {
-        Value::typeOf(value) == ValueType::Undefined
-    }
-
     fn getUndefined() -> Value {
         let value = (unsafe { Value::getUndefinedUnchecked() });
         assume Value::isUndefined(value);
@@ -449,6 +495,10 @@ impl Value {
     }
 
     unsafe fn getUndefinedUnchecked() -> Value;
+
+    fn isUndefined(value: Value) -> Bool {
+        Value::typeOf(value) == ValueType::Undefined
+    }
 
     fn isObject(value: Value) -> Bool {
         Value::typeOf(value) == ValueType::Object
@@ -565,19 +615,26 @@ impl Object {
 
     unsafe fn shapeOfUnchecked(heap: Heap, object: Object) -> Shape;
 
-    // #[reads(heap)]
-    // fn protoOf(object: Object) -> Value;
-    //fn protoOf(object: Object) -> Value {
-    //    (unsafe { Object::protoOfUnchecked(heap, object) })
-    //}
-
-    //unsafe fn protoOfUnchecked(heap: Heap, object: Object) -> Value;
+    fn isNativeObject(object: Object) -> Bool {
+      let shape = Object::shapeOf(object);
+      let class = Shape::classOf(shape);
+      Class::isNativeObject(class)
+    }
 
     fn toNativeObject(object: Object) -> NativeObject {
+        assert Object::isNativeObject(object);
+        (unsafe { object as NativeObject })
+    }
+
+    fn isArgumentsObject(object: Object) -> Bool {
         let shape = Object::shapeOf(object);
         let class = Shape::classOf(shape);
-        assert Class::isNativeObject(class);
-        (unsafe { object as NativeObject })
+        Class::isArgumentsObject(class)
+    }
+
+    fn toArgumentsObject(object: Object) -> ArgumentsObject {
+        assert Object::isArgumentsObject(object);
+        (unsafe { object as ArgumentsObject })
     }
 
     fn getFixedSlot(object: Object, slot: UInt32) -> Value {
@@ -605,9 +662,16 @@ struct NativeObject <: Object;
 
 impl NativeObject {
     var maxFixedSlots: UInt64 = 16_u64;
+    // FIXME(spinda): Don't know the actual value for this.
+    var maxSlotSpan: UInt64 = 1024_u64;
     var sizeOf: UInt64 = 24_u64;
+    var offsetOfFixedSlots: UInt64 = NativeObject::sizeOf;
     var offsetOfSlots: UInt64 = 8_u64;
     var offsetOfElements: UInt64 = 16_u64;
+
+    fn offsetOfFixedSlot(slot: UInt32) -> UInt64 {
+      NativeObject::offsetOfFixedSlots + slot * Value::sizeOf
+    }
 
     fn getFixedSlot(nativeObject: NativeObject, slot: UInt32) -> Value {
         let shape = Object::shapeOf(nativeObject);
@@ -629,11 +693,11 @@ impl NativeObject {
 
     unsafe fn getSlotsUnchecked(heap: Heap, nativeObject: NativeObject) -> NativeObjectSlots;
 
-    fn getElements(nativeObject: NativeObject) -> NativeObjectElements {
-        (unsafe { NativeObject::getElementsUnchecked(heap, nativeObject) } )
+    fn getElementsHeader(nativeObject: NativeObject) -> NativeObjectElements {
+        (unsafe { NativeObject::getElementsHeaderUnchecked(heap, nativeObject) } )
     }
 
-    unsafe fn getElementsUnchecked(heap: Heap, nativeObject: NativeObject) ->
+    unsafe fn getElementsHeaderUnchecked(heap: Heap, nativeObject: NativeObject) ->
     NativeObjectElements;
 
     #[spec]
@@ -644,9 +708,9 @@ impl NativeObject {
             return RegData::fromNativeObjectSlots(slots);
         } else if offset == NativeObject::offsetOfElements as Int64 {
             // object elements
-            let elements = NativeObject::getElements(nativeObject); 
+            let elements = NativeObject::getElementsHeader(nativeObject); 
             return RegData::fromNativeObjectElements(elements);
-        } else if offset >= NativeObject::sizeOf as Int64 {
+        } else if offset >= NativeObject::offsetOfFixedSlots as Int64 {
             // fixed slots
             let slotOffset = offset as UInt64 - NativeObject::sizeOf;
             assert slotOffset % Value::sizeOf == 0_u64;
@@ -664,6 +728,10 @@ impl NativeObject {
 struct NativeObjectSlots;
 
 impl NativeObjectSlots {
+    fn offsetOfSlot(slot: UInt32) -> UInt64 {
+      slot * Value::sizeOf
+    }
+
     fn length(slots: NativeObjectSlots) -> UInt32;
 
     fn getDynamicSlot(slots: NativeObjectSlots, slot: UInt32) -> Value {
@@ -803,10 +871,60 @@ impl DataViewObject {
     }
 }
 
-struct ArgumentsObject;
+struct ArgumentsObject <: NativeObject;
+
+impl ArgumentsObject {
+    var lengthOverriddenBit : UInt32 = 1_u32;
+    var elementOverriddenBit : UInt32 = 4_u32;
+    var packedBitsCount: UInt32 = 5_u32;
+
+    var argsLengthMax: UInt32 = 500000_u32;
+
+    fn getInitialLength(obj: ArgumentsObject) -> UInt32 {
+        assert !ArgumentsObject::hasOverriddenLength(obj) || !ArgumentsObject::hasOverriddenElement(obj);
+        let initialLengthSlot = ArgumentsObject::getInitialLengthSlot(obj);
+        initialLengthSlot >> ArgumentsObject::packedBitsCount
+    }
+
+    fn hasOverriddenLength(obj: ArgumentsObject) -> Bool {
+        let initialLengthSlot = ArgumentsObject::getInitialLengthSlot(obj);
+        (initialLengthSlot & ArgumentsObject::lengthOverriddenBit) != 0_u32
+    }
+
+    fn hasOverriddenElement(obj: ArgumentsObject) -> Bool {
+        let initialLengthSlot = ArgumentsObject::getInitialLengthSlot(obj);
+        (initialLengthSlot & ArgumentsObject::elementOverriddenBit) != 0_u32
+    }
+
+    fn getInitialLengthSlot(obj: ArgumentsObject) -> UInt32 {
+        let initialLengthSlot = (unsafe { ArgumentsObject::getInitialLengthSlotUnchecked(heap, obj) });
+        assume (initialLengthSlot >> ArgumentsObject::packedBitsCount) <= ArgumentsObject::argsLengthMax;
+        initialLengthSlot
+    }
+
+    unsafe fn getInitialLengthSlotUnchecked(heap: Heap, obj: ArgumentsObject) -> UInt32;
+
+    fn getArgumentsData(obj: ArgumentsObject) -> ArgumentsData {
+        assert !ArgumentsObject::hasOverriddenElement(obj);
+        let argsData = (unsafe { ArgumentsObject::getArgumentsDataUnchecked(heap, obj) });
+        assume argsData.numArgs == ArgumentsObject::getInitialLength(obj);
+        argsData
+    }
+
+    unsafe fn getArgumentsDataUnchecked(heap: Heap, obj: ArgumentsObject) -> ArgumentsData;
+}
 
 struct ArgumentsData {
     numArgs: UInt32
+}
+
+impl ArgumentsData {
+    fn getArg(argsData: ArgumentsData, index: UInt32) -> Value {
+        assert index < argsData.numArgs;
+        (unsafe { ArgumentsData::getArgUnchecked(heap, argsData, index) })
+    }
+
+    unsafe fn getArgUnchecked(heap: Heap, argsData: ArgumentsData, index: UInt32) -> Value;
 }
 
 struct UnmappedArgumentsObject <: ArgumentsObject;
@@ -853,43 +971,57 @@ impl MapObject {
     }
 }
 
-struct Shape;
-
-impl Shape {
-    fn baseShapeOf(shape: Shape) -> BaseShape;
-
-    fn classOf(shape: Shape) -> Class {
-        let baseShape = Shape::baseShapeOf(shape);
-        BaseShape::classOf(baseShape)
-    }
-
-    fn hasFixedSlot(shape: Shape, slot: UInt32) -> Bool;
-
-    fn numFixedSlots(shape: Shape) -> UInt32;
-
-    fn slotSpan(shape: Shape) -> UInt32;
-}
-
 struct BaseShape;
 
 impl BaseShape {
+    fn fromAddr(addr: UInt64) -> BaseShape;
+
     fn classOf(baseShape: BaseShape) -> Class;
 
+    // #[reads(heap)]
+    // fn protoOf(object: Object) -> TaggedProto;
     fn protoOf(baseShape: BaseShape) -> TaggedProto {
         (unsafe { BaseShape::protoOfUnchecked(heap, baseShape) })
     }
 
     unsafe fn protoOfUnchecked(heap: Heap, baseShape: BaseShape) -> TaggedProto;
+}
 
+struct Shape;
+
+impl Shape {
+    fn fromAddr(addr: UInt64) -> Shape;
+
+    fn baseShapeOf(shape: Shape) -> BaseShape;
+
+    fn classOf(shape: Shape) -> Class {
+        BaseShape::classOf(Shape::baseShapeOf(shape))
+    }
+
+    fn numFixedSlots(shape: Shape) -> UInt32;
+    fn slotSpan(shape: Shape) -> UInt32;
+
+    fn hasSlot(shape: Shape, slot: UInt32) -> Bool {
+      slot < NativeObject::maxSlotSpan && slot < Shape::slotSpan(shape)
+    }
+
+    fn hasFixedSlot(shape: Shape, slot: UInt32) -> Bool {
+      slot < NativeObject::maxFixedSlots && slot < Shape::numFixedSlots(shape)
+    }
+
+    fn hasDynamicSlot(shape: Shape, slot: UInt32) -> Bool {
+      Shape::hasSlot(shape, slot) && slot >= Shape::numFixedSlots(shape)
+    }
 }
 
 struct Class;
 
 impl Class {
-    var rawFunctionClass: Class;
-    var rawExtendedFunctionClass: Class;
+    fn fromAddr(addr: UInt64) -> Class;
 
     fn windowProxyClass() -> Class;
+
+    fn emulatesUndefined(class: Class) -> Bool;
 
     fn isNativeObject(class: Class) -> Bool;
     fn isProxyObject(class: Class) -> Bool;
@@ -903,9 +1035,10 @@ impl Class {
 struct String;
 
 impl String {
+    fn fromAddr(addr: UInt64) -> String;
+
     fn isAtom(string: String) -> Bool;
 
-    //TODO: figure out casting on C++ side
     #[refined]
     fn asAtom(string: String) -> Atom {
         assert String::isAtom(string);
@@ -916,6 +1049,8 @@ impl String {
 }
 
 struct Atom <: String;
+
+fn EqualStringsHelperPure(str1: String, str2: String) -> Bool;
 
 struct Symbol;
 
@@ -931,6 +1066,8 @@ enum ProtoTag {
 struct TaggedProto;
 
 impl TaggedProto {
+    fn fromAddr(addr: UInt64) -> TaggedProto;
+
     #[spec]
     fn tag(proto: TaggedProto) -> ProtoTag;
 

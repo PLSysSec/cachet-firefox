@@ -1,6 +1,7 @@
 // vim: set tw=99 ts=4 sts=4 sw=4 et:
 
 import "./JS.cachet";
+import "./JSOp.cachet";
 
 enum Reg {
     Rax,
@@ -27,6 +28,7 @@ impl Reg {
     }
 }
 
+// Used for ValueOperand as well
 // #[cfg(cpp)]
 struct ValueReg;
 // #[cfg(verify)]
@@ -61,16 +63,16 @@ enum FloatContentType {
     Simd128,
 }
 
-struct FloatReg;
+struct FloatReg {
+   reg: PhyFloatReg,
+   type: FloatContentType,
+}
 
 impl FloatReg {
-    fn reg(floatReg: FloatReg) -> PhyFloatReg;
-    fn type(floatReg: FloatReg) -> FloatContentType;
-
     fn new(reg: PhyFloatReg, type: FloatContentType) -> FloatReg {
         let floatReg = (unsafe { FloatReg::newUnchecked(reg, type) });
-        assume FloatReg::reg(floatReg) == reg;
-        assume FloatReg::type(floatReg) == type;
+        assume floatReg.reg == reg;
+        assume floatReg.type == type;
         floatReg
     }
 
@@ -189,23 +191,20 @@ impl TypedOrValueReg {
 struct GeneralRegSet;
 
 impl GeneralRegSet {
-    fn newEmpty() -> GeneralRegSet;
-    fn newVolatile() -> GeneralRegSet;
+    fn empty() -> GeneralRegSet;
+    fn volatile() -> GeneralRegSet;
 
-    fn newIntersect(lhs: GeneralRegSet, rhs: GeneralRegSet) -> GeneralRegSet;
-    fn newDifference(lhs: GeneralRegSet, rhs: GeneralRegSet) -> GeneralRegSet;
+    fn intersect(lhs: GeneralRegSet, rhs: GeneralRegSet) -> GeneralRegSet;
+    fn difference(lhs: GeneralRegSet, rhs: GeneralRegSet) -> GeneralRegSet;
 
     #[refined]
     fn isEmpty(set: GeneralRegSet) -> Bool {
-        let mut res = true;
-
         for reg in Reg asc {
             if GeneralRegSet::contains(set, reg) {
-                res = false;
+                return false;
             }
         }
-
-        res
+        true
     }
 
     fn contains(set: GeneralRegSet, reg: Reg) -> Bool;
@@ -216,31 +215,28 @@ impl GeneralRegSet {
 struct FloatRegSet;
 
 impl FloatRegSet {
-    fn newEmpty() -> FloatRegSet;
-    fn newVolatile() -> FloatRegSet;
+    fn empty() -> FloatRegSet;
+    fn volatile() -> FloatRegSet;
 
-    fn newIntersect(lhs: FloatRegSet, rhs: FloatRegSet) -> FloatRegSet;
-    fn newDifference(lhs: FloatRegSet, rhs: FloatRegSet) -> FloatRegSet;
-
-    fn contains(set: FloatRegSet, floatReg: FloatReg) -> Bool;
-    fn add(out newSet: FloatRegSet, set: FloatRegSet, floatReg: FloatReg);
-    fn take(out newSet: FloatRegSet, set: FloatRegSet, floatReg: FloatReg);
+    fn intersect(lhs: FloatRegSet, rhs: FloatRegSet) -> FloatRegSet;
+    fn difference(lhs: FloatRegSet, rhs: FloatRegSet) -> FloatRegSet;
 
     #[refined]
     fn isEmpty(set: FloatRegSet) -> Bool {
-        let mut res = true;
         for phyReg in PhyFloatReg asc {
             let singleReg = FloatReg::new(phyReg, FloatContentType::Single);
             let doubleReg = FloatReg::new(phyReg, FloatContentType::Double);
             let simdReg = FloatReg::new(phyReg, FloatContentType::Simd128);
-
             if FloatRegSet::contains(set, singleReg) || FloatRegSet::contains(set, doubleReg) || FloatRegSet::contains(set, simdReg) {
-                res = false;
+                return false;
             }
         }
-
-        res
+        true
     }
+
+    fn contains(set: FloatRegSet, floatReg: FloatReg) -> Bool;
+    fn add(out newSet: FloatRegSet, set: FloatRegSet, floatReg: FloatReg);
+    fn take(out newSet: FloatRegSet, set: FloatRegSet, floatReg: FloatReg);
 
     #[refined]
     fn reducedForPush(set: FloatRegSet) -> FloatRegSet {
@@ -261,7 +257,6 @@ impl FloatRegSet {
                 FloatRegSet::take(out newSet, newSet, singleReg);
             }
         }
-
         newSet
     }
 }
@@ -272,13 +267,28 @@ impl LiveRegSet {
     fn gprs(set: LiveRegSet) -> GeneralRegSet;
     fn fpus(set: LiveRegSet) -> FloatRegSet;
 
+    fn new(gprs: GeneralRegSet, fpus: FloatRegSet) -> LiveRegSet {
+        let set = (unsafe { LiveRegSet::newUnchecked(gprs, fpus) });
+        assume LiveRegSet::gprs(set) == gprs;
+        assume LiveRegSet::fpus(set) == fpus;
+        set
+    }
+
+    unsafe fn newUnchecked(gprs: GeneralRegSet, fpus: FloatRegSet) -> LiveRegSet;
+
+    fn empty() -> LiveRegSet {
+        let gprs = GeneralRegSet::empty();
+        let fpus = FloatRegSet::empty();
+        LiveRegSet::new(gprs, fpus)
+    }
+
     fn containsReg(set: LiveRegSet, reg: Reg) -> Bool {
         let gprs = LiveRegSet::gprs(set);
         GeneralRegSet::contains(gprs, reg)
     }
 
     fn addReg(out newSet: LiveRegSet, set: LiveRegSet, reg: Reg) {
-        let gprs = LiveRegSet::gprs(set);
+        let mut gprs = LiveRegSet::gprs(set);
         let fpus = LiveRegSet::fpus(set);
 
         GeneralRegSet::add(out gprs, gprs, reg);
@@ -286,7 +296,7 @@ impl LiveRegSet {
     }
 
     fn takeReg(out newSet: LiveRegSet, set: LiveRegSet, reg: Reg) {
-        let gprs = LiveRegSet::gprs(set);
+        let mut gprs = LiveRegSet::gprs(set);
         let fpus = LiveRegSet::fpus(set);
 
         GeneralRegSet::take(out gprs, gprs, reg);
@@ -300,7 +310,7 @@ impl LiveRegSet {
 
     fn addFloatReg(out newSet: LiveRegSet, set: LiveRegSet, floatReg: FloatReg) {
         let gprs = LiveRegSet::gprs(set);
-        let fpus = LiveRegSet::fpus(set);
+        let mut fpus = LiveRegSet::fpus(set);
 
         FloatRegSet::add(out fpus, fpus, floatReg);
         newSet = LiveRegSet::new(gprs, fpus);
@@ -308,26 +318,217 @@ impl LiveRegSet {
 
     fn takeFloatReg(out newSet: LiveRegSet, set: LiveRegSet, floatReg: FloatReg) {
         let gprs = LiveRegSet::gprs(set);
-        let fpus = LiveRegSet::fpus(set);
+        let mut fpus = LiveRegSet::fpus(set);
 
         FloatRegSet::take(out fpus, fpus, floatReg);
         newSet = LiveRegSet::new(gprs, fpus);
     }
+}
 
-    fn newEmpty() -> LiveRegSet {
-        let gprs = GeneralRegSet::newEmpty();
-        let fpus = FloatRegSet::newEmpty();
-        LiveRegSet::new(gprs, fpus)
+#[spec]
+struct FloatData;
+
+impl FloatData {
+    fn contentType(data: FloatData) -> FloatContentType;
+
+    fn fromDouble(double: Float64) -> FloatData {
+        let data = (unsafe { FloatData::fromDoubleUnchecked(double) });
+        assume FloatData::contentType(data) == FloatContentType::Double;
+        assume (unsafe { FloatData::toDoubleUnchecked(data) }) == double;
+        data
     }
 
-    fn new(gprs: GeneralRegSet, fpus: FloatRegSet) -> LiveRegSet {
-        let set = (unsafe { LiveRegSet::newUnchecked(gprs, fpus) });
-        assume LiveRegSet::gprs(set) == gprs;
-        assume LiveRegSet::fpus(set) == fpus;
-        set
+    unsafe fn fromDoubleUnchecked(double: Float64) -> FloatData;
+
+    fn toDouble(data: FloatData) -> Float64 {
+        assert FloatData::contentType(data) == FloatContentType::Double;
+        let double = (unsafe { FloatData::toDoubleUnchecked(data) });
+        assume (unsafe { FloatData::fromDoubleUnchecked(double) }) == data;
+        double
     }
 
-    unsafe fn newUnchecked(gprs: GeneralRegSet, fpus: FloatRegSet) -> LiveRegSet;
+    unsafe fn toDoubleUnchecked(data: FloatData) -> Float64;
+
+    fn fromFloat(float: Float32) -> FloatData {
+        let data = (unsafe { FloatData::fromFloatUnchecked(float) });
+        assume FloatData::contentType(data) == FloatContentType::Single;
+        assume (unsafe { FloatData::toFloatUnchecked(data) }) == float;
+        data
+    }
+
+    unsafe fn fromFloatUnchecked(float: Float32) -> FloatData;
+
+    fn toFloat(data: FloatData) -> Float32 {
+        assert FloatData::contentType(data) == FloatContentType::Single;
+        let float = (unsafe { FloatData::toFloatUnchecked(data) });
+        assume (unsafe { FloatData::fromFloatUnchecked(float) }) == data;
+        float
+    }
+
+    unsafe fn toFloatUnchecked(data: FloatData) -> Float32;
+
+    fn fromSimd128(simd128: Simd128) -> FloatData {
+        let data = (unsafe { FloatData::fromSimd128Unchecked(simd128) });
+        assume FloatData::contentType(data) == FloatContentType::Simd128;
+        assume (unsafe { FloatData::toSimd128Unchecked(data) }) == simd128;
+        data
+    }
+
+    unsafe fn fromSimd128Unchecked(simd128: Simd128) -> FloatData;
+
+    fn toSimd128(data: FloatData) -> Simd128 {
+        assert FloatData::contentType(data) == FloatContentType::Simd128;
+        let simd128 = (unsafe { FloatData::toSimd128Unchecked(data) });
+        assume (unsafe { FloatData::fromSimd128Unchecked(simd128) }) == data;
+        simd128
+    }
+
+    unsafe fn toSimd128Unchecked(data: FloatData) -> Simd128;
+}
+
+#[spec]
+struct SavedGeneralRegs {
+    set: GeneralRegSet,
+    size: UInt64,
+}
+
+impl SavedGeneralRegs {
+    fn new(set: GeneralRegSet, size: UInt64) -> SavedGeneralRegs {
+        let saved = (unsafe { SavedGeneralRegs::newUnchecked(set, size) });
+        assume saved.set == set;
+        assume saved.size == size;
+        saved
+    }
+
+    unsafe fn newUnchecked(set: GeneralRegSet, size: UInt64) -> SavedGeneralRegs;
+}
+
+#[spec]
+struct SavedFloatRegs {
+    set: FloatRegSet,
+    size: UInt64,
+}
+
+impl SavedFloatRegs {
+    fn new(set: FloatRegSet, size: UInt64) -> SavedFloatRegs {
+        let saved = (unsafe { SavedFloatRegs::newUnchecked(set, size) });
+        assume saved.set == set;
+        assume saved.size == size;
+        saved
+    }
+
+    unsafe fn newUnchecked(set: FloatRegSet, size: UInt64) -> SavedFloatRegs;
+}
+
+#[spec]
+enum StackDataType {
+    RegData,
+    FloatData,
+    SavedGeneralRegs,
+    SavedFloatRegs,
+}
+
+#[spec]
+struct StackData;
+
+impl StackData {
+    fn typeOf(data: StackData) -> StackDataType;
+
+    fn size(data: StackData) -> UInt64 {
+        if StackData::typeOf(data) == StackDataType::RegData {
+            // RegData is always 8 bytes
+            return 8_u64;
+        } else if StackData::typeOf(data) == StackDataType::FloatData {
+            let floatData = StackData::toFloatData(data);
+            let contentType = FloatData::contentType(floatData);
+            if contentType == FloatContentType::Single {
+                return 4_u64;
+            } else if contentType == FloatContentType::Double {
+                return 8_u64;
+            } else {
+                return 16_u64;
+            }
+        } else if StackData::typeOf(data) == StackDataType::SavedGeneralRegs {
+            let saved = StackData::toSavedGeneralRegs(data);
+            return saved.size;
+        } else {
+            assert StackData::typeOf(data) == StackDataType::SavedFloatRegs;
+            let saved = StackData::toSavedFloatRegs(data);
+            return saved.size;
+        }
+    }
+
+    fn fromFloatData(floatData: FloatData) -> StackData {
+        let data = (unsafe { StackData::fromFloatDataUnchecked(floatData) });
+        assume StackData::typeOf(data) == StackDataType::FloatData;
+        assume (unsafe { StackData::toFloatDataUnchecked(data) }) == floatData;
+        data
+    }
+
+    unsafe fn fromFloatDataUnchecked(floatData: FloatData) -> StackData;
+
+    fn toFloatData(data: StackData) -> FloatData {
+        assert StackData::typeOf(data) == StackDataType::FloatData;
+        let floatData = (unsafe { StackData::toFloatDataUnchecked(data) });
+        assume (unsafe { StackData::fromFloatDataUnchecked(floatData) }) == data;
+        floatData
+    }
+
+    unsafe fn toFloatDataUnchecked(data: StackData) -> FloatData;
+
+    fn fromRegData(regData: RegData) -> StackData {
+        let data = (unsafe { StackData::fromRegDataUnchecked(regData) });
+        assume StackData::typeOf(data) == StackDataType::RegData;
+        assume (unsafe { StackData::toRegDataUnchecked(data) }) == regData;
+        data
+    }
+
+    unsafe fn fromRegDataUnchecked(regData: RegData) -> StackData;
+
+    fn toRegData(data: StackData) -> RegData {
+        assert StackData::typeOf(data) == StackDataType::RegData;
+        let regData = (unsafe { StackData::toRegDataUnchecked(data) });
+        assume (unsafe { StackData::fromRegDataUnchecked(regData) }) == data;
+        regData
+    }
+
+    unsafe fn toRegDataUnchecked(data: StackData) -> RegData;
+
+    fn fromSavedGeneralRegs(saved: SavedGeneralRegs) -> StackData {
+        let data = (unsafe { StackData::fromSavedGeneralRegsUnchecked(saved) });
+        assume StackData::typeOf(data) == StackDataType::SavedGeneralRegs;
+        assume (unsafe { StackData::toSavedGeneralRegsUnchecked(data) }) == saved;
+        data
+    }
+
+    unsafe fn fromSavedGeneralRegsUnchecked(saved: SavedGeneralRegs) -> StackData;
+
+    fn toSavedGeneralRegs(data: StackData) -> SavedGeneralRegs {
+        assert StackData::typeOf(data) == StackDataType::SavedGeneralRegs;
+        let saved = (unsafe { StackData::toSavedGeneralRegsUnchecked(data) });
+        assume (unsafe { StackData::fromSavedGeneralRegsUnchecked(saved) }) == data;
+        saved
+    }
+
+    unsafe fn toSavedGeneralRegsUnchecked(data: StackData) -> SavedGeneralRegs;
+
+    fn fromSavedFloatRegs(saved: SavedFloatRegs) -> StackData {
+        let data = (unsafe { StackData::fromSavedFloatRegsUnchecked(saved) });
+        assume StackData::typeOf(data) == StackDataType::SavedFloatRegs;
+        assume (unsafe { StackData::toSavedFloatRegsUnchecked(data) }) == saved;
+        data
+    }
+
+    unsafe fn fromSavedFloatRegsUnchecked(saved: SavedFloatRegs) -> StackData;
+
+    fn toSavedFloatRegs(data: StackData) -> SavedFloatRegs {
+        assert StackData::typeOf(data) == StackDataType::SavedFloatRegs;
+        let saved = (unsafe { StackData::toSavedFloatRegsUnchecked(data) });
+        assume (unsafe { StackData::fromSavedFloatRegsUnchecked(saved) }) == data;
+        saved
+    }
+
+    unsafe fn toSavedFloatRegsUnchecked(data: StackData) -> SavedFloatRegs;
 }
 
 enum Condition {
@@ -340,6 +541,49 @@ enum Condition {
     NotSigned,
     GreaterThan,
     LessThan,
+    GreaterThanOrEqual,
+    LessThanOrEqual,
+    Above,
+    Below,
+    AboveOrEqual,
+    BelowOrEqual,
+}
+
+impl Condition {
+    fn fromJSOp(jsop: JSOp, isSigned: Bool) -> Condition {
+        if jsop == JSOp::Eq || jsop == JSOp::StrictEq {
+            return Condition::Equal;
+        }
+        if jsop == JSOp::Ne || jsop == JSOp::StrictNe {
+            return Condition::NotEqual;
+        }
+
+        if isSigned {
+            if jsop == JSOp::Lt {
+                return Condition::LessThan;
+            }
+            if jsop == JSOp::Le {
+                return Condition::LessThanOrEqual;
+            }
+            if jsop == JSOp::Gt {
+                return Condition::GreaterThan;
+            }
+            assert jsop == JSOp::Ge;
+            return Condition::GreaterThanOrEqual;
+        } else {
+            if jsop == JSOp::Lt {
+                return Condition::Below;
+            }
+            if jsop == JSOp::Le {
+                return Condition::BelowOrEqual;
+            }
+            if jsop == JSOp::Gt {
+                return Condition::Above;
+            }
+            assert jsop == JSOp::Ge;
+            return Condition::AboveOrEqual;
+        }
+    }
 }
 
 struct Address {
@@ -471,7 +715,6 @@ impl ABIFunction {
     fn clobberVolatileRegs();
 }
 
-
 ir MASM {
 
     // NOTE: Needs to be implemented to call the equivalent
@@ -492,8 +735,16 @@ ir MASM {
         MASM::setInt32(dstReg, srcInt32);
     }
 
-    op MovePtrImmGCPtrObject(object: Object, dstReg: Reg) {
-        MASM::setObject(dstReg, object);
+    op MoveValue(srcReg: ValueReg, dstReg: ValueReg) {
+        MASM::setValue(dstReg, MASM::getValue(srcReg));
+    }
+
+    op MovePtrBoolImmWord(b: Bool, dstReg: Reg) {
+        MASM::setBool(dstReg, b);
+    }
+
+    op MoveDouble(srcReg: FloatReg, dstReg: FloatReg) {
+        MASM::setDouble(dstReg, MASM::getDouble(srcReg));
     }
 
     // this op corresponds to an overload of the MoveValue op
@@ -502,8 +753,8 @@ ir MASM {
         MASM::setValue(dstReg, value);
     }
 
-    op MoveValue(srcReg: ValueReg, dstReg: ValueReg) {
-        MASM::setValue(dstReg, MASM::getValue(srcReg));
+    op MovePtrImmGCPtrObject(object: Object, dstReg: Reg) {
+        MASM::setObject(dstReg, object);
     }
 
     op Cmp32Move32(condition: Condition, lhsReg: Reg, rhsReg: Reg, srcReg: Reg, dstReg: Reg) {
@@ -520,12 +771,8 @@ ir MASM {
         }
     }
 
-    op MoveBool(srcReg: Reg, dstReg: Reg) {
-        MASM::setBool(dstReg, MASM::getBool(srcReg));
-    }
-
-    op MovePtrBoolImmWord(b: Bool, dstReg: Reg) {
-        MASM::setBool(dstReg, b);
+    op StoreBool(bool: Bool, reg: Reg) {
+        MASM::setBool(reg, bool);
     }
 
     op Jump(label target: MASM) {
@@ -571,15 +818,8 @@ ir MASM {
         }
     }
 
-    op LoadPtrAddress(address: Address, dstReg: Reg) {
-        let baseData = MASM::getData(address.base);
-        let data = RegData::readData(baseData, address.offset);
-        MASM::setData(dstReg, data);
-    }
-
     op LoadValueBaseObjectElementIndex(index: BaseObjectElementIndex, dstReg: ValueReg) {
-        let baseValueIndex = index.inner;
-        let baseIndex = baseValueIndex.inner;
+        let baseIndex = index.inner.inner;
         let baseData = MASM::getData(baseIndex.base);    
         let offset = BaseIndex::getOffset(baseIndex);
 
@@ -588,19 +828,110 @@ ir MASM {
         MASM::setValue(dstReg, value);
     }
 
-    op TestObjectSet(condition: Condition, valueReg: ValueReg, dstReg: Reg) {
-        assert (condition == Condition::Equal || condition == Condition::NotEqual);
+    op LoadPtrAddress(address: Address, dstReg: Reg) {
+        let baseData = MASM::getData(address.base);
+        let data = RegData::readData(baseData, address.offset);
+        MASM::setData(dstReg, data);
+    }
 
-        let value = MASM::getValue(valueReg);
-        let isObject = Value::isObject(value);
+    op PushRegsInMask(set: LiveRegSet) {
+        MASM::pushRegsInMask(set); 
+    }
 
-        MASM::setBool(dstReg, false);
+    op PopRegsInMaskIgnore(set: LiveRegSet, ignore: LiveRegSet) {
+       MASM::popRegsInMaskIgnore(set, ignore); 
+    }
 
-        if condition == Condition::Equal && isObject {
-            MASM::setBool(dstReg, true);
-        } else if condition == Condition::NotEqual && !isObject {
-            MASM::setBool(dstReg, true);
+    op GuardSpecificAtom(
+        strReg: Reg, atom: Atom, scratchReg: Reg, volatileRegs: LiveRegSet, label fail: MASM
+    ) {
+        let str = MASM::getString(strReg);
+        if str == atom {
+            return;
         }
+
+        if String::isAtom(str) {
+            goto fail;
+        }
+
+        if String::length(str) != String::length(atom) {
+            goto fail;
+        }
+
+        MASM::pushRegsInMask(volatileRegs);
+
+        MASM::setString(scratchReg, atom);
+        MASM::setString(Reg::Rcx, MASM::getString(scratchReg));
+        MASM::setString(Reg::Rdx, str);
+
+        ABIFunction::call(ABIFunction::EqualStringsHelperPure);
+        MASM::setBool(scratchReg, MASM::getBool(Reg::Rax));
+
+        assert !LiveRegSet::containsReg(volatileRegs, scratchReg);
+        MASM::popRegsInMask(volatileRegs);
+
+        let result = MASM::getBool(scratchReg);
+        if !result {
+            goto fail;
+        }
+    }
+
+    op TagValue(valTy: JSValueType, payload: Reg, dest: ValueReg) {
+        // TODO: Don't have getters/setters for other types yet
+        if valTy == JSValueType::Object {
+            let o = MASM::getObject(payload);
+            let val = Value::fromObject(o);
+            MASM::setValue(dest, val);
+        } else if valTy == JSValueType::Int32 {
+            let i = MASM::getInt32(payload);
+            let val = Value::fromInt32(i);
+            MASM::setValue(dest, val);
+        } else if valTy == JSValueType::Bool {
+            let b = MASM::getBool(payload);
+            let val = Value::fromBool(b);
+            MASM::setValue(dest, val);
+        } else if valTy == JSValueType::String {
+            let s = MASM::getString(payload);
+            let val = Value::fromString(s);
+            MASM::setValue(dest, val);
+        } else if valTy == JSValueType::Symbol {
+            let s = MASM::getSymbol(payload);
+            let val = Value::fromSymbol(s);
+            MASM::setValue(dest, val);
+        } else if valTy == JSValueType::BigInt {
+            let b = MASM::getBigInt(payload);
+            let val = Value::fromBigInt(b);
+            MASM::setValue(dest, val);
+        } else {
+            assert false;
+        }
+    }
+
+    op EnsureDouble(srcReg: ValueReg, destReg: FloatReg, label failure: MASM) {
+        let value = MASM::getValue(srcReg);
+        let valTy = Value::typeOf(value);
+
+        if valTy == ValueType::Double {
+            let double = Value::toDouble(value);
+            MASM::setDouble(destReg, double);
+        } else if valTy == ValueType::Int32 {
+            let int32 = Value::toInt32(value);
+            let double = Float64::fromInt32(int32);
+            MASM::setDouble(destReg, double);
+        } else {
+            goto failure;
+        }
+    }
+
+    op BoxDouble(srcReg: FloatReg, valueReg: ValueReg, scratchReg: FloatReg) {
+        let double = MASM::getDouble(srcReg);
+        let value = Value::fromDouble(double);
+        MASM::setValue(valueReg, value);
+    }
+
+    op UnboxInt32(valueReg: ValueReg, int32Reg: Reg) {
+        let value = MASM::getValue(valueReg);
+        MASM::setInt32(int32Reg, Value::toInt32(value)); 
     }
 
     op UnboxObject(valueReg: ValueReg, objectReg: Reg) {
@@ -618,6 +949,18 @@ ir MASM {
         MASM::setObject(destReg, object);
     }
 
+    op FallibleUnboxObject(valueReg: ValueReg, objectReg: Reg, label failure: MASM) {
+        let value = MASM::getValue(valueReg);
+        let valueIsObject = Value::isObject(value);
+
+        if !valueIsObject {
+            goto failure;
+        }
+
+        let object = Value::toObject(value);
+        MASM::setObject(objectReg, object);
+    }
+
     op FallibleUnboxBoolean(valueReg: ValueReg, boolReg: Reg, label failure: MASM) {
         let value = MASM::getValue(valueReg);
         let valueIsBool = Value::isBool(value);
@@ -630,14 +973,30 @@ ir MASM {
         MASM::setBool(boolReg, bool);
     }
 
-    op UnboxInt32(valueReg: ValueReg, int32Reg: Reg) {
+    op UnboxString(valueReg: ValueReg, stringReg: Reg) {
         let value = MASM::getValue(valueReg);
-        MASM::setInt32(int32Reg, Value::toInt32(value)); 
+        MASM::setString(stringReg, Value::toString(value));
+    }
+
+    op UnboxSymbol(valueReg: ValueReg, symbolReg: Reg) {
+        let value = MASM::getValue(valueReg);
+        MASM::setSymbol(symbolReg, Value::toSymbol(value));
+    }
+
+    op UnboxBigInt(valueReg: ValueReg, bigIntReg: Reg) {
+        let value = MASM::getValue(valueReg);
+        MASM::setBigInt(bigIntReg, Value::toBigInt(value));
     }
 
     op UnboxNonDouble(valueReg: ValueReg, dstReg: Reg, valTy: JSValueType) {
         let value = MASM::getValue(valueReg);
         MASM::unboxNonDouble(value, dstReg, valTy);
+    }
+
+    op UnboxDouble(valueReg: ValueReg, floatReg: FloatReg) {
+        let value = MASM::getValue(valueReg);
+        let double = Value::toDouble(value);
+        MASM::setDouble(floatReg, double);
     }
 
     // NOTE: This Op needs to be implemented as a Phantom Op on the
@@ -652,12 +1011,6 @@ ir MASM {
         }
     }
 
-    op ConvertInt32ToDouble(srcReg: Reg, destReg: FloatReg) {
-        let int32 = MASM::getInt32(srcReg);
-        let double = Float64::fromInt32(int32);
-        MASM::setDouble(destReg, double);
-    }
-
     op ConvertInt32ValueToDouble(valueReg: ValueReg) {
         let value = MASM::getValue(valueReg);
 
@@ -670,15 +1023,24 @@ ir MASM {
         MASM::setValue(valueReg, Value::fromDouble(double));
     }
 
-    op LoadObjectProto(objectReg: Reg, protoReg: Reg) {
-        let object = MASM::getObject(objectReg);
+    op ConvertDoubleToInt32(srcReg: FloatReg, destReg: Reg, label failure: MASM, negativeZeroCheck: Bool) {
+        let double = MASM::getDouble(srcReg);
+        
+        if negativeZeroCheck && Float64::isNegativeZero(double) {
+            goto failure; 
+        }
 
-        let shape = Object::shapeOf(object);
-        let baseShape = Shape::baseShapeOf(shape);
-        let proto = BaseShape::protoOf(baseShape);
-        let data = RegData::fromTaggedProto(proto);
+        let int32 = Float64::toInt32(double);
+        let doubleTrunc = Float64::fromInt32(int32);
 
-        MASM::setData(protoReg, data);
+        MASM::setDouble(FloatReg::doubleScratchReg(), doubleTrunc);
+
+        if Float64::isNaN(double) || Float64::isNaN(doubleTrunc) || double != doubleTrunc {
+            goto failure;
+        }
+
+
+        MASM::setInt32(destReg, int32);
     }
 
     op SpectreBoundsCheck32Address(
@@ -736,6 +1098,104 @@ ir MASM {
         }
     }
 
+    op BranchTestDouble(
+        condition: Condition,
+        valueReg: ValueReg,
+        label branch: MASM,
+    ) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        let value = MASM::getValue(valueReg);
+
+        let valueIsDouble = Value::isDouble(value);
+
+        if condition == Condition::Equal && valueIsDouble {
+            goto branch;
+        } else if condition == Condition::NotEqual && !valueIsDouble {
+            goto branch;
+        }
+    }
+
+    op BranchTestDoubleTag(
+        condition: Condition,
+        tagReg: Reg,
+        label branch: MASM,
+    ) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        let tag = MASM::getValueTag(tagReg);
+
+        let tagIsDouble = tag == ValueType::Double;
+
+        if condition == Condition::Equal && tagIsDouble {
+            goto branch;
+        } else if condition == Condition::NotEqual && !tagIsDouble {
+            goto branch;
+        }
+    }
+
+    // Note: this is a wrapper around branchPtr for when
+    // lhsReg and rhsReg are the same objects.
+    op BranchObject(
+        condition: Condition,
+        lhsReg: Reg,
+        rhsReg: Reg,
+        label branch: MASM,
+    ) {
+        let lhs = MASM::getObject(lhsReg);
+        let rhs = MASM::getObject(rhsReg);
+        let isEqual = lhs == rhs;
+
+        if condition == Condition::Equal {
+            if isEqual {
+                goto branch;
+            }
+        }
+
+        if condition == Condition::NotEqual {
+            if !isEqual {
+                goto branch;
+            }
+        }
+    }
+
+    op ConvertInt32ToDouble(srcReg: Reg, destReg: FloatReg) {
+        let int32 = MASM::getInt32(srcReg);
+        let double = Float64::fromInt32(int32);
+        MASM::setDouble(destReg, double);
+    }
+
+    op BranchTestInt32(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        let value = MASM::getValue(valueReg);
+        let valueIsInt32 = Value::isInt32(value);
+
+        if condition == Condition::Equal && valueIsInt32 {
+            goto branch;
+        } else if condition == Condition::NotEqual && !valueIsInt32 {
+            goto branch;
+        }
+    }
+
+    op BranchTestInt32Tag(condition: Condition, tagReg: Reg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        let tag = MASM::getValueTag(tagReg);
+        let tagIsInt32 = tag == ValueType::Int32;
+
+        if condition == Condition::Equal && tagIsInt32 {
+            goto branch;
+        } else if condition == Condition::NotEqual && !tagIsInt32 {
+            goto branch;
+        }
+    }
+
+    op BranchTestInt32Truthy(truthy: Bool, valueReg: ValueReg, label branch: MASM) {
+        let value = MASM::getValue(valueReg);
+        let int32 = Value::toInt32(value);
+
+        if (!truthy && int32 == 0_i32) || (truthy && int32 != 0_i32) {
+            goto branch;
+        }
+    }
+
     op BranchTestBoolean(condition: Condition, valueReg: ValueReg, label branch: MASM) {
         assert condition == Condition::Equal || condition == Condition::NotEqual;
         let value = MASM::getValue(valueReg);
@@ -784,56 +1244,190 @@ ir MASM {
         }
     }
 
+    op BranchTestObject(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        let value = MASM::getValue(valueReg);
+        let valueIsObject = Value::isObject(value);
+
+        if condition == Condition::Equal && valueIsObject {
+            goto branch;
+        }
+
+        if condition == Condition::NotEqual && !valueIsObject {
+            goto branch;
+        }
+    }
+
+    op BranchTestObjectTag(condition: Condition, tagReg: Reg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        let tag = MASM::getValueTag(tagReg);
+        let valueIsObject = tag == ValueType::Object;
+
+        if condition == Condition::Equal && valueIsObject {
+            goto branch;
+        }
+
+        if condition == Condition::NotEqual && !valueIsObject {
+            goto branch;
+        }
+    }
+
+    op BranchTestValue(cond: Condition, lhs: BaseIndex, rhs: ValueReg, label branch: MASM) {
+        assert cond == Condition::Equal || cond == Condition::NotEqual;
+
+        let lhsBaseData = MASM::getData(lhs.base);
+        let lhsOffset = BaseIndex::getOffset(lhs);
+        let lhsData = RegData::readData(lhsBaseData, lhsOffset);
+        let lhsValue = RegData::toValue(lhsData);
+
+        let rhsValue = MASM::getValue(rhs);
+
+        if cond == Condition::Equal && lhsValue == rhsValue {
+            goto branch;
+        } else if cond == Condition::NotEqual && lhsValue != rhsValue {
+            goto branch;
+        }
+    }
+
+    // Note: this is a wrapper around branchTestPtr for when
+    // the register contains a TaggedProto
+    op BranchTestNullProto(reg: Reg, label branch: MASM) {
+        let data = MASM::getData(reg);
+        let proto = RegData::toTaggedProto(data);
+
+        if TaggedProto::isNull(proto) {
+            goto branch;
+        }
+    }
+
+    // Note: this is a wrapper around branchPtr for when
+    // the register contains a TaggedProto
+    op BranchTestLazyProto(reg: Reg, label branch: MASM) {
+        let data = MASM::getData(reg);
+        let proto = RegData::toTaggedProto(data);
+
+        if TaggedProto::isLazy(proto) {
+            goto branch;
+        }
+    }
+
     op BranchTestNull(condition: Condition, valueReg: ValueReg, label branch: MASM) {
         assert condition == Condition::Equal || condition == Condition::NotEqual;
 
         let value = MASM::getValue(valueReg);
         let valueIsNull = Value::isNull(value);
 
-        if condition == Condition::Equal {
-            if valueIsNull {
-                goto branch;
-            }
+        if condition == Condition::Equal && valueIsNull {
+            goto branch;
         }
 
-        if condition == Condition::NotEqual {
-            if !valueIsNull {
-                goto branch;
-            }
+        if condition == Condition::NotEqual && !valueIsNull {
+            goto branch;
         }
     }
 
-    op BranchTestObject(condition: Condition, valueReg: ValueReg, label branch: MASM) {
-        let value = MASM::getValue(valueReg);
-        let valueIsObject = Value::isObject(value);
+    op BranchTestNullTag(condition: Condition, tagReg: Reg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
 
-        if condition == Condition::Equal {
-            if valueIsObject {
-                goto branch;
-            }
+        let tag = MASM::getValueTag(tagReg);
+        let valueIsNull = tag == ValueType::Null;
+
+        if condition == Condition::Equal && valueIsNull {
+            goto branch;
         }
 
-        if condition == Condition::NotEqual {
-            if !valueIsObject {
-                goto branch;
-            }
+        if condition == Condition::NotEqual && !valueIsNull {
+            goto branch;
+        }
+    }
+
+    op TestNullSet(condition: Condition, valueReg: ValueReg, destReg: Reg) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+
+        let value = MASM::getValue(valueReg);
+        let valueIsNull = Value::isNull(value);
+
+        if ((condition == Condition::Equal && valueIsNull) ||
+                (condition == Condition::NotEqual && !valueIsNull)) {
+            MASM::setBool(destReg, true);
+        } else {
+            MASM::setBool(destReg, false);
+        }
+    }
+
+    op BranchTestUndefined(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+
+        let value = MASM::getValue(valueReg);
+        let valueIsUndefined = Value::isUndefined(value);
+
+        if condition == Condition::Equal && valueIsUndefined{
+            goto branch;
+        }
+
+        if condition == Condition::NotEqual && !valueIsUndefined {
+            goto branch;
+        }
+    }
+
+    op BranchTestUndefinedTag(condition: Condition, tagReg: Reg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+
+        let tag = MASM::getValueTag(tagReg);
+        let valueIsUndefined = tag == ValueType::Undefined;
+
+        if condition == Condition::Equal && valueIsUndefined{
+            goto branch;
+        }
+
+        if condition == Condition::NotEqual && !valueIsUndefined {
+            goto branch;
+        }
+    }
+
+    op BranchIfObjectEmulatesUndefined(
+        objReg: Reg, scratchReg: Reg, label slowCheck: MASM, label branch: MASM
+    ) {
+        let object = MASM::getObject(objReg);
+        let shape = Object::shapeOf(object);
+        let class = Shape::classOf(shape);
+        MASM::setData(scratchReg, RegData::fromClass(class));
+
+        if Class::isProxyObject(class) {
+            goto slowCheck;
+        }
+
+        if Class::emulatesUndefined(class) {
+            goto branch;
+        }
+    }
+
+    op TestUndefinedSet(condition: Condition, valueReg: ValueReg, destReg: Reg) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+
+        let value = MASM::getValue(valueReg);
+        let valueIsUndefined = Value::isUndefined(value);
+
+        if ((condition == Condition::Equal && valueIsUndefined) ||
+                (condition == Condition::NotEqual && !valueIsUndefined)) {
+            MASM::setBool(destReg, true);
+        } else {
+            MASM::setBool(destReg, false);
         }
     }
 
     op BranchTestMagic(condition: Condition, valueReg: ValueReg, label branch: MASM) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+
         let value = MASM::getValue(valueReg);
         let valueIsMagic = Value::isMagic(value);
 
-        if condition == Condition::Equal {
-            if valueIsMagic {
-                goto branch;
-            }
+        if condition == Condition::Equal && valueIsMagic {
+            goto branch;
         }
 
-        if condition == Condition::NotEqual {
-            if !valueIsMagic {
-                goto branch;
-            }
+        if condition == Condition::NotEqual && !valueIsMagic {
+            goto branch;
         }
     }
 
@@ -857,6 +1451,41 @@ ir MASM {
         }
 
         if condition == Condition::NotEqual && !valueIsMagic {
+            goto branch;
+        }
+    }
+
+    op BranchTestObjectShape(
+        condition: Condition, objectReg: Reg, shape: Shape, scratchReg: Reg, spectreRegToZero: Reg,
+        label branch: MASM
+    ) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+        assert objectReg != scratchReg;
+        assert spectreRegToZero != scratchReg;
+
+        let object = MASM::getObject(objectReg);
+        let objectHasShape = Object::shapeOf(object) == shape;
+
+        MASM::setInt32(scratchReg, 0_i32);
+
+        if condition == Condition::Equal && objectHasShape {
+            goto branch;
+        } else if condition == Condition::NotEqual && !objectHasShape {
+            goto branch;
+        }
+    }
+
+    op BranchTestObjectShapeNoSpectreMitigations(
+        condition: Condition, objectReg: Reg, shape: Shape, label branch: MASM
+    ) {
+        assert condition == Condition::Equal || condition == Condition::NotEqual;
+
+        let object = MASM::getObject(objectReg);
+        let objectHasShape = Object::shapeOf(object) == shape;
+
+        if condition == Condition::Equal && objectHasShape {
+            goto branch;
+        } else if condition == Condition::NotEqual && !objectHasShape {
             goto branch;
         }
     }
@@ -901,136 +1530,68 @@ ir MASM {
         }
     }
 
-    op BranchTestObjectShape(
-        condition: Condition, objectReg: Reg, shape: Shape, scratchReg: Reg, spectreRegToZero: Reg,
-        label branch: MASM
-    ) {
+    op BranchIfNonNativeObj(objectReg: Reg, scratchReg: Reg, label branch: MASM) {
         let object = MASM::getObject(objectReg);
-        let objectHasShape = Object::shapeOf(object) == shape;
+        let shape = Object::shapeOf(object);
+        let class = Shape::classOf(shape);
+        MASM::setData(scratchReg, RegData::fromClass(class));
+        let objectIsNative = Class::isNativeObject(class);
 
-        MASM::setInt32(scratchReg, 0_i32);
-
-        if condition == Condition::Equal && objectHasShape {
-            goto branch;
-        } else if condition == Condition::NotEqual && !objectHasShape {
+        if !objectIsNative {
             goto branch;
         }
     }
 
-    op BranchTestObjectShapeNoSpectreMitigations(
-        condition: Condition, objectReg: Reg, shape: Shape, label branch: MASM
-    ) {
+    op BranchTestObjectIsProxy(proxy: Bool, objectReg: Reg, scratchReg: Reg, label branch: MASM) {
         let object = MASM::getObject(objectReg);
-        let objectHasShape = Object::shapeOf(object) == shape;
+        let shape = Object::shapeOf(object);
+        let class = Shape::classOf(shape);
+        MASM::setData(scratchReg, RegData::fromClass(class));
+        let objectIsProxy = Class::isProxyObject(class);
 
-        if condition == Condition::Equal && objectHasShape {
+        if !proxy && !objectIsProxy {
             goto branch;
-        } else if condition == Condition::NotEqual && !objectHasShape {
-            goto branch;
-        }
-    }
-
-    op BranchTestUndefined(condition: Condition, valueReg: ValueReg, label branch: MASM) {
-        assert condition == Condition::Equal || condition == Condition::NotEqual;
-
-        let value = MASM::getValue(valueReg);
-        let valueIsUndefined = Value::isUndefined(value);
-
-        if condition == Condition::Equal && valueIsUndefined{
-            goto branch;
-        }
-
-        if condition == Condition::NotEqual && !valueIsUndefined {
+        } else if proxy && objectIsProxy {
             goto branch;
         }
     }
 
-    op BranchTestInt32(condition: Condition, valueReg: ValueReg, label branch: MASM) {
-        let value = MASM::getValue(valueReg);
-        let valueIsInt32 = Value::isInt32(value);
+    op Branch32(condition: Condition, lhsReg: Reg, rhsReg: Reg, label branch: MASM) {
+        assert (
+            condition == Condition::Equal || condition == Condition::NotEqual ||
+            condition == Condition::GreaterThan || condition == Condition::LessThan ||
+            condition == Condition::GreaterThanOrEqual || condition == Condition::LessThanOrEqual ||
+            condition == Condition::Above || condition == Condition::Below ||
+            condition == Condition::AboveOrEqual || condition == Condition::BelowOrEqual
 
-        if condition == Condition::Equal {
-            if valueIsInt32 {
-                goto branch;
-            }
-        } else if condition == Condition::NotEqual {
-            if !valueIsInt32 {
-                goto branch;
-            }
-        } else {
-            assert false;
-        }
-    }
+        );
 
-    op BranchTestInt32Truthy(truthy: Bool, valueReg: ValueReg, label branch: MASM) {
-        let value = MASM::getValue(valueReg);
-        let int32 = Value::toInt32(value);
-
-        if (!truthy && int32 == 0_i32) || (truthy && int32 != 0_i32) {
-            goto branch;
-        }
-    }
-
-    op BranchTest32(condition: Condition, lhsReg: Reg, rhsReg: Reg, label branch: MASM) {
         let lhsInt32 = MASM::getInt32(lhsReg);
         let rhsInt32 = MASM::getInt32(rhsReg);
+        
+        let lhsUInt32 = lhsInt32 as UInt32;
+        let rhsUInt32 = rhsInt32 as UInt32;
 
-        let result = lhsInt32 & rhsInt32;
-
-        assert (
-                condition == Condition::Zero ||
-                condition == Condition::NonZero ||
-                condition == Condition::Signed ||
-                condition == Condition::NotSigned
-               );
-
-        if condition == Condition::Zero {
-            if result == 0_i32 {
-                goto branch;
-            }
-        } else if condition == Condition::NonZero {
-            if result != 0_i32 {
-                goto branch;
-            }
-        } else if condition == Condition::Signed {
-            if result < 0_i32 {
-                goto branch;
-            }
-        } else if condition == Condition::NotSigned {
-            if result > 0_i32 {
-                goto branch;
-            }
-        }
-    }
-
-    op BranchTest32Imm(condition: Condition, lhsReg: Reg, rhsInt32: Int32, label branch: MASM) {
-        let lhsInt32 = MASM::getInt32(lhsReg);
-
-        let result = lhsInt32 & rhsInt32;
-
-        assert (
-                condition == Condition::Zero ||
-                condition == Condition::NonZero ||
-                condition == Condition::Signed ||
-                condition == Condition::NotSigned
-               );
-
-        if condition == Condition::Zero {
-            if result == 0_i32 {
-                goto branch;
-            }
-        } else if condition == Condition::NonZero {
-            if result != 0_i32 {
-                goto branch;
-            }
-        } else if condition == Condition::Signed {
-            if result < 0_i32 {
-                goto branch;
-            }
-        } else if condition == Condition::NotSigned {
-            if result > 0_i32 {
-                goto branch;
-            }
+        if condition == Condition::Equal && lhsInt32 == rhsInt32 {
+            goto branch;
+        } else if condition == Condition::NotEqual && lhsInt32 != rhsInt32 {
+            goto branch;
+        } else if condition == Condition::GreaterThan && lhsInt32 > rhsInt32 {
+            goto branch;
+        } else if condition == Condition::LessThan && lhsInt32 < rhsInt32 {
+            goto branch;
+        } else if condition == Condition::GreaterThanOrEqual && lhsInt32 >= rhsInt32 {
+            goto branch;
+        } else if condition == Condition::LessThanOrEqual && lhsInt32 <= rhsInt32 {
+            goto branch;
+        } else if condition == Condition::Above && lhsUInt32 > rhsUInt32 {
+            goto branch;
+        } else if condition == Condition::Below && lhsUInt32 < rhsUInt32 {
+            goto branch;
+        } else if condition == Condition::AboveOrEqual && lhsUInt32 >= rhsUInt32 {
+            goto branch;
+        } else if condition == Condition::BelowOrEqual && lhsUInt32 <= rhsUInt32 {
+            goto branch;
         }
     }
 
@@ -1092,91 +1653,51 @@ ir MASM {
         }
     }
 
-    op BranchIfNonNativeObj(objectReg: Reg, scratchReg: Reg, label branch: MASM) {
-        let object = MASM::getObject(objectReg);
-        let shape = Object::shapeOf(object);
-        let class = Shape::classOf(shape);
-        MASM::setData(scratchReg, RegData::fromClass(class));
-        let objectIsNative = Class::isNativeObject(class);
+    op BranchTest32(condition: Condition, lhsReg: Reg, rhsReg: Reg, label branch: MASM) {
+        let lhsInt32 = MASM::getInt32(lhsReg);
+        let rhsInt32 = MASM::getInt32(rhsReg);
 
-        if !objectIsNative {
+        let result = lhsInt32 & rhsInt32;
+
+        assert (
+            condition == Condition::Zero ||
+            condition == Condition::NonZero ||
+            condition == Condition::Signed ||
+            condition == Condition::NotSigned
+        );
+
+        if condition == Condition::Zero && result == 0_i32 {
+            goto branch;
+        } else if condition == Condition::NonZero && result != 0_i32 {
+            goto branch;
+        } else if condition == Condition::Signed && result < 0_i32 {
+            goto branch;
+        } else if condition == Condition::NotSigned && result > 0_i32 {
             goto branch;
         }
     }
 
-    op BranchTestObjectIsProxy(proxy: Bool, objectReg: Reg, scratchReg: Reg, label branch: MASM) {
-        let object = MASM::getObject(objectReg);
-        let shape = Object::shapeOf(object);
-        let class = Shape::classOf(shape);
-        MASM::setData(scratchReg, RegData::fromClass(class));
-        let objectIsProxy = Class::isProxyObject(class);
+    op BranchTest32Imm(condition: Condition, lhsReg: Reg, rhsInt32: Int32, label branch: MASM) {
+        let lhsInt32 = MASM::getInt32(lhsReg);
 
-        if !proxy && !objectIsProxy {
+        let result = lhsInt32 & rhsInt32;
+
+        assert (
+            condition == Condition::Zero ||
+            condition == Condition::NonZero ||
+            condition == Condition::Signed ||
+            condition == Condition::NotSigned
+        );
+
+        if condition == Condition::Zero && result == 0_i32 {
             goto branch;
-        } else if proxy && objectIsProxy {
+        } else if condition == Condition::NonZero && result != 0_i32 {
+            goto branch;
+        } else if condition == Condition::Signed && result < 0_i32 {
+            goto branch;
+        } else if condition == Condition::NotSigned && result > 0_i32 {
             goto branch;
         }
-    }
-
-    op GuardSpecificAtom(
-        strReg: Reg, atom: Atom, scratchReg: Reg, volatileRegs: LiveRegSet, label fail: MASM
-    ) {
-        let str = MASM::getString(strReg);
-        if str == atom {
-            return;
-        }
-
-        if String::isAtom(str) {
-            goto fail;
-        }
-
-        if String::length(str) != String::length(atom) {
-            goto fail;
-        }
-
-        MASM::pushRegsInMask(volatileRegs);
-
-        MASM::setString(scratchReg, atom);
-        MASM::setString(Reg::Rcx, MASM::getString(scratchReg));
-        MASM::setString(Reg::Rdx, str);
-
-        ABIFunction::call(ABIFunction::EqualStringsHelperPure);
-        MASM::setBool(scratchReg, MASM::getBool(Reg::Rax));
-
-        assert !LiveRegSet::containsReg(volatileRegs, scratchReg);
-        MASM::popRegsInMask(volatileRegs);
-
-        let result = MASM::getBool(scratchReg);
-        if !result {
-            goto fail;
-        }
-    }
-
-    op TagValue(valTy: JSValueType, payload: Reg, dest: ValueReg) {
-        // TODO: Don't have getters/setters for other types yet
-        if valTy == JSValueType::Int32 {
-            let i = MASM::getInt32(payload);
-            let val = Value::fromInt32(i);
-            MASM::setValue(dest, val);
-        } else if valTy == JSValueType::Bool {
-            let b = MASM::getBool(payload);
-            let val = Value::fromBool(b);
-            MASM::setValue(dest, val);
-        } else if valTy == JSValueType::String {
-            let s = MASM::getString(payload);
-            let val = Value::fromString(s);
-            MASM::setValue(dest, val);
-        } else if valTy == JSValueType::Symbol {
-            let s = MASM::getSymbol(payload);
-            let val = Value::fromSymbol(s);
-            MASM::setValue(dest, val);
-        } else if valTy == JSValueType::BigInt {
-            let b = MASM::getBigInt(payload);
-            let val = Value::fromBigInt(b);
-            MASM::setValue(dest, val);
-        }
-
-        assert false;
     }
 
     op BranchAdd32(condition: Condition, srcReg: Reg, dstReg: Reg, label branch: MASM) {
@@ -1279,6 +1800,27 @@ ir MASM {
         MASM::setInt32(dstReg, result);
     }
 
+    // TODO(abhishekc-sharma): handle isUnsigned and volatile registers.
+    op FlexibleDivMod32(rhsReg: Reg, lhsOutputReg: Reg, remReg: Reg) {
+      let lhsInt32 = MASM::getInt32(lhsOutputReg);
+      let rhsInt32 = MASM::getInt32(rhsReg);
+
+      let quotient = lhsInt32 / rhsInt32;
+      let remainder = lhsInt32 % rhsInt32;
+
+      MASM::setInt32(lhsOutputReg, quotient);
+      MASM::setInt32(remReg, remainder);
+    }
+
+    // TODO(abhishekc-sharma): handle isUnsigned and volatile registers.
+    op FlexibleRemainder32(rhsReg: Reg, lhsOutputReg: Reg) {
+      let lhsInt32 = MASM::getInt32(lhsOutputReg);
+      let rhsInt32 = MASM::getInt32(rhsReg);
+
+      let remainder = lhsInt32 % rhsInt32;
+      MASM::setInt32(lhsOutputReg, remainder);
+    }
+
     op Neg32(valueReg: Reg) {
         let valueInt32 = MASM::getInt32(valueReg);
         let result = -valueInt32;
@@ -1291,15 +1833,6 @@ ir MASM {
         let result = ~valueInt32;
 
         MASM::setInt32(valueReg, result);
-    }
-
-    op And32(srcReg: Reg, dstReg: Reg) {
-        let lhsInt32 = MASM::getInt32(srcReg);
-        let rhsInt32 = MASM::getInt32(dstReg);
-
-        let result = lhsInt32 & rhsInt32;
-
-        MASM::setInt32(dstReg, result);
     }
 
     op Or32(srcReg: Reg, dstReg: Reg) {
@@ -1316,6 +1849,15 @@ ir MASM {
         let rhsInt32 = MASM::getInt32(dstReg);
 
         let result = lhsInt32 ^ rhsInt32;
+
+        MASM::setInt32(dstReg, result);
+    }
+
+    op And32(srcReg: Reg, dstReg: Reg) {
+        let lhsInt32 = MASM::getInt32(srcReg);
+        let rhsInt32 = MASM::getInt32(dstReg);
+
+        let result = lhsInt32 & rhsInt32;
 
         MASM::setInt32(dstReg, result);
     }
@@ -1347,6 +1889,79 @@ ir MASM {
         MASM::setInt32(srcDestReg, result);
     }
 
+    op TestObjectSet(condition: Condition, valueReg: ValueReg, dstReg: Reg) {
+        assert (condition == Condition::Equal || condition == Condition::NotEqual);
+
+        let value = MASM::getValue(valueReg);
+        let isObject = Value::isObject(value);
+
+        MASM::setBool(dstReg, false);
+
+        if condition == Condition::Equal && isObject {
+            MASM::setBool(dstReg, true);
+        } else if condition == Condition::NotEqual && !isObject {
+            MASM::setBool(dstReg, true);
+        }
+    }
+
+    op LoadArgumentsObjectLength(
+        objectReg: Reg, outputReg: Reg, label failure: MASM
+    ) {
+        let obj = MASM::getObject(objectReg);
+        let argObj = Object::toArgumentsObject(obj);
+        let length = ArgumentsObject::getInitialLengthSlot(argObj);
+        MASM::setInt32(outputReg, length as Int32);
+        if ArgumentsObject::hasOverriddenLength(argObj) {
+            goto failure;
+        }
+        MASM::setInt32(outputReg, ArgumentsObject::getInitialLength(argObj) as Int32);
+    }
+
+    op LoadArgumentsObjectElement(
+        objReg: Reg, indexReg: Reg, output: ValueReg, tempReg: Reg, label failure: MASM,
+    ) {
+        let tempReg2 = ValueReg::scratchReg(output);
+
+        let obj = MASM::getObject(objReg);
+        let argObj = Object::toArgumentsObject(obj);
+        let length = ArgumentsObject::getInitialLengthSlot(argObj);
+        MASM::setInt32(tempReg, length as Int32);
+
+        if ArgumentsObject::hasOverriddenElement(argObj) {
+            goto failure;
+        }
+
+        length = ArgumentsObject::getInitialLength(argObj);
+        MASM::setInt32(tempReg, length as Int32);
+
+        let index = MASM::getInt32(indexReg) as UInt32;
+
+        if index >= length {
+            goto failure;
+        }
+
+        let argsData = ArgumentsObject::getArgumentsData(argObj);
+        MASM::setData(tempReg, RegData::fromArgumentsData(argsData));
+
+        let argValue = ArgumentsData::getArg(argsData, index as UInt32);
+        if Value::isMagic(argValue) {
+            goto failure;
+        }
+
+        MASM::setValue(output, argValue);
+    }
+
+    op LoadObjectProto(objectReg: Reg, protoReg: Reg) {
+        let object = MASM::getObject(objectReg);
+
+        let shape = Object::shapeOf(object);
+        let baseShape = Shape::baseShapeOf(shape);
+        let proto = BaseShape::protoOf(baseShape);
+        let data = RegData::fromTaggedProto(proto);
+
+        MASM::setData(protoReg, data);
+    }
+
     op SplitTagForTest(valueReg: ValueReg, tagReg: Reg) {
         let value = MASM::getValue(valueReg);
         let tag = Value::typeOf(value);
@@ -1367,6 +1982,20 @@ ir MASM {
         } else {
             MASM::unboxNonDouble(value, AnyReg::toReg(dstReg), JSValueType::fromMIRType(type));
         }
+    }
+
+    #[spec]
+    fn loadInt32OrDouble(value: Value, dstReg: FloatReg) {
+        if Value::isInt32(value) {
+            let int32 = Value::toInt32(value);
+            let double = Float64::fromInt32(int32);
+            MASM::setDouble(dstReg, double);
+        } else if Value::isDouble(value) {
+            let double = Value::toDouble(value);
+            MASM::setDouble(dstReg, double);
+        }
+
+        assert false;
     }
 
     #[spec]
@@ -1391,24 +2020,13 @@ ir MASM {
         } else if valTy == JSValueType::BigInt {
             let b = Value::toBigInt(value);
             MASM::setBigInt(dstReg, b);
+        } else {
+            assert false;
         }
-
-        assert false;
     }
 
-    #[spec]
-    fn loadInt32OrDouble(value: Value, dstReg: FloatReg) {
-        if Value::isInt32(value) {
-            let int32 = Value::toInt32(value);
-            let double = Float64::fromInt32(int32);
-            MASM::setDouble(dstReg, double);
-        } else if Value::isDouble(value) {
-            let double = Value::toDouble(value);
-            MASM::setDouble(dstReg, double);
-        }
-
-        assert false;
-    }
+    fn getValue(valueReg: ValueReg) -> Value;
+    fn setValue(valueReg: ValueReg, value: Value);
 
     #[spec]
     fn getData(reg: Reg) -> RegData;
@@ -1416,43 +2034,149 @@ ir MASM {
     fn setData(reg: Reg, data: RegData);
 
     #[spec]
+    fn getUnboxedValue(reg: Reg) -> Value {
+        RegData::toUnboxedValue(MASM::getData(reg))
+    }
+
+    #[spec]
+    fn setUnboxedValue(reg: Reg, value: Value) {
+        MASM::setData(reg, RegData::fromUnboxedValue(value));
+    }
+
+    #[refined]
+    fn getInt32(reg: Reg) -> Int32 {
+        Value::toInt32(MASM::getUnboxedValue(reg))
+    }
+
+    #[refined]
+    fn setInt32(reg: Reg, int32: Int32) {
+        MASM::setUnboxedValue(reg, Value::fromInt32(int32));
+    }
+
+    #[refined]
+    fn getBool(reg: Reg) -> Bool {
+        Value::toBool(MASM::getUnboxedValue(reg))
+    }
+
+    #[refined]
+    fn setBool(reg: Reg, bool: Bool) {
+        MASM::setUnboxedValue(reg, Value::fromBool(bool));
+    }
+
+    #[refined]
+    fn getObject(reg: Reg) -> Object {
+        Value::toObject(MASM::getUnboxedValue(reg))
+    }
+
+    #[refined]
+    fn setObject(reg: Reg, object: Object) {
+        MASM::setUnboxedValue(reg, Value::fromObject(object));
+    }
+
+    #[refined]
+    fn getString(reg: Reg) -> String {
+        Value::toString(MASM::getUnboxedValue(reg))
+    }
+
+    #[refined]
+    fn setString(reg: Reg, string: String) {
+        MASM::setUnboxedValue(reg, Value::fromString(string));
+    }
+
+    #[refined]
+    fn getSymbol(reg: Reg) -> Symbol {
+        Value::toSymbol(MASM::getUnboxedValue(reg))
+    }
+
+    #[refined]
+    fn setSymbol(reg: Reg, symbol: Symbol) {
+        MASM::setUnboxedValue(reg, Value::fromSymbol(symbol));
+    }
+
+    #[refined]
+    fn getBigInt(reg: Reg) -> BigInt {
+        Value::toBigInt(MASM::getUnboxedValue(reg))
+    }
+
+    #[refined]
+    fn setBigInt(reg: Reg, bigInt: BigInt) {
+        MASM::setUnboxedValue(reg, Value::fromBigInt(bigInt));
+    }
+
+    #[refined]
     fn getValueTag(reg: Reg) -> ValueType {
         RegData::toValueType(MASM::getData(reg))
     }
 
-    #[spec]
+    #[refined]
     fn setValueTag(reg:Reg, tag: ValueType) {
         MASM::setData(reg, RegData::fromValueType(tag));
     }
 
-    fn getValue(valueReg: ValueReg) -> Value;
-    fn setValue(valueReg: ValueReg, value: Value);
+    #[refined]
+    fn getStackIndex(reg: Reg) -> UInt64 {
+        RegData::toStackIndex(MASM::getData(reg))
+    }
 
-    fn getInt32(reg: Reg) -> Int32;
-    fn setInt32(reg: Reg, int32: Int32);
-
-    fn getObject(reg: Reg) -> Object;
-    fn setObject(reg: Reg, object: Object);
-
-    fn getBool(reg: Reg) -> Bool;
-    fn setBool(reg: Reg, bool: Bool);
-
-    fn getString(reg: Reg) -> String;
-    fn setString(reg: Reg, string: String);
-
-    fn getSymbol(reg: Reg) -> Symbol;
-    fn setSymbol(reg: Reg, symbol: Symbol);
-
-    fn getBigInt(reg: Reg) -> BigInt;
-    fn setBigInt(reg: Reg, bigInt: BigInt);
-
-    fn getDouble(floatReg: FloatReg) -> Float64;
-    fn setDouble(floatReg: FloatReg, double: Float64);
+    #[refined]
+    fn setStackIndex(reg: Reg, stackIndex: UInt64) {
+        MASM::setData(reg, RegData::fromStackIndex(stackIndex));
+    }
 
     #[spec]
-    fn setHasPushedRegs();
+    fn getFloatData(phyReg: PhyFloatReg) -> FloatData;
     #[spec]
-    fn unsetHasPushedRegs();
+    fn setFloatData(phyReg: PhyFloatReg, data: FloatData);
+
+    #[refined]
+    fn getDouble(floatReg: FloatReg) -> Float64 {
+        assert floatReg.type == FloatContentType::Double;
+        FloatData::toDouble(MASM::getFloatData(floatReg.reg))
+    }
+
+    #[refined]
+    fn setDouble(floatReg: FloatReg, double: Float64) {
+        assert floatReg.type == FloatContentType::Double;
+        MASM::setFloatData(floatReg.reg, FloatData::fromDouble(double));
+    }
+
+    #[spec]
+    fn stackPush(stackData: StackData);
+    #[spec]
+    fn stackPop() -> StackData;
+
+    #[spec]
+    fn stackStore(idx: UInt64, stackData: StackData);
+    #[spec]
+    fn stackLoad(idx: UInt64) -> StackData;
+
+    #[refined]
+    fn stackPushReg(reg: Reg) {
+        let regData = MASM::getData(reg);
+        let stackData = StackData::fromRegData(regData);
+        MASM::stackPush(stackData);
+    }
+
+    #[refined]
+    fn stackPopReg(reg: Reg) {
+        let stackData = MASM::stackPop();
+        let regData = StackData::toRegData(stackData);
+        MASM::setData(reg, regData);
+    }
+
+    var mut hasPushedRegs: Bool;
+
+    #[spec]
+    fn setHasPushedRegs() {
+        assert !MASM::hasPushedRegs;
+        MASM::hasPushedRegs = true;
+    }
+
+    #[spec]
+    fn unsetHasPushedRegs() {
+        assert MASM::hasPushedRegs;
+        MASM::hasPushedRegs = false;
+    }
 
     #[spec]
     fn stackPushLiveGeneralReg(reg: Reg);
@@ -1496,9 +2220,8 @@ ir MASM {
         let fpus = FloatRegSet::reducedForPush(LiveRegSet::fpus(set)); 
         let gprs = LiveRegSet::gprs(set);
 
-
         let fpusIgnore = LiveRegSet::fpus(ignore);
-        let fpusPop = FloatRegSet::newDifference(fpus, fpusIgnore);
+        let fpusPop = FloatRegSet::difference(fpus, fpusIgnore);
 
         for phyReg in PhyFloatReg desc {
             let singleReg = FloatReg::new(phyReg, FloatContentType::Single);
@@ -1514,9 +2237,8 @@ ir MASM {
             }
         }
 
-
         let gprsIgnore = LiveRegSet::gprs(ignore);
-        let gprsPop = GeneralRegSet::newDifference(gprs, gprsIgnore);
+        let gprsPop = GeneralRegSet::difference(gprs, gprsIgnore);
 
         for reg in Reg desc {
             if GeneralRegSet::contains(gprsPop, reg) {
@@ -1529,7 +2251,58 @@ ir MASM {
 
     #[refined]
     fn popRegsInMask(set: LiveRegSet) {
-        let ignore = LiveRegSet::newEmpty();
+        let ignore = LiveRegSet::empty();
         MASM::popRegsInMaskIgnore(set, ignore);
     }
 }
+
+//impl MASM {
+    //spec var mut regs: Map<Reg, Value>;
+    //spec var mut valueRegs: Map<ValueReg, Value>;
+
+    //fn getValue(valueReg: ValueReg) -> Value;
+
+    //refine fn getValue(valueReg: ValueReg) -> Value {
+        //Map::get(MASM::valueRegs, valueReg)
+    //}
+
+    //fn setValue(valueReg: ValueReg, value: Value);
+
+    //refine fn setValue(valueReg: ValueReg, value: Value) {
+        //MASM::valueRegs = Map::set(MASM::valueRegs, valueReg, value);
+    //}
+
+    //spec fn getUnboxedValue(reg: Reg) -> Value {
+        //Map::get(MASM::regs, reg)
+    //}
+
+    //fn setUnboxedValue(reg: Reg, value: Value);
+
+    //refine fn setUnboxedValue(reg: Reg, value: Value) {
+        //MASM::regs = Map::set(MASM::regs, reg, value);
+    //}
+
+    //fn getInt32(reg: Reg) -> Int32;
+
+    //refine fn getInt32(reg: Reg) -> Int32 {
+        //Value::toInt32(MASM::getUnboxedValue(reg))
+    //}
+
+    //fn setInt32(reg: Reg, int32: Int32);
+
+    //refine fn setInt32(reg: Reg, int32: Int32) {
+        //MASM::setUnboxedValue(reg, Value::fromInt32(int32));
+    //}
+
+    //fn getObject(reg: Reg) -> Object;
+
+    //refine fn getObject(reg: Reg) -> Object {
+        //Value::toObject(MASM::getUnboxedValue(reg))
+    //}
+
+    //fn setObject(reg: Reg, object: Object);
+
+    //refine fn setObject(reg: Reg, object: Object) {
+        //MASM::setUnboxedValue(reg, Value::fromObject(object));
+    //}
+//}

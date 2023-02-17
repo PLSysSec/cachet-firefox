@@ -22,6 +22,7 @@
 #include "vm/JSFunction.h"
 #include "vm/JSObject.h"
 #include "vm/NativeObject.h"
+#include "vm/Opcodes.h"
 #include "vm/Shape.h"
 
 namespace js {
@@ -31,6 +32,7 @@ namespace jit {
 class CacheIRCompiler;
 class OperandLocation;
 class FailurePath;
+class AutoScratchFloatRegister;
 
 namespace cachet {
 
@@ -157,6 +159,7 @@ using Type_Shape = GCType<js::Shape*>;
 using Type_BaseShape = GCType<js::BaseShape*>;
 using Type_Class = PrimitiveType<const JSClass*>;
 using Type_TaggedProto = GCType<js::TaggedProto>;
+using Type_JSOp = PrimitiveType<JSOp>;
 
 using Type_ValueReg = PrimitiveType<ValueOperand>;
 using Type_Reg = PrimitiveType<Register>;
@@ -175,13 +178,15 @@ using Type_BaseIndex = PrimitiveType<js::jit::BaseIndex>;
 using Type_BaseValueIndex = PrimitiveType<js::jit::BaseValueIndex>;
 using Type_BaseObjectElementIndex = PrimitiveType<js::jit::BaseObjectElementIndex>;
 using Type_BaseObjectSlotIndex = PrimitiveType<js::jit::BaseObjectSlotIndex>;
+using Type_AutoScratchFloatReg = PrimitiveType<AutoScratchFloatRegister>;
 
 using Type_OperandLocation = PrimitiveType<OperandLocation>;
 
 enum class OperandLocationKind {
   Uninitialized = 0,
   PayloadReg,
-  ValueReg
+  ValueReg,
+  FloatReg
 };
 
 using Type_OperandLocationKind = PrimitiveType<OperandLocationKind>;
@@ -189,21 +194,29 @@ using Type_OperandLocationKind = PrimitiveType<OperandLocationKind>;
 using Type_OperandId = PrimitiveType<OperandId>;
 using Type_ValueId = PrimitiveType<ValOperandId>;
 using Type_ObjectId = PrimitiveType<ObjOperandId>;
-using Type_Int32Id = PrimitiveType<Int32OperandId>;
-using Type_NumberId = PrimitiveType<NumberOperandId>;
-using Type_BoolId = PrimitiveType<BooleanOperandId>;
 using Type_StringId = PrimitiveType<StringOperandId>;
 using Type_SymbolId = PrimitiveType<SymbolOperandId>;
+using Type_BoolId = PrimitiveType<BooleanOperandId>;
+using Type_Int32Id = PrimitiveType<Int32OperandId>;
+using Type_NumberId = PrimitiveType<NumberOperandId>;
 using Type_BigIntId = PrimitiveType<BigIntOperandId>;
 using Type_ValueTagId = PrimitiveType<ValueTagOperandId>;
+using Type_IntPtrId = PrimitiveType<IntPtrOperandId>;
 using Type_TypedId = PrimitiveType<TypedOperandId>;
 
 using Type_Int32Field = PrimitiveType<uint32_t>;
+using Type_IntPtrField = PrimitiveType<uint32_t>;
+using Type_ShapeField = PrimitiveType<uint32_t>;
+using Type_ClassField = PrimitiveType<uint32_t>;
+using Type_GetterSetterField = PrimitiveType<uint32_t>;
 using Type_ObjectField = PrimitiveType<uint32_t>;
 using Type_StringField = PrimitiveType<uint32_t>;
 using Type_SymbolField = PrimitiveType<uint32_t>;
-using Type_ShapeField = PrimitiveType<uint32_t>;
-using Type_ClassField = PrimitiveType<uint32_t>;
+using Type_BaseScriptField = PrimitiveType<uint32_t>;
+using Type_IdField = PrimitiveType<uint32_t>;
+using Type_AllocSiteField = PrimitiveType<uint32_t>;
+using Type_Int64Field = PrimitiveType<uint32_t>;
+using Type_ValueField = PrimitiveType<uint32_t>;
 
 using Type_GuardClassKind = PrimitiveType<GuardClassKind>;
 
@@ -228,8 +241,6 @@ namespace IR_MASM {
   
   void BindLabel(Cachet_ContextRef cx, OpsRef ops, LabelMutRef label);
 }
-
-
 
 #define CACHET_CacheIR_COMPILER
 #define CACHET_MASM_EMIT
