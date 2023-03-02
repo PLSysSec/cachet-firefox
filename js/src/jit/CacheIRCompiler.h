@@ -750,6 +750,8 @@ friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_allocateReg(cachet::Cachet
 friend void cachet::Impl_CacheIR::Fn_releaseReg(cachet::Cachet_ContextRef cx, cachet::Type_Reg::Ref param_reg);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_allocateScratchReg(cachet::Cachet_ContextRef cx);
 friend void cachet::Impl_CacheIR::Fn_releaseScratchReg(cachet::Cachet_ContextRef cx);
+friend cachet::Type_FloatReg::Val cachet::Impl_CacheIR::Fn_allocateDoubleScratchReg(cachet::Cachet_ContextRef cx);
+friend void cachet::Impl_CacheIR::Fn_releaseDoubleScratchReg(cachet::Cachet_ContextRef cx);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_defineObjectId(cachet::Cachet_ContextRef cx, cachet::Type_ObjectId::Ref param_objectId);
 friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_defineInt32Id(cachet::Cachet_ContextRef cx, cachet::Type_Int32Id::Ref param_int32Id);
 friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_defineNumberId(cachet::Cachet_ContextRef cx, cachet::Type_NumberId::Ref param_numberId);

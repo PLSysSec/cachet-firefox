@@ -467,6 +467,10 @@ Type_Int32::Val Fn_toInt32Unchecked(Cachet_ContextRef cx, Type_Float64::Ref para
   return (int32_t)param_float64;
 }
 
+Type_Float64::Val Fn_fromUInt32Unchecked(Cachet_ContextRef cx, Type_UInt32::Ref param_uint32) {
+  return (double)param_uint32;
+}
+
 };  // namespace Impl_Float64
 
 namespace Impl_Value {
@@ -1359,6 +1363,13 @@ void EmitOp_TagValue(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_JSValueType
   ops.tagValue(param_valTy, param_payload, param_dest);
 }
 
+void EmitOp_BoxDouble(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                      Type_FloatReg::Ref param_srcReg,
+                      Type_ValueReg::Ref param_valueReg,
+                      Type_FloatReg::Ref param_scratchReg) {
+  ops.boxDouble(param_srcReg, param_valueReg, param_scratchReg);
+}
+
 void EmitOp_UnboxInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                           Type_ValueReg::Ref param_valueReg,
                           Type_Reg::Ref param_int32Reg) {
@@ -1399,6 +1410,12 @@ void EmitOp_CastBoolToInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Reg:
 void EmitOp_ConvertInt32ValueToDouble(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                         Type_ValueReg::Ref param_valueReg) {
   ops.convertInt32ValueToDouble(param_valueReg);
+}
+
+void EmitOp_ConvertUInt32ToDouble(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                  Type_Reg::Ref param_srcReg,
+                                  Type_FloatReg::Ref param_destReg) {
+  ops.convertUInt32ToDouble(param_srcReg, param_destReg);
 }
 
 void EmitOp_SpectreBoundsCheck32Address(Cachet_ContextRef cx,
@@ -1724,6 +1741,24 @@ void EmitOp_BranchMul32(Cachet_ContextRef cx,
                          param_branch);
 }
 
+void EmitOp_FlexibleDivMod32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                             Type_Reg::Ref param_rhsReg,
+                             Type_Reg::Ref param_lhsOutputReg,
+                             Type_Reg::Ref param_remOutputReg,
+                             Type_Bool::Ref param_isUnsigned,
+                             Type_LiveRegSet::Ref param_volatileRegs) {
+  ops.flexibleDivMod32(param_rhsReg, param_lhsOutputReg, param_remOutputReg, param_isUnsigned, param_volatileRegs);
+}
+
+void EmitOp_FlexibleRemainder32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                Type_Reg::Ref param_rhsReg,
+                                Type_Reg::Ref param_lhsOutputReg,
+                                Type_Bool::Ref param_isUnsigned,
+                                Type_LiveRegSet::Ref param_volatileLiveRegs) {
+  ops.flexibleRemainder32(param_rhsReg, param_lhsOutputReg, param_isUnsigned, param_volatileLiveRegs);
+}
+
+
 void EmitOp_Neg32(Cachet_ContextRef cx,
                   IR_MASM::OpsRef ops,
                   Type_Reg::Ref param_valueReg) {
@@ -1769,6 +1804,13 @@ void EmitOp_FlexibleRshift32Arithmetic(Cachet_ContextRef cx,
                                        Type_Reg::Ref param_shiftReg,
                                        Type_Reg::Ref param_srcDestReg) {
   ops.flexibleRshift32Arithmetic(param_shiftReg, param_srcDestReg);
+}
+
+void EmitOp_FlexibleRshift32(Cachet_ContextRef cx,
+                             IR_MASM::OpsRef ops,
+                             Type_Reg::Ref param_shiftReg,
+                             Type_Reg::Ref param_srcDestReg) {
+  ops.flexibleRshift32(param_shiftReg, param_srcDestReg);
 }
 
 void EmitOp_TestObjectSet(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
@@ -1877,18 +1919,30 @@ void Fn_releaseReg(Cachet_ContextRef cx, Type_Reg::Ref param_reg) {
 }
 
 Type_Reg::Val Fn_allocateScratchReg(Cachet_ContextRef cx) {
-#ifdef DEBUG
-  cx.compiler->masm.debugTrackedRegisters_.add(ScratchReg);
-#endif
+//#ifdef DEBUG
+//  cx.compiler->masm.debugTrackedRegisters_.add(ScratchReg);
+//#endif
   return ScratchReg;
 }
 
 void Fn_releaseScratchReg(Cachet_ContextRef cx) {
-#ifdef DEBUG
-  cx.compiler->masm.debugTrackedRegisters_.take(ScratchReg);
-#endif
+//#ifdef DEBUG
+//  cx.compiler->masm.debugTrackedRegisters_.take(ScratchReg);
+//#endif
 }
 
+Type_FloatReg::Val Fn_allocateDoubleScratchReg(Cachet_ContextRef cx) {
+//#ifdef DEBUG
+//  cx.compiler->masm.debugTrackedRegisters_.add(ScratchDoubleReg_);
+//#endif
+  return ScratchDoubleReg_;
+}
+
+void Fn_releaseDoubleScratchReg(Cachet_ContextRef cx) {
+//#ifdef DEBUG
+//  cx.compiler->masm.debugTrackedRegisters_.take(ScratchDoubleReg_);
+//#endif
+}
 
 
 Type_Reg::Val Fn_defineObjectId(Cachet_ContextRef cx,

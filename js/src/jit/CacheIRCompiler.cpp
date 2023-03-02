@@ -2880,6 +2880,9 @@ bool CacheIRCompiler::emitInt32MulResult(Int32OperandId lhsId,
 bool CacheIRCompiler::emitInt32DivResult(Int32OperandId lhsId,
                                          Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_Int32DivResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
+#else
   AutoOutputRegister output(*this);
   Register lhs = allocator.useRegister(masm, lhsId);
   Register rhs = allocator.useRegister(masm, rhsId);
@@ -2914,12 +2917,16 @@ bool CacheIRCompiler::emitInt32DivResult(Int32OperandId lhsId,
   // A remainder implies a double result.
   masm.branchTest32(Assembler::NonZero, rem, rem, failure->label());
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#endif
   return true;
 }
 
 bool CacheIRCompiler::emitInt32ModResult(Int32OperandId lhsId,
                                          Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_Int32ModResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
+#else
   AutoOutputRegister output(*this);
   Register lhs = allocator.useRegister(masm, lhsId);
   Register rhs = allocator.useRegister(masm, rhsId);
@@ -2954,7 +2961,7 @@ bool CacheIRCompiler::emitInt32ModResult(Int32OperandId lhsId,
   masm.bind(&notZero);
 
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
-
+#endif
   return true;
 }
 
@@ -3074,6 +3081,9 @@ bool CacheIRCompiler::emitInt32URightShiftResult(Int32OperandId lhsId,
                                                  Int32OperandId rhsId,
                                                  bool forceDouble) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+#ifdef JS_CACHET
+  cachet::Impl_CacheIR::Op_Int32URightShiftResult(cachet::CachetContext {this, cx_}, lhsId, rhsId, forceDouble);
+#else
   AutoOutputRegister output(*this);
 
   Register lhs = allocator.useRegister(masm, lhsId);
@@ -3095,6 +3105,7 @@ bool CacheIRCompiler::emitInt32URightShiftResult(Int32OperandId lhsId,
     masm.branchTest32(Assembler::Signed, scratch, scratch, failure->label());
     masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
   }
+#endif
   return true;
 }
 

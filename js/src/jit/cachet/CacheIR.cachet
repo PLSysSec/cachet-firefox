@@ -1295,6 +1295,81 @@ ir CacheIR emits MASM {
         CacheIR::releaseReg(scratch2Reg);
     }
 
+    op Int32DivResult(lhsId: Int32Id, rhsId: Int32Id) {
+        let lhsReg = CacheIR::useInt32Id(lhsId);
+        let rhsReg = CacheIR::useInt32Id(rhsId);
+
+        let remReg = CacheIR::allocateReg();
+        let scratchReg = CacheIR::allocateReg();
+
+        let failure = CacheIR::addFailurePath();
+
+        // prevent division by 0.
+        emit MASM::BranchTest32(Condition::Zero, rhsReg, rhsReg, failure.label_);
+
+        // prevent -2147483648 / -1.
+        label notOverflow: MASM;
+        emit MASM::Branch32Imm(Condition::NotEqual, lhsReg, -2147483647_i32 - 1_i32, notOverflow);
+        emit MASM::Branch32Imm(Condition::Equal, rhsReg, -1_i32, failure.label_);
+        bind notOverflow;
+
+        // prevent negative 0.
+        label notZero: MASM;
+        emit MASM::BranchTest32(Condition::NonZero, lhsReg, lhsReg, notZero);
+        emit MASM::BranchTest32(Condition::Signed, rhsReg, rhsReg, failure.label_);
+        bind notZero;
+
+        emit MASM::Mov(lhsReg, scratchReg);
+        let volatileRegs = LiveRegSet::new(
+            GeneralRegSet::volatile(), CacheIR::liveVolatileFloatRegs()
+        );
+        emit MASM::FlexibleDivMod32(rhsReg, scratchReg, remReg, false, volatileRegs);
+
+        // A remainder implies a double result.
+        emit MASM::BranchTest32(Condition::NonZero, remReg, remReg, failure.label_);
+
+        emit MASM::TagValue(JSValueType::Int32, scratchReg,
+                TypedOrValueReg::toValueReg(CacheIR::outputReg));
+
+        CacheIR::releaseReg(remReg);
+        CacheIR::releaseReg(scratchReg);
+    }
+
+    op Int32ModResult(lhsId: Int32Id, rhsId: Int32Id) {
+        let lhsReg = CacheIR::useInt32Id(lhsId);
+        let rhsReg = CacheIR::useInt32Id(rhsId);
+
+        let scratchReg = CacheIR::allocateReg();
+
+        let failure = CacheIR::addFailurePath();
+
+        // x % 0 results in NaN.
+        emit MASM::BranchTest32(Condition::Zero, rhsReg, rhsReg, failure.label_);
+
+        // Prevent -2147483648 % -1.
+        label notOverflow: MASM;
+        emit MASM::Branch32Imm(Condition::NotEqual, lhsReg, -2147483647_i32 - 1_i32, notOverflow);
+        emit MASM::Branch32Imm(Condition::Equal, rhsReg, -1_i32, failure.label_);
+        bind notOverflow;
+
+        emit MASM::Mov(lhsReg, scratchReg);
+        let volatileRegs = LiveRegSet::new(
+            GeneralRegSet::volatile(), CacheIR::liveVolatileFloatRegs()
+        );
+        emit MASM::FlexibleRemainder32(rhsReg, scratchReg, false, volatileRegs);
+
+        // Modulo takes the sign of the dividend; we can't return negative zero here.
+        label notZero: MASM;
+        emit MASM::BranchTest32(Condition::NonZero, scratchReg, scratchReg, notZero);
+        emit MASM::BranchTest32(Condition::Signed, lhsReg, lhsReg, failure.label_);
+        bind notZero;
+
+        emit MASM::TagValue(JSValueType::Int32, scratchReg,
+                TypedOrValueReg::toValueReg(CacheIR::outputReg));
+
+        CacheIR::releaseReg(scratchReg); 
+    }
+
     op Int32BitOrResult(lhsId: Int32Id, rhsId: Int32Id) {
         let lhsReg = CacheIR::useInt32Id(lhsId);
         let rhsReg = CacheIR::useInt32Id(rhsId);
@@ -1356,6 +1431,32 @@ ir CacheIR emits MASM {
         emit MASM::FlexibleRshift32Arithmetic(rhsReg, scratchReg);
         emit MASM::TagValue(JSValueType::Int32, scratchReg,
                 TypedOrValueReg::toValueReg(CacheIR::outputReg));
+
+        CacheIR::releaseReg(scratchReg);
+    }
+
+    op Int32URightShiftResult(lhsId: Int32Id, rhsId: Int32Id, forceDouble: Bool) {
+        let lhsReg = CacheIR::useInt32Id(lhsId);
+        let rhsReg = CacheIR::useInt32Id(rhsId);
+        let scratchReg = CacheIR::allocateReg();
+
+        let failure = CacheIR::addFailurePath();
+    
+        emit MASM::Mov(lhsReg, scratchReg);
+        emit MASM::FlexibleRshift32(rhsReg, scratchReg);
+
+        if forceDouble {
+            let fpscratch = CacheIR::allocateDoubleScratchReg();
+
+            emit MASM::ConvertUInt32ToDouble(scratchReg, fpscratch);
+            emit MASM::BoxDouble(fpscratch, TypedOrValueReg::toValueReg(CacheIR::outputReg), fpscratch);
+
+            CacheIR::releaseDoubleScratchReg();
+        } else {
+            emit MASM::BranchTest32(Condition::Signed, scratchReg, scratchReg, failure.label_);
+            emit MASM::TagValue(JSValueType::Int32, scratchReg,
+                    TypedOrValueReg::toValueReg(CacheIR::outputReg));
+        }
 
         CacheIR::releaseReg(scratchReg);
     }
@@ -1498,6 +1599,18 @@ ir CacheIR emits MASM {
     //fn releaseAutoScratchFloatReg(floatReg: AutoScratchFloatReg) {
     //    CacheIR::releaseFloatReg(floatReg.reg);
     //}
+
+    // Register allocated by ScratchDoubleScope
+    #[refined]
+    fn allocateDoubleScratchReg() -> FloatReg {
+        CacheIR::allocateAvailableFloatReg(FloatReg::doubleScratchReg())
+    }
+
+    // Register allocated by ScratchDoubleScope
+    #[refined]
+    fn releaseDoubleScratchReg() {
+        CacheIR::releaseFloatReg(FloatReg::doubleScratchReg());
+    }
 
     fn defineValueId(valueId: ValueId) -> ValueReg;
     fn defineTypedId(typedId: TypedId) -> Reg;
