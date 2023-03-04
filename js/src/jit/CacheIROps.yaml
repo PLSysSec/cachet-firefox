@@ -107,6 +107,13 @@ GuardIsUndefined:
   args:
     input: ValId
 
+GuardIsNotUninitializedLexical:
+  shared: true
+  transpile: true
+  cost_estimate: 1
+  args:
+    input: ValId
+
 GuardToBoolean:
   shared: true
   transpile: true
@@ -596,6 +603,24 @@ GuardDynamicSlotValue:
     obj: ObjId
     offset: RawInt32Field
     val: ValueField
+
+LoadFixedSlot:
+  shared: true
+  transpile: true
+  cost_estimate: 1
+  args:
+    result: ValId
+    obj: ObjId
+    offset: RawInt32Field
+
+LoadDynamicSlot:
+  shared: true
+  transpile: true
+  cost_estimate: 1
+  args:
+    result: ValId
+    obj: ObjId
+    slot: RawInt32Field
 
 GuardNoAllocationMetadataBuilder:
   shared: true

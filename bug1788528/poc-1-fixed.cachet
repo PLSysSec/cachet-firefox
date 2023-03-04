@@ -1,0 +1,38 @@
+GetName IonIC
+Input                         [ObjId environment] 0
+Output                        Value
+%
+
+GuardShape                    [ObjId obj] 0, [ShapeField shape] 0
+LoadEnclosingEnvironment      [ObjId obj] 0, [ObjId result] 1
+GuardShape                    [ObjId obj] 1, [ShapeField shape] 8
+LoadDynamicSlotResult         [ObjId obj] 1, [RawInt32Field offset] 16
+ReturnFromIC                  
+%
+
+ShapeField                 0, 117a1733e060
+ShapeField                 8, 117a17366d00
+RawInt32Field             16, 2640
+%
+
+ShapeBase                     117a1733e060, 117a1733d040
+ShapeClass                    117a1733e060, 559c89c410a8
+ShapeNumFixedSlots            117a1733e060, 2
+ShapeSlotSpan                 117a1733e060, 2
+
+ShapeBase                     117a17366d00, 117a1733d0b8
+ShapeClass                    117a17366d00, 559c89c35e40
+ShapeNumFixedSlots            117a17366d00, 16
+ShapeSlotSpan                 117a17366d00, 348
+
+BaseShapeTaggedProto          117a1733d0b8, 117a17343028
+
+BaseShapeTaggedProto          117a1733d040, 0
+
+ClassIsNativeObject           559c89c35e40
+
+ClassIsNativeObject           559c89c410a8
+
+TaggedProtoIsObject           117a17343028
+
+TaggedProtoIsNull             0
