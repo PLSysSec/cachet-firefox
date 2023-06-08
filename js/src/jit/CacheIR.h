@@ -1461,6 +1461,19 @@ class MOZ_RAII GetPropIRGenerator : public IRGenerator {
   AttachDecision tryAttachStub();
 };
 
+bool IsCacheableProtoChain(NativeObject* obj, NativeObject* holder);
+
+[[nodiscard]] bool ValueToNameOrSymbolId(JSContext* cx, HandleValue idVal,
+                                         MutableHandleId id,
+                                         bool* nameOrSymbol);
+
+enum NativeGetPropCacheability {
+  CanAttachNone,
+  CanAttachReadSlot,
+  CanAttachNativeGetter,
+  CanAttachScriptedGetter,
+};
+
 // GetNameIRGenerator generates CacheIR for a GetName IC.
 class MOZ_RAII GetNameIRGenerator : public IRGenerator {
   HandleObject env_;

@@ -17,6 +17,7 @@
 namespace js {
 
 class PropertyResult {
+ public:
   enum class Kind : uint8_t {
     NotFound,
     NativeProperty,
@@ -24,6 +25,8 @@ class PropertyResult {
     DenseElement,
     TypedArrayElement,
   };
+
+ private:
   union {
     // Set if kind is NativeProperty.
     PropertyInfo propInfo_;
@@ -39,6 +42,7 @@ class PropertyResult {
   // Note: because PropertyInfo does not have a default constructor, we can't
   // use |= default| here.
   PropertyResult() {}
+  Kind kind() const { return kind_; }
 
   // When a property is not found, we may additionally indicate that the
   // prototype chain should be ignored. This occurs for:

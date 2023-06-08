@@ -40,7 +40,7 @@ bool AssemblerBuffer::swap(Vector<uint8_t, 0, SystemAllocPolicy>& bytes) {
   return true;
 }
 
-#ifdef JS_JITSPEW
+#if defined(JS_CACHET) || defined(JS_JITSPEW)
 void js::jit::GenericAssembler::spew(const char* fmt, va_list va) {
   // Buffer to hold the formatted string. Note that this may contain
   // '%' characters, so do not pass it directly to printf functions.

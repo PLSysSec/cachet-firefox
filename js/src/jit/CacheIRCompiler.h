@@ -13,9 +13,6 @@
 #include "jit/MacroAssembler.h"
 #include "jit/SharedICRegisters.h"
 #include "js/ScalarType.h"  // js::Scalar::Type
-#ifdef JS_CACHET
-#include "jit/CachetCompiler.h"
-#endif
 
 namespace JS {
 class BigInt;
@@ -63,6 +60,7 @@ class IonICStub;
 //
 // There are also a number of RAII classes that interact with the register
 // allocator, in order to provide access to more registers than just those
+//
 // provided for by the OperandIds.
 //
 // - AutoOutputReg: The register which will hold the output value of the stub.
@@ -728,6 +726,16 @@ class StubFieldOffset {
 
 class AutoOutputRegister;
 
+#ifdef JS_CACHET
+namespace cachet {
+namespace detail {
+
+class CompilerInternals;
+
+}  // namespace detail
+}  // namespace cachet
+#endif
+
 // Base class for BaselineCacheIRCompiler and IonCacheIRCompiler.
 class MOZ_RAII CacheIRCompiler {
  protected:
@@ -737,45 +745,9 @@ class MOZ_RAII CacheIRCompiler {
   friend class AutoCallVM;
   friend class AutoScratchFloatRegister;
   friend class AutoAvailableFloatRegister;
-
 #ifdef JS_CACHET
-friend cachet::IR_MASM::OpsRef cachet::IR_MASM::GetOutput(cachet::Cachet_ContextRef cx);
-friend cachet::IR_MASM::OpsRef cachet::IR_CacheIR::GetOutput(cachet::Cachet_ContextRef cx);
-friend cachet::Type_TypedOrValueReg::Ref cachet::Impl_CacheIR::Var_outputReg(cachet::Cachet_ContextRef cx);
-friend cachet::Type_JSValueType::Ref cachet::Impl_CacheIR::Fn_knownType(cachet::Cachet_ContextRef cx, cachet::Type_ValueId::Ref param_valueId);
-friend cachet::Type_FailurePath::Val cachet::Impl_CacheIR::Fn_addFailurePath(cachet::Cachet_ContextRef cx);
-friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_allocateValueReg(cachet::Cachet_ContextRef cx);
-friend void cachet::Impl_CacheIR::Fn_releaseValueReg(cachet::Cachet_ContextRef cx, cachet::Type_ValueReg::Ref param_valueReg);
-friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_allocateReg(cachet::Cachet_ContextRef cx);
-friend void cachet::Impl_CacheIR::Fn_releaseReg(cachet::Cachet_ContextRef cx, cachet::Type_Reg::Ref param_reg);
-friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_allocateScratchReg(cachet::Cachet_ContextRef cx);
-friend void cachet::Impl_CacheIR::Fn_releaseScratchReg(cachet::Cachet_ContextRef cx);
-friend cachet::Type_FloatReg::Val cachet::Impl_CacheIR::Fn_allocateDoubleScratchReg(cachet::Cachet_ContextRef cx);
-friend void cachet::Impl_CacheIR::Fn_releaseDoubleScratchReg(cachet::Cachet_ContextRef cx);
-friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_defineObjectId(cachet::Cachet_ContextRef cx, cachet::Type_ObjectId::Ref param_objectId);
-friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_defineInt32Id(cachet::Cachet_ContextRef cx, cachet::Type_Int32Id::Ref param_int32Id);
-friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_defineNumberId(cachet::Cachet_ContextRef cx, cachet::Type_NumberId::Ref param_numberId);
-friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_defineValueTagId(cachet::Cachet_ContextRef cx, cachet::Type_ValueTagId::Ref param_valueTagId);
-friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_useValueId(cachet::Cachet_ContextRef cx, cachet::Type_ValueId::Ref param_valueId);
-friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useObjectId(cachet::Cachet_ContextRef cx, cachet::Type_ObjectId::Ref param_objectId);
-friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useInt32Id(cachet::Cachet_ContextRef cx, cachet::Type_Int32Id::Ref param_int32Id);
-friend cachet::Type_ValueReg::Val cachet::Impl_CacheIR::Fn_useNumberId(cachet::Cachet_ContextRef cx, cachet::Type_NumberId::Ref param_numberId);
-friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useBoolId(cachet::Cachet_ContextRef cx, cachet::Type_BoolId::Ref param_booleanId);
-friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useStringId(cachet::Cachet_ContextRef cx, cachet::Type_StringId::Ref param_stringId);
-friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useSymbolId(cachet::Cachet_ContextRef cx, cachet::Type_SymbolId::Ref param_symbolId);
-friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useBigIntId(cachet::Cachet_ContextRef cx, cachet::Type_BigIntId::Ref param_bigIntId);
-friend cachet::Type_Reg::Val cachet::Impl_CacheIR::Fn_useValueTagId(cachet::Cachet_ContextRef cx, cachet::Type_ValueTagId::Ref param_valueTagId);
-friend void cachet::Impl_CacheIR::Fn_emitLoadInt32StubField(cachet::Cachet_ContextRef cx, cachet::Type_Int32Field::Ref param_int32Field, cachet::Type_Reg::Ref param_dstReg);
-friend void cachet::Impl_CacheIR::Fn_emitLoadObjectStubField(cachet::Cachet_ContextRef cx, cachet::Type_ObjectField::Ref param_objectField, cachet::Type_Reg::Ref param_dstReg);
-friend void cachet::Impl_CacheIR::Fn_emitLoadValueStubField(cachet::Cachet_ContextRef cx, cachet::Type_ValueField::Ref param_valueField, cachet::Type_ValueReg::Ref param_dstReg);
-friend cachet::Type_Int32::Val cachet::Impl_CacheIR::Fn_readInt32Field(cachet::Cachet_ContextRef cx, cachet::Type_Int32Field::Ref param_int32Field);
-friend cachet::Type_String::Val cachet::Impl_CacheIR::Fn_readStringField(cachet::Cachet_ContextRef cx, cachet::Type_StringField::Ref param_stringField);
-friend cachet::Type_Shape::Val cachet::Impl_CacheIR::Fn_readShapeField(cachet::Cachet_ContextRef cx, cachet::Type_ShapeField::Ref param_shapeField);
-friend cachet::Type_Class::Val cachet::Impl_CacheIR::Fn_readClassField(cachet::Cachet_ContextRef cx, cachet::Type_ClassField::Ref param_classField);
-friend cachet::Type_Value::Val cachet::Impl_CacheIR::Fn_readValueField(cachet::Cachet_ContextRef cx, cachet::Type_ValueField::Ref param_valueField);
-friend cachet::Type_Bool::Val cachet::Impl_CacheIR::Fn_objectGuardNeedsSpectreMitigations(cachet::Cachet_ContextRef cx, cachet::Type_ObjectId::Ref param_objectId);
-friend cachet::Type_FloatRegSet::MutRef cachet::Impl_CacheIR::Var_liveFloatRegSet(cachet::Cachet_ContextRef cx);
-#endif  // JS_CACHET
+  friend class cachet::detail::CompilerInternals;
+#endif
 
   bool preparedForVMCall_;
 
@@ -787,6 +759,22 @@ friend cachet::Type_FloatRegSet::MutRef cachet::Impl_CacheIR::Var_liveFloatRegSe
   JSContext* cx_;
   const CacheIRWriter& writer_;
   StackMacroAssembler masm;
+
+#ifdef JS_CACHET
+  bool isCachetEnabled_;
+
+ public:
+  void disableCachet() {
+    MOZ_ASSERT(isIon());
+    isCachetEnabled_ = false;
+  }
+
+  void setMASMPrinter(Sprinter* sp) {
+    masm.setPrinter(sp);
+  }
+
+ protected:
+#endif
 
   CacheRegisterAllocator allocator;
   Vector<FailurePath, 4, SystemAllocPolicy> failurePaths;
@@ -809,6 +797,9 @@ friend cachet::Type_FloatRegSet::MutRef cachet::Impl_CacheIR::Var_liveFloatRegSe
       : preparedForVMCall_(false),
         cx_(cx),
         writer_(writer),
+#ifdef JS_CACHET
+        isCachetEnabled_(true),
+#endif
         allocator(writer_),
         liveFloatRegs_(FloatRegisterSet::All()),
         engine_(engine),

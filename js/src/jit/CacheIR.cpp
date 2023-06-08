@@ -304,8 +304,8 @@ static ProxyStubType GetProxyStubType(JSContext* cx, HandleObject obj,
   return ProxyStubType::DOMUnshadowed;
 }
 
-static bool ValueToNameOrSymbolId(JSContext* cx, HandleValue idVal,
-                                  MutableHandleId id, bool* nameOrSymbol) {
+bool jit::ValueToNameOrSymbolId(JSContext* cx, HandleValue idVal,
+                                MutableHandleId id, bool* nameOrSymbol) {
   *nameOrSymbol = false;
 
   if (!idVal.isString() && !idVal.isSymbol() && !idVal.isUndefined() &&
@@ -425,12 +425,11 @@ AttachDecision GetPropIRGenerator::tryAttachStub() {
   return AttachDecision::NoAction;
 }
 
-#ifdef DEBUG
 // Any property lookups performed when trying to attach ICs must be pure, i.e.
 // must use LookupPropertyPure() or similar functions. Pure lookups are
 // guaranteed to never modify the prototype chain. This ensures that the holder
 // object can always be found on the prototype chain.
-static bool IsCacheableProtoChain(NativeObject* obj, NativeObject* holder) {
+bool jit::IsCacheableProtoChain(NativeObject* obj, NativeObject* holder) {
   while (obj != holder) {
     JSObject* proto = obj->staticPrototype();
     if (!proto || !proto->is<NativeObject>()) {
@@ -440,7 +439,6 @@ static bool IsCacheableProtoChain(NativeObject* obj, NativeObject* holder) {
   }
   return true;
 }
-#endif
 
 static bool IsCacheableGetPropReadSlot(NativeObject* obj, NativeObject* holder,
                                        PropertyInfo prop) {
@@ -448,13 +446,6 @@ static bool IsCacheableGetPropReadSlot(NativeObject* obj, NativeObject* holder,
 
   return prop.isDataProperty();
 }
-
-enum NativeGetPropCacheability {
-  CanAttachNone,
-  CanAttachReadSlot,
-  CanAttachNativeGetter,
-  CanAttachScriptedGetter,
-};
 
 static NativeGetPropCacheability IsCacheableGetPropCall(NativeObject* obj,
                                                         NativeObject* holder,
@@ -911,31 +902,43 @@ static bool CanAttachDOMCall(JSContext* cx, JSJitInfo::OpType type,
   MOZ_ASSERT(type == JSJitInfo::Getter || type == JSJitInfo::Setter ||
              type == JSJitInfo::Method);
 
+  fprintf(stderr, "hello\n");
+
   if (mode != ICState::Mode::Specialized) {
+    fprintf(stderr, "rejecting due to not specialized\n");
     return false;
   }
 
   if (!fun->hasJitInfo()) {
+    fprintf(stderr, "rejecting due to no JIT info\n");
     return false;
   }
 
   if (cx->realm() != fun->realm()) {
+    fprintf(stderr, "rejecting due to bad realm\n");
     return false;
   }
 
   const JSJitInfo* jitInfo = fun->jitInfo();
   MOZ_ASSERT_IF(IsWindow(obj), !jitInfo->needsOuterizedThisObject());
   if (jitInfo->type() != type) {
+    fprintf(stderr, "rejecting due to bad type\n");
     return false;
   }
 
   const JSClass* clasp = obj->getClass();
   if (!clasp->isDOMClass()) {
+    fprintf(stderr, "rejecting due to not DOM class\n");
     return false;
   }
 
   if (type != JSJitInfo::Method && clasp->isProxyObject()) {
+    fprintf(stderr, "rejecting due to is proxy\n");
     return false;
+  }
+
+  if (obj->is<NativeObject>()) {
+    fprintf(stderr, "(btw, it's a native object with %d fixed slot(s))\n", obj->as<NativeObject>().numFixedSlots());
   }
 
   // Tell the analysis the |DOMInstanceClassHasProtoAtDepth| hook can't GC.
@@ -943,7 +946,13 @@ static bool CanAttachDOMCall(JSContext* cx, JSJitInfo::OpType type,
 
   DOMInstanceClassHasProtoAtDepth instanceChecker =
       cx->runtime()->DOMcallbacks->instanceClassMatchesProto;
-  return instanceChecker(clasp, jitInfo->protoID, jitInfo->depth);
+  const bool result = instanceChecker(clasp, jitInfo->protoID, jitInfo->depth);
+  if (result) {
+    fprintf(stderr, "going for it\n");
+  } else {
+    fprintf(stderr, "rejecting via instance checker\n");
+  }
+  return result;
 }
 
 static bool CanAttachDOMGetterSetter(JSContext* cx, JSJitInfo::OpType type,

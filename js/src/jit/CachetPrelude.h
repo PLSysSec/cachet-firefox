@@ -25,6 +25,8 @@ struct PrimitiveType {
   using Ref = Val;
   using MutRef = Val&;
 
+  // TODO(spinda): Review these conversions.
+
   template <typename U>
   static U&& ToVal(U&& x) {
     return std::forward<U>(x);
@@ -144,6 +146,56 @@ struct IntegralType : public NumericType<T> {
   }
 };
 
+template <typename T>
+struct StructType {
+  using Val = T;
+  using Local = Val;
+  using Ref = const Val&;
+  using MutRef = Val&;
+
+  static Val ToVal(Ref ref) {
+    return ref;
+  }
+
+  static Val ToVal(MutRef mutRef) {
+    return mutRef;
+  }
+
+  template <typename C>
+  static Local EmptyLocal(C cx) {
+    return T();
+  }
+
+  template <typename C, typename U>
+  static Local ToLocal(C cx, U&& x) {
+    return std::forward<U>(x);
+  }
+
+  static Ref ToRef(const Local& local) {
+    return local;
+  }
+
+  static Ref ToRef(MutRef mutRef) {
+    return mutRef;
+  }
+
+  static MutRef ToMutRef(Local& local) {
+    return local;
+  }
+
+  template <typename U>
+  static void SetMutRef(MutRef lhs, U&& rhs) {
+    lhs = std::forward<U>(rhs);
+  }
+
+  static bool Eq(Ref lhs, Ref rhs) {
+    return lhs == rhs;
+  }
+
+  static bool Neq(Ref lhs, Ref rhs) {
+    return lhs != rhs;
+  }
+};
 
 using Type_Unit = PrimitiveType<std::monostate>;
 using Type_Bool = NumericType<bool>;

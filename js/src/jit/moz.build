@@ -255,8 +255,7 @@ GeneratedFile(
     inputs=["CacheIROps.yaml"],
 )
 
-
-# Generate jit/MIROpsGenerated.h from jit/MIROps.yaml
+# Generate jit/CachetGenerated.{h,inc} from jit/cachet/CacheIR.cachet
 if CONFIG["JS_CACHET"]:
     GeneratedFile(
         "CachetGenerated.h",

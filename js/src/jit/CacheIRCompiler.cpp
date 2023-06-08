@@ -1537,8 +1537,10 @@ bool CacheIRCompiler::emitGuardIsNumber(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardIsNumber(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardIsNumber(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   JSValueType knownType = allocator.knownType(inputId);
 
   // Doubles and ints are numbers!
@@ -1553,6 +1555,8 @@ bool CacheIRCompiler::emitGuardIsNumber(ValOperandId inputId) {
   }
 
   masm.branchTestNumber(Assembler::NotEqual, input, failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -1561,8 +1565,10 @@ bool CacheIRCompiler::emitGuardToObject(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardToObject(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardToObject(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   if (allocator.knownType(inputId) == JSVAL_TYPE_OBJECT) {
     return true;
   }
@@ -1574,6 +1580,8 @@ bool CacheIRCompiler::emitGuardToObject(ValOperandId inputId) {
     return false;
   }
   masm.branchTestObject(Assembler::NotEqual, input, failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -1582,8 +1590,10 @@ bool CacheIRCompiler::emitGuardIsNullOrUndefined(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardIsNullOrUndefined(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardIsNullOrUndefined(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   JSValueType knownType = allocator.knownType(inputId);
   if (knownType == JSVAL_TYPE_UNDEFINED || knownType == JSVAL_TYPE_NULL) {
     return true;
@@ -1600,6 +1610,8 @@ bool CacheIRCompiler::emitGuardIsNullOrUndefined(ValOperandId inputId) {
   masm.branchTestUndefined(Assembler::NotEqual, input, failure->label());
 
   masm.bind(&success);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -1608,8 +1620,10 @@ bool CacheIRCompiler::emitGuardIsNull(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardIsNull(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardIsNull(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   JSValueType knownType = allocator.knownType(inputId);
   if (knownType == JSVAL_TYPE_NULL) {
     return true;
@@ -1623,6 +1637,8 @@ bool CacheIRCompiler::emitGuardIsNull(ValOperandId inputId) {
 
   Label success;
   masm.branchTestNull(Assembler::NotEqual, input, failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -1631,8 +1647,10 @@ bool CacheIRCompiler::emitGuardIsUndefined(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardIsUndefined(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardIsUndefined(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   JSValueType knownType = allocator.knownType(inputId);
   if (knownType == JSVAL_TYPE_UNDEFINED) {
     return true;
@@ -1645,6 +1663,8 @@ bool CacheIRCompiler::emitGuardIsUndefined(ValOperandId inputId) {
   }
 
   masm.branchTestUndefined(Assembler::NotEqual, input, failure->label());
+#if JS_CACHET
+  }
 #endif
   return true;
 }
@@ -1653,8 +1673,10 @@ bool CacheIRCompiler::emitGuardBooleanToInt32(ValOperandId inputId,
                                               Int32OperandId resultId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardBooleanToInt32(cachet::CachetContext {this, cx_}, inputId, resultId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardBooleanToInt32(cachet::CachetContext {this, cx_}, masm, inputId, resultId);
+  } else {
+#endif
   Register output = allocator.defineRegister(masm, resultId);
 
   if (allocator.knownType(inputId) == JSVAL_TYPE_BOOLEAN) {
@@ -1671,6 +1693,8 @@ bool CacheIRCompiler::emitGuardBooleanToInt32(ValOperandId inputId,
   }
 
   masm.fallibleUnboxBoolean(input, output, failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -1679,8 +1703,10 @@ bool CacheIRCompiler::emitGuardToString(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardToString(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardToString(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   if (allocator.knownType(inputId) == JSVAL_TYPE_STRING) {
     return true;
   }
@@ -1691,6 +1717,8 @@ bool CacheIRCompiler::emitGuardToString(ValOperandId inputId) {
     return false;
   }
   masm.branchTestString(Assembler::NotEqual, input, failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -1699,8 +1727,10 @@ bool CacheIRCompiler::emitGuardToSymbol(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardToSymbol(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardToSymbol(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   if (allocator.knownType(inputId) == JSVAL_TYPE_SYMBOL) {
     return true;
   }
@@ -1711,6 +1741,8 @@ bool CacheIRCompiler::emitGuardToSymbol(ValOperandId inputId) {
     return false;
   }
   masm.branchTestSymbol(Assembler::NotEqual, input, failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -1719,8 +1751,10 @@ bool CacheIRCompiler::emitGuardToBigInt(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardToBigInt(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardToBigInt(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   if (allocator.knownType(inputId) == JSVAL_TYPE_BIGINT) {
     return true;
   }
@@ -1731,6 +1765,8 @@ bool CacheIRCompiler::emitGuardToBigInt(ValOperandId inputId) {
     return false;
   }
   masm.branchTestBigInt(Assembler::NotEqual, input, failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -1739,8 +1775,10 @@ bool CacheIRCompiler::emitGuardToBoolean(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardToBoolean(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardToBoolean(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   if (allocator.knownType(inputId) == JSVAL_TYPE_BOOLEAN) {
     return true;
   }
@@ -1751,6 +1789,8 @@ bool CacheIRCompiler::emitGuardToBoolean(ValOperandId inputId) {
     return false;
   }
   masm.branchTestBoolean(Assembler::NotEqual, input, failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -1759,8 +1799,10 @@ bool CacheIRCompiler::emitGuardToInt32(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardToInt32(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardToInt32(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   if (allocator.knownType(inputId) == JSVAL_TYPE_INT32) {
     return true;
   }
@@ -1772,6 +1814,8 @@ bool CacheIRCompiler::emitGuardToInt32(ValOperandId inputId) {
   }
 
   masm.branchTestInt32(Assembler::NotEqual, input, failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2006,8 +2050,10 @@ bool CacheIRCompiler::emitGuardNonDoubleType(ValOperandId inputId,
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardNonDoubleType(cachet::CachetContext {this, cx_}, inputId, type);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardNonDoubleType(cachet::CachetContext {this, cx_}, masm, inputId, type);
+  } else {
+#endif
   if (allocator.knownType(inputId) == JSValueType(type)) {
     return true;
   }
@@ -2047,6 +2093,8 @@ bool CacheIRCompiler::emitGuardNonDoubleType(ValOperandId inputId,
     case ValueType::Object:
       MOZ_CRASH("unexpected type");
   }
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2054,8 +2102,10 @@ bool CacheIRCompiler::emitGuardNonDoubleType(ValOperandId inputId,
 bool CacheIRCompiler::emitGuardClass(ObjOperandId objId, GuardClassKind kind) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardClass(cachet::CachetContext {this, cx_}, objId, kind);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardClass(cachet::CachetContext {this, cx_}, masm, objId, kind);
+  } else {
+#endif
   Register obj = allocator.useRegister(masm, objId);
   AutoScratchRegister scratch(allocator, masm);
 
@@ -2072,6 +2122,8 @@ bool CacheIRCompiler::emitGuardClass(ObjOperandId objId, GuardClassKind kind) {
   } else {
     masm.branchTestObjClassNoSpectreMitigations(Assembler::NotEqual, obj, clasp,
                                                 scratch, failure->label());
+  }
+#ifdef JS_CACHET
   }
 #endif
   return true;
@@ -2140,9 +2192,10 @@ bool CacheIRCompiler::emitGuardFixedSlotValue(ObjOperandId objId,
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardFixedSlotValue(cachet::CachetContext {this, cx_}, objId, offsetOffset, valOffset);
-#else
-
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardFixedSlotValue(cachet::CachetContext {this, cx_}, masm, objId, offsetOffset, valOffset);
+  } else {
+#endif
   Register obj = allocator.useRegister(masm, objId);
 
   AutoScratchRegister scratch(allocator, masm);
@@ -2162,6 +2215,8 @@ bool CacheIRCompiler::emitGuardFixedSlotValue(ObjOperandId objId,
   BaseIndex slotVal(obj, scratch, TimesOne);
   masm.branchTestValue(Assembler::NotEqual, slotVal, scratchVal,
                        failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2172,8 +2227,10 @@ bool CacheIRCompiler::emitGuardDynamicSlotValue(ObjOperandId objId,
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardDynamicSlotValue(cachet::CachetContext {this, cx_}, objId, offsetOffset, valOffset);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardDynamicSlotValue(cachet::CachetContext {this, cx_}, masm, objId, offsetOffset, valOffset);
+  } else {
+#endif
   Register obj = allocator.useRegister(masm, objId);
 
   AutoScratchRegister scratch1(allocator, masm);
@@ -2196,6 +2253,8 @@ bool CacheIRCompiler::emitGuardDynamicSlotValue(ObjOperandId objId,
   BaseIndex slotVal(scratch1, scratch2, TimesOne);
   masm.branchTestValue(Assembler::NotEqual, slotVal, scratchVal,
                        failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2204,8 +2263,10 @@ bool CacheIRCompiler::emitGuardIsNativeObject(ObjOperandId objId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardIsNativeObject(cachet::CachetContext {this, cx_}, objId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardIsNativeObject(cachet::CachetContext {this, cx_}, masm, objId);
+  } else {
+#endif
   Register obj = allocator.useRegister(masm, objId);
   AutoScratchRegister scratch(allocator, masm);
 
@@ -2215,6 +2276,8 @@ bool CacheIRCompiler::emitGuardIsNativeObject(ObjOperandId objId) {
   }
 
   masm.branchIfNonNativeObj(obj, scratch, failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2223,8 +2286,10 @@ bool CacheIRCompiler::emitGuardIsProxy(ObjOperandId objId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardIsProxy(cachet::CachetContext {this, cx_}, objId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardIsProxy(cachet::CachetContext {this, cx_}, masm, objId);
+  } else {
+#endif
   Register obj = allocator.useRegister(masm, objId);
   AutoScratchRegister scratch(allocator, masm);
 
@@ -2234,6 +2299,8 @@ bool CacheIRCompiler::emitGuardIsProxy(ObjOperandId objId) {
   }
 
   masm.branchTestObjectIsProxy(false, obj, scratch, failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2307,8 +2374,10 @@ bool CacheIRCompiler::emitGuardIsNotDOMProxy(ObjOperandId objId) {
 bool CacheIRCompiler::emitGuardNoDenseElements(ObjOperandId objId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardNoDenseElements(cachet::CachetContext {this, cx_}, objId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardNoDenseElements(cachet::CachetContext {this, cx_}, masm, objId);
+  } else {
+#endif
   Register obj = allocator.useRegister(masm, objId);
   AutoScratchRegister scratch(allocator, masm);
 
@@ -2323,6 +2392,8 @@ bool CacheIRCompiler::emitGuardNoDenseElements(ObjOperandId objId) {
   // Make sure there are no dense elements.
   Address initLength(scratch, ObjectElements::offsetOfInitializedLength());
   masm.branch32(Assembler::NotEqual, initLength, Imm32(0), failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2417,11 +2488,15 @@ bool CacheIRCompiler::emitBooleanToNumber(BooleanOperandId booleanId,
                                           NumberOperandId resultId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_BooleanToNumber(cachet::CachetContext {this, cx_}, booleanId, resultId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_BooleanToNumber(cachet::CachetContext {this, cx_}, masm, booleanId, resultId);
+  } else {
+#endif
   Register boolean = allocator.useRegister(masm, booleanId);
   ValueOperand output = allocator.defineValueRegister(masm, resultId);
   masm.tagValue(JSVAL_TYPE_INT32, boolean, output);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2468,8 +2543,10 @@ bool CacheIRCompiler::emitGuardStringToIndex(StringOperandId strId,
 bool CacheIRCompiler::emitLoadProto(ObjOperandId objId, ObjOperandId resultId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadProto(cachet::CachetContext {this, cx_}, objId, resultId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadProto(cachet::CachetContext {this, cx_}, masm, objId, resultId);
+  } else {
+#endif
   Register obj = allocator.useRegister(masm, objId);
   Register reg = allocator.defineRegister(masm, resultId);
   masm.loadObjProto(obj, reg);
@@ -2483,6 +2560,8 @@ bool CacheIRCompiler::emitLoadProto(ObjOperandId objId, ObjOperandId resultId) {
   masm.assumeUnreachable("Unexpected null or lazy proto in CacheIR LoadProto");
   masm.bind(&done);
 #endif
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2513,14 +2592,18 @@ bool CacheIRCompiler::emitLoadValueTag(ValOperandId valId,
                                        ValueTagOperandId resultId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadValueTag(cachet::CachetContext {this, cx_}, valId, resultId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadValueTag(cachet::CachetContext {this, cx_}, masm, valId, resultId);
+  } else {
+#endif
   ValueOperand val = allocator.useValueRegister(masm, valId);
   Register res = allocator.defineRegister(masm, resultId);
 
   Register tag = masm.extractTag(val, res);
   if (tag != res) {
     masm.mov(tag, res);
+  }
+#ifdef JS_CACHET
   }
 #endif
   return true;
@@ -2572,10 +2655,14 @@ bool CacheIRCompiler::emitLoadDOMExpandoValueIgnoreGeneration(
 bool CacheIRCompiler::emitLoadUndefinedResult() {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadUndefinedResult(cachet::CachetContext {this, cx_});
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadUndefinedResult(cachet::CachetContext {this, cx_}, masm);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   masm.moveValue(UndefinedValue(), output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2593,8 +2680,16 @@ static void EmitStoreBoolean(MacroAssembler& masm, bool b,
 
 bool CacheIRCompiler::emitLoadBooleanResult(bool val) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+#ifdef JS_CACHET
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadBooleanResult(cachet::CachetContext {this, cx_}, masm, val);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   EmitStoreBoolean(masm, val, output);
+#ifdef JS_CACHET
+  }
+#endif
   return true;
 }
 
@@ -2627,8 +2722,10 @@ static void EmitStoreResult(MacroAssembler& masm, Register reg,
 bool CacheIRCompiler::emitLoadInt32ArrayLengthResult(ObjOperandId objId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadInt32ArrayLengthResult(cachet::CachetContext {this, cx_}, objId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadInt32ArrayLengthResult(cachet::CachetContext {this, cx_}, masm, objId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register obj = allocator.useRegister(masm, objId);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
@@ -2644,6 +2741,8 @@ bool CacheIRCompiler::emitLoadInt32ArrayLengthResult(ObjOperandId objId) {
   // Guard length fits in an int32.
   masm.branchTest32(Assembler::Signed, scratch, scratch, failure->label());
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2799,8 +2898,10 @@ bool CacheIRCompiler::emitInt32AddResult(Int32OperandId lhsId,
                                          Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32AddResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32AddResult(cachet::CachetContext {this, cx_}, masm, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
 
@@ -2815,6 +2916,8 @@ bool CacheIRCompiler::emitInt32AddResult(Int32OperandId lhsId,
   masm.mov(rhs, scratch);
   masm.branchAdd32(Assembler::Overflow, lhs, scratch, failure->label());
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
 
   return true;
@@ -2823,8 +2926,10 @@ bool CacheIRCompiler::emitInt32SubResult(Int32OperandId lhsId,
                                          Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32SubResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32SubResult(cachet::CachetContext {this, cx_}, masm, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
   Register lhs = allocator.useRegister(masm, lhsId);
@@ -2838,6 +2943,8 @@ bool CacheIRCompiler::emitInt32SubResult(Int32OperandId lhsId,
   masm.mov(lhs, scratch);
   masm.branchSub32(Assembler::Overflow, rhs, scratch, failure->label());
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2846,8 +2953,10 @@ bool CacheIRCompiler::emitInt32MulResult(Int32OperandId lhsId,
                                          Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32MulResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32MulResult(cachet::CachetContext {this, cx_}, masm, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register lhs = allocator.useRegister(masm, lhsId);
   Register rhs = allocator.useRegister(masm, rhsId);
@@ -2873,6 +2982,8 @@ bool CacheIRCompiler::emitInt32MulResult(Int32OperandId lhsId,
 
   masm.bind(&done);
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2881,8 +2992,10 @@ bool CacheIRCompiler::emitInt32DivResult(Int32OperandId lhsId,
                                          Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32DivResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32DivResult(cachet::CachetContext {this, cx_}, masm, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register lhs = allocator.useRegister(masm, lhsId);
   Register rhs = allocator.useRegister(masm, rhsId);
@@ -2917,6 +3030,8 @@ bool CacheIRCompiler::emitInt32DivResult(Int32OperandId lhsId,
   // A remainder implies a double result.
   masm.branchTest32(Assembler::NonZero, rem, rem, failure->label());
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2925,8 +3040,10 @@ bool CacheIRCompiler::emitInt32ModResult(Int32OperandId lhsId,
                                          Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32ModResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32ModResult(cachet::CachetContext {this, cx_}, masm, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register lhs = allocator.useRegister(masm, lhsId);
   Register rhs = allocator.useRegister(masm, rhsId);
@@ -2961,6 +3078,8 @@ bool CacheIRCompiler::emitInt32ModResult(Int32OperandId lhsId,
   masm.bind(&notZero);
 
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -2991,8 +3110,10 @@ bool CacheIRCompiler::emitInt32BitOrResult(Int32OperandId lhsId,
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32BitOrResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32BitOrResult(cachet::CachetContext {this, cx_}, masm, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
 
@@ -3002,6 +3123,8 @@ bool CacheIRCompiler::emitInt32BitOrResult(Int32OperandId lhsId,
   masm.mov(rhs, scratch);
   masm.or32(lhs, scratch);
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3009,8 +3132,10 @@ bool CacheIRCompiler::emitInt32BitXorResult(Int32OperandId lhsId,
                                             Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32BitXorResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32BitXorResult(cachet::CachetContext {this, cx_}, masm, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
 
@@ -3020,6 +3145,8 @@ bool CacheIRCompiler::emitInt32BitXorResult(Int32OperandId lhsId,
   masm.mov(rhs, scratch);
   masm.xor32(lhs, scratch);
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3027,8 +3154,10 @@ bool CacheIRCompiler::emitInt32BitAndResult(Int32OperandId lhsId,
                                             Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32BitAndResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32BitAndResult(cachet::CachetContext {this, cx_}, masm, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
 
@@ -3038,6 +3167,8 @@ bool CacheIRCompiler::emitInt32BitAndResult(Int32OperandId lhsId,
   masm.mov(rhs, scratch);
   masm.and32(lhs, scratch);
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3045,8 +3176,10 @@ bool CacheIRCompiler::emitInt32LeftShiftResult(Int32OperandId lhsId,
                                                Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32LeftShiftResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32LeftShiftResult(cachet::CachetContext {this, cx_}, masm, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register lhs = allocator.useRegister(masm, lhsId);
   Register rhs = allocator.useRegister(masm, rhsId);
@@ -3055,6 +3188,8 @@ bool CacheIRCompiler::emitInt32LeftShiftResult(Int32OperandId lhsId,
   masm.mov(lhs, scratch);
   masm.flexibleLshift32(rhs, scratch);
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3063,8 +3198,10 @@ bool CacheIRCompiler::emitInt32RightShiftResult(Int32OperandId lhsId,
                                                 Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32RightShiftResult(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32RightShiftResult(cachet::CachetContext {this, cx_}, masm, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register lhs = allocator.useRegister(masm, lhsId);
   Register rhs = allocator.useRegister(masm, rhsId);
@@ -3073,6 +3210,8 @@ bool CacheIRCompiler::emitInt32RightShiftResult(Int32OperandId lhsId,
   masm.mov(lhs, scratch);
   masm.flexibleRshift32Arithmetic(rhs, scratch);
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3082,8 +3221,10 @@ bool CacheIRCompiler::emitInt32URightShiftResult(Int32OperandId lhsId,
                                                  bool forceDouble) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32URightShiftResult(cachet::CachetContext {this, cx_}, lhsId, rhsId, forceDouble);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32URightShiftResult(cachet::CachetContext {this, cx_}, masm, lhsId, rhsId, forceDouble);
+  } else {
+#endif
   AutoOutputRegister output(*this);
 
   Register lhs = allocator.useRegister(masm, lhsId);
@@ -3105,6 +3246,8 @@ bool CacheIRCompiler::emitInt32URightShiftResult(Int32OperandId lhsId,
     masm.branchTest32(Assembler::Signed, scratch, scratch, failure->label());
     masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
   }
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3112,8 +3255,10 @@ bool CacheIRCompiler::emitInt32URightShiftResult(Int32OperandId lhsId,
 bool CacheIRCompiler::emitInt32NegationResult(Int32OperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32NegationResult(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32NegationResult(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register val = allocator.useRegister(masm, inputId);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
@@ -3129,6 +3274,8 @@ bool CacheIRCompiler::emitInt32NegationResult(Int32OperandId inputId) {
   masm.mov(val, scratch);
   masm.neg32(scratch);
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3136,8 +3283,10 @@ bool CacheIRCompiler::emitInt32NegationResult(Int32OperandId inputId) {
 bool CacheIRCompiler::emitInt32IncResult(Int32OperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32IncResult(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32IncResult(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register input = allocator.useRegister(masm, inputId);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
@@ -3150,6 +3299,8 @@ bool CacheIRCompiler::emitInt32IncResult(Int32OperandId inputId) {
   masm.mov(input, scratch);
   masm.branchAdd32(Assembler::Overflow, Imm32(1), scratch, failure->label());
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3157,8 +3308,10 @@ bool CacheIRCompiler::emitInt32IncResult(Int32OperandId inputId) {
 bool CacheIRCompiler::emitInt32DecResult(Int32OperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32DecResult(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32DecResult(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register input = allocator.useRegister(masm, inputId);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
@@ -3171,6 +3324,8 @@ bool CacheIRCompiler::emitInt32DecResult(Int32OperandId inputId) {
   masm.mov(input, scratch);
   masm.branchSub32(Assembler::Overflow, Imm32(1), scratch, failure->label());
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3178,8 +3333,10 @@ bool CacheIRCompiler::emitInt32DecResult(Int32OperandId inputId) {
 bool CacheIRCompiler::emitInt32NotResult(Int32OperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_Int32NotResult(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32NotResult(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register val = allocator.useRegister(masm, inputId);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
@@ -3187,6 +3344,8 @@ bool CacheIRCompiler::emitInt32NotResult(Int32OperandId inputId) {
   masm.mov(val, scratch);
   masm.not32(scratch);
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3416,8 +3575,10 @@ bool CacheIRCompiler::emitTruncateDoubleToUInt32(NumberOperandId inputId,
 bool CacheIRCompiler::emitLoadArgumentsObjectLengthResult(ObjOperandId objId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadArgumentsObjectLengthResult(cachet::CachetContext {this, cx_}, objId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadArgumentsObjectLengthResult(cachet::CachetContext {this, cx_}, masm, objId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register obj = allocator.useRegister(masm, objId);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
@@ -3430,6 +3591,8 @@ bool CacheIRCompiler::emitLoadArgumentsObjectLengthResult(ObjOperandId objId) {
   masm.loadArgumentsObjectLength(obj, scratch, failure->label());
 
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3627,8 +3790,10 @@ bool CacheIRCompiler::emitLoadArgumentsObjectArgResult(ObjOperandId objId,
                                                        Int32OperandId indexId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadArgumentsObjectArgResult(cachet::CachetContext {this, cx_}, objId, indexId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadArgumentsObjectArgResult(cachet::CachetContext {this, cx_}, masm, objId, indexId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register obj = allocator.useRegister(masm, objId);
   Register index = allocator.useRegister(masm, indexId);
@@ -3641,6 +3806,8 @@ bool CacheIRCompiler::emitLoadArgumentsObjectArgResult(ObjOperandId objId,
 
   masm.loadArgumentsObjectElement(obj, index, output.valueReg(), scratch,
                                   failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3649,8 +3816,10 @@ bool CacheIRCompiler::emitLoadDenseElementResult(ObjOperandId objId,
                                                  Int32OperandId indexId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadDenseElementResult(cachet::CachetContext {this, cx_}, objId, indexId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadDenseElementResult(cachet::CachetContext {this, cx_}, masm, objId, indexId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register obj = allocator.useRegister(masm, objId);
   Register index = allocator.useRegister(masm, indexId);
@@ -3673,6 +3842,8 @@ bool CacheIRCompiler::emitLoadDenseElementResult(ObjOperandId objId,
   BaseObjectElementIndex element(scratch1, index);
   masm.branchTestMagic(Assembler::Equal, element, failure->label());
   masm.loadTypedOrValue(element, output);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3680,8 +3851,10 @@ bool CacheIRCompiler::emitLoadDenseElementResult(ObjOperandId objId,
 bool CacheIRCompiler::emitGuardInt32IsNonNegative(Int32OperandId indexId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardInt32IsNonNegative(cachet::CachetContext {this, cx_}, indexId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardInt32IsNonNegative(cachet::CachetContext {this, cx_}, masm, indexId);
+  } else {
+#endif
   Register index = allocator.useRegister(masm, indexId);
 
   FailurePath* failure;
@@ -3690,6 +3863,8 @@ bool CacheIRCompiler::emitGuardInt32IsNonNegative(Int32OperandId indexId) {
   }
 
   masm.branch32(Assembler::LessThan, index, Imm32(0), failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3756,8 +3931,10 @@ bool CacheIRCompiler::emitGuardTagNotEqual(ValueTagOperandId lhsId,
                                            ValueTagOperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardTagNotEqual(cachet::CachetContext {this, cx_}, lhsId, rhsId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardTagNotEqual(cachet::CachetContext {this, cx_}, masm, lhsId, rhsId);
+  } else {
+#endif
   Register lhs = allocator.useRegister(masm, lhsId);
   Register rhs = allocator.useRegister(masm, rhsId);
 
@@ -3776,6 +3953,8 @@ bool CacheIRCompiler::emitGuardTagNotEqual(ValueTagOperandId lhsId,
   masm.jump(failure->label());
 
   masm.bind(&done);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -3977,8 +4156,10 @@ bool CacheIRCompiler::emitLoadDenseElementHoleResult(ObjOperandId objId,
                                                      Int32OperandId indexId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadDenseElementHoleResult(cachet::CachetContext {this, cx_}, objId, indexId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadDenseElementHoleResult(cachet::CachetContext {this, cx_}, masm, objId, indexId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register obj = allocator.useRegister(masm, objId);
   Register index = allocator.useRegister(masm, indexId);
@@ -4011,6 +4192,8 @@ bool CacheIRCompiler::emitLoadDenseElementHoleResult(ObjOperandId objId,
   masm.moveValue(UndefinedValue(), output.valueReg());
 
   masm.bind(&done);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -4146,8 +4329,10 @@ bool CacheIRCompiler::emitPackedArrayShiftResult(ObjOperandId arrayId) {
 bool CacheIRCompiler::emitIsObjectResult(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_IsObjectResult(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_IsObjectResult(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
 
@@ -4156,6 +4341,8 @@ bool CacheIRCompiler::emitIsObjectResult(ValOperandId inputId) {
   masm.testObjectSet(Assembler::Equal, val, scratch);
 
   masm.tagValue(JSVAL_TYPE_BOOLEAN, scratch, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -5002,7 +5189,11 @@ bool CacheIRCompiler::emitInt32MinMax(bool isMax, Int32OperandId firstId,
                                       Int32OperandId secondId,
                                       Int32OperandId resultId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
-
+#ifdef JS_CACHET
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_Int32MinMax(cachet::CachetContext {this, cx_}, masm, isMax, firstId, secondId, resultId);
+  } else {
+#endif
   Register first = allocator.useRegister(masm, firstId);
   Register second = allocator.useRegister(masm, secondId);
   Register result = allocator.defineRegister(masm, resultId);
@@ -5011,6 +5202,9 @@ bool CacheIRCompiler::emitInt32MinMax(bool isMax, Int32OperandId firstId,
       isMax ? Assembler::GreaterThan : Assembler::LessThan;
   masm.move32(first, result);
   masm.cmp32Move32(cond, second, first, second, result);
+#ifdef JS_CACHET
+  }
+#endif
   return true;
 }
 
@@ -6007,12 +6201,16 @@ bool CacheIRCompiler::emitStoreFixedSlotUndefinedResult(ObjOperandId objId,
 bool CacheIRCompiler::emitLoadObjectResult(ObjOperandId objId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadObjectResult(cachet::CachetContext {this, cx_}, objId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadObjectResult(cachet::CachetContext {this, cx_}, masm, objId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register obj = allocator.useRegister(masm, objId);
 
   EmitStoreResult(masm, obj, JSVAL_TYPE_OBJECT, output);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -6020,12 +6218,16 @@ bool CacheIRCompiler::emitLoadObjectResult(ObjOperandId objId) {
 bool CacheIRCompiler::emitLoadStringResult(StringOperandId strId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadStringResult(cachet::CachetContext {this, cx_}, strId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadStringResult(cachet::CachetContext {this, cx_}, masm, strId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register str = allocator.useRegister(masm, strId);
 
   masm.tagValue(JSVAL_TYPE_STRING, str, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -6033,12 +6235,16 @@ bool CacheIRCompiler::emitLoadStringResult(StringOperandId strId) {
 bool CacheIRCompiler::emitLoadSymbolResult(SymbolOperandId symId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadSymbolResult(cachet::CachetContext {this, cx_}, symId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadSymbolResult(cachet::CachetContext {this, cx_}, masm, symId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register sym = allocator.useRegister(masm, symId);
 
   masm.tagValue(JSVAL_TYPE_SYMBOL, sym, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -6046,12 +6252,16 @@ bool CacheIRCompiler::emitLoadSymbolResult(SymbolOperandId symId) {
 bool CacheIRCompiler::emitLoadInt32Result(Int32OperandId valId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadInt32Result(cachet::CachetContext {this, cx_}, valId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadInt32Result(cachet::CachetContext {this, cx_}, masm, valId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register val = allocator.useRegister(masm, valId);
 
   masm.tagValue(JSVAL_TYPE_INT32, val, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -6059,12 +6269,16 @@ bool CacheIRCompiler::emitLoadInt32Result(Int32OperandId valId) {
 bool CacheIRCompiler::emitLoadBigIntResult(BigIntOperandId valId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadBigIntResult(cachet::CachetContext {this, cx_}, valId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadBigIntResult(cachet::CachetContext {this, cx_}, masm, valId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register val = allocator.useRegister(masm, valId);
 
   masm.tagValue(JSVAL_TYPE_BIGINT, val, output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -6072,8 +6286,10 @@ bool CacheIRCompiler::emitLoadBigIntResult(BigIntOperandId valId) {
 bool CacheIRCompiler::emitLoadDoubleResult(NumberOperandId valId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadDoubleResult(cachet::CachetContext {this, cx_}, valId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadDoubleResult(cachet::CachetContext {this, cx_}, masm, valId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   ValueOperand val = allocator.useValueRegister(masm, valId);
 
@@ -6087,6 +6303,8 @@ bool CacheIRCompiler::emitLoadDoubleResult(NumberOperandId valId) {
 
   masm.moveValue(val, output.valueReg());
   masm.convertInt32ValueToDouble(output.valueReg());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -6141,8 +6359,10 @@ bool CacheIRCompiler::emitLoadTypeOfObjectResult(ObjOperandId objId) {
 bool CacheIRCompiler::emitLoadInt32TruthyResult(ValOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadInt32TruthyResult(cachet::CachetContext {this, cx_}, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadInt32TruthyResult(cachet::CachetContext {this, cx_}, masm, inputId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   ValueOperand val = allocator.useValueRegister(masm, inputId);
 
@@ -6155,6 +6375,8 @@ bool CacheIRCompiler::emitLoadInt32TruthyResult(ValOperandId inputId) {
   masm.moveValue(BooleanValue(false), output.valueReg());
 
   masm.bind(&done);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -6414,8 +6636,10 @@ bool CacheIRCompiler::emitCompareInt32Result(JSOp op, Int32OperandId lhsId,
                                              Int32OperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_CompareInt32Result(cachet::CachetContext {this, cx_}, op, lhsId, rhsId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_CompareInt32Result(cachet::CachetContext {this, cx_}, masm, op, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register left = allocator.useRegister(masm, lhsId);
   Register right = allocator.useRegister(masm, rhsId);
@@ -6429,6 +6653,8 @@ bool CacheIRCompiler::emitCompareInt32Result(JSOp op, Int32OperandId lhsId,
   masm.bind(&ifTrue);
   EmitStoreBoolean(masm, true, output);
   masm.bind(&done);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -6689,8 +6915,10 @@ bool CacheIRCompiler::emitCompareNullUndefinedResult(JSOp op, bool isUndefined,
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_CompareNullUndefinedResult(cachet::CachetContext {this, cx_}, op, isUndefined, inputId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_CompareNullUndefinedResult(cachet::CachetContext {this, cx_}, masm, op, isUndefined, inputId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   ValueOperand input = allocator.useValueRegister(masm, inputId);
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
@@ -6744,6 +6972,8 @@ bool CacheIRCompiler::emitCompareNullUndefinedResult(JSOp op, bool isUndefined,
   EmitStoreBoolean(masm, op == JSOp::Ne, output);
 
   masm.bind(&done);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -7166,8 +7396,10 @@ bool CacheIRCompiler::emitLoadInstanceOfObjectResult(ValOperandId lhsId,
                                                      ObjOperandId protoId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadInstanceOfObjectResult(cachet::CachetContext {this, cx_}, lhsId, protoId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadInstanceOfObjectResult(cachet::CachetContext {this, cx_}, masm, lhsId, protoId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   ValueOperand lhs = allocator.useValueRegister(masm, lhsId);
   Register proto = allocator.useRegister(masm, protoId);
@@ -7208,6 +7440,8 @@ bool CacheIRCompiler::emitLoadInstanceOfObjectResult(ValOperandId lhsId,
   EmitStoreBoolean(masm, true, output);
   // fallthrough
   masm.bind(&done);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -7407,11 +7641,15 @@ bool CacheIRCompiler::emitLoadObject(ObjOperandId resultId,
                                      uint32_t objOffset) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadObject(cachet::CachetContext {this, cx_}, resultId, objOffset);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadObject(cachet::CachetContext {this, cx_}, masm, resultId, objOffset);
+  } else {
+#endif
   Register reg = allocator.defineRegister(masm, resultId);
   StubFieldOffset obj(objOffset, StubField::Type::Object);
   emitLoadStubField(obj, reg);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -7420,11 +7658,15 @@ bool CacheIRCompiler::emitLoadInt32Constant(uint32_t valOffset,
                                             Int32OperandId resultId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadInt32Constant(cachet::CachetContext {this, cx_}, valOffset, resultId);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadInt32Constant(cachet::CachetContext {this, cx_}, masm, valOffset, resultId);
+  } else {
+#endif
   Register reg = allocator.defineRegister(masm, resultId);
   StubFieldOffset val(valOffset, StubField::Type::RawInt32);
   emitLoadStubField(val, reg);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }

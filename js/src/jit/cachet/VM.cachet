@@ -1,0 +1,1391 @@
+// vim: set tw=99 ts=4 sts=4 sw=4 et:
+
+import "CodeGenerator.cachet"; // for `isCacheableProtoChain`
+
+struct Heap;
+var mut heap: Heap;
+
+fn clearPendingException();
+
+#[spec]
+enum RegDataType {
+    Value,
+    UnboxedValue,
+    NativeObjectSlots,
+    NativeObjectElements,
+    ArgumentsData,
+    ValueTag,
+    TaggedProto,
+    Class,
+    StackIndex,
+}
+
+#[spec]
+struct RegData;
+
+impl RegData {
+    fn typeOf(data: RegData) -> RegDataType;
+
+    fn isValue(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::Value
+    }
+
+    fn fromValue(value: Value) -> RegData {
+        let data = (unsafe { RegData::fromValueUnchecked(value) });
+        assume RegData::isValue(data);
+        assume (unsafe { RegData::toValueUnchecked(data) }) == value;
+        data
+    }
+
+    unsafe fn fromValueUnchecked(value: Value) -> RegData;
+
+    fn toValue(data: RegData) -> Value {
+        assert RegData::isValue(data);
+        let value = (unsafe { RegData::toValueUnchecked(data) });
+        assume (unsafe { RegData::fromValueUnchecked(value) }) == data;
+        value
+    }
+
+    unsafe fn toValueUnchecked(data: RegData) -> Value;
+
+    fn isUnboxedValue(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::UnboxedValue
+    }
+
+    fn fromUnboxedValue(value: Value) -> RegData {
+        let data = (unsafe { RegData::fromUnboxedValueUnchecked(value) });
+        assume RegData::isUnboxedValue(data);
+        assume (unsafe { RegData::toUnboxedValueUnchecked(data) }) == value;
+        data
+    }
+
+    unsafe fn fromUnboxedValueUnchecked(value: Value) -> RegData;
+
+    fn toUnboxedValue(data: RegData) -> Value {
+        assert RegData::isUnboxedValue(data);
+        let value = (unsafe { RegData::toUnboxedValueUnchecked(data) });
+        assume (unsafe { RegData::fromUnboxedValueUnchecked(value) }) == data;
+        value
+    }
+
+    unsafe fn toUnboxedValueUnchecked(data: RegData) -> Value;
+
+    fn isNativeObjectSlots(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::NativeObjectSlots
+    }
+
+    fn fromNativeObjectSlots(slots: NativeObjectSlots) -> RegData {
+        let data = (unsafe { RegData::fromNativeObjectSlotsUnchecked(slots) });
+        assume RegData::isNativeObjectSlots(data);
+        assume (unsafe { RegData::toNativeObjectSlotsUnchecked(data) }) == slots;
+        data
+    }
+
+    unsafe fn fromNativeObjectSlotsUnchecked(slots: NativeObjectSlots) -> RegData;
+
+    fn toNativeObjectSlots(data: RegData) -> NativeObjectSlots {
+        assert RegData::isNativeObjectSlots(data);
+        let slots = (unsafe { RegData::toNativeObjectSlotsUnchecked(data) });
+        assume (unsafe { RegData::fromNativeObjectSlotsUnchecked(slots) }) == data;
+        slots
+    }
+
+    unsafe fn toNativeObjectSlotsUnchecked(data: RegData) -> NativeObjectSlots;
+
+    fn isNativeObjectElements(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::NativeObjectElements
+    }
+
+    fn fromNativeObjectElements(elements: NativeObjectElements) -> RegData {
+        let data = (unsafe { RegData::fromNativeObjectElementsUnchecked(elements) });
+        assume RegData::isNativeObjectElements(data);
+        assume (unsafe { RegData::toNativeObjectElementsUnchecked(data) }) == elements;
+        data
+    }
+
+    unsafe fn fromNativeObjectElementsUnchecked(slots: NativeObjectElements) -> RegData;
+
+    fn toNativeObjectElements(data: RegData) -> NativeObjectElements {
+        assert RegData::isNativeObjectElements(data);
+        let elements = (unsafe { RegData::toNativeObjectElementsUnchecked(data) });
+        assume (unsafe { RegData::fromNativeObjectElementsUnchecked(elements) }) == data;
+        elements
+    }
+
+    unsafe fn toNativeObjectElementsUnchecked(data: RegData) -> NativeObjectElements;
+
+    fn isArgumentsData(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::ArgumentsData
+    }
+
+    fn fromArgumentsData(argsData: ArgumentsData) -> RegData {
+        let data = (unsafe { RegData::fromArgumentsDataUnchecked(argsData) });
+        assume RegData::isArgumentsData(data);
+        assume (unsafe { RegData::toArgumentsDataUnchecked(data) }) == argsData;
+        data
+    }
+
+    unsafe fn fromArgumentsDataUnchecked(argsData: ArgumentsData) -> RegData;
+
+    fn toArgumentsData(data: RegData) -> ArgumentsData {
+        assert RegData::isArgumentsData(data);
+        let argsData = (unsafe { RegData::toArgumentsDataUnchecked(data) });
+        assume (unsafe { RegData::fromArgumentsDataUnchecked(argsData) }) == data;
+        argsData
+    }
+
+    unsafe fn toArgumentsDataUnchecked(data: RegData) -> ArgumentsData;
+
+    fn isValueTag(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::ValueTag
+    }
+
+    fn fromValueType(valTy: ValueType) -> RegData {
+        let data = (unsafe { RegData::fromValueTypeUnchecked(valTy) });
+        assume RegData::isValueTag(data);
+        assume (unsafe { RegData::toValueTypeUnchecked(data) }) == valTy;
+        data
+    }
+
+    unsafe fn fromValueTypeUnchecked(valTy: ValueType) -> RegData;
+
+    fn toValueType(data: RegData) -> ValueType {
+        assert RegData::isValueTag(data);
+        let valTy = (unsafe { RegData::toValueTypeUnchecked(data) });
+        assume (unsafe { RegData::fromValueTypeUnchecked(valTy) }) == data;
+        valTy
+    }
+
+    unsafe fn toValueTypeUnchecked(data: RegData) -> ValueType;
+
+    fn isTaggedProto(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::TaggedProto
+    }
+
+    fn fromTaggedProto(proto: TaggedProto) -> RegData {
+        if TaggedProto::isObject(proto) {
+            return RegData::fromUnboxedValue(Value::fromObject(TaggedProto::toObject(proto)));
+        }
+
+        let data = (unsafe { RegData::fromTaggedProtoUnchecked(proto) });
+        assume RegData::isTaggedProto(data);
+        assume (unsafe { RegData::toTaggedProtoUnchecked(data) }) == proto;
+        data
+    }
+
+    unsafe fn fromTaggedProtoUnchecked(proto: TaggedProto) -> RegData;
+
+    fn toTaggedProto(data: RegData) -> TaggedProto {
+        if RegData::isTaggedProto(data) {
+            let proto = (unsafe { RegData::toTaggedProtoUnchecked(data) });
+            assume (unsafe { RegData::fromTaggedProtoUnchecked(proto) }) == data;
+            return proto;
+        }
+
+        assert RegData::isUnboxedValue(data);
+        let unboxedValue = RegData::toUnboxedValue(data);
+
+        assert Value::isObject(unboxedValue);
+        let object = Value::toObject(unboxedValue);
+
+        TaggedProto::fromObject(object)
+    }
+
+    unsafe fn toTaggedProtoUnchecked(data: RegData) -> TaggedProto;
+
+    fn isClass(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::Class
+    }
+
+    fn fromClass(class: Class) -> RegData {
+        let data = (unsafe { RegData::fromClassUnchecked(class) });
+        assume RegData::isClass(data);
+        assume (unsafe { RegData::toClassUnchecked(data) }) == class;
+        data
+    }
+
+    unsafe fn fromClassUnchecked(class: Class) -> RegData;
+
+    fn toClass(data: RegData) -> Class {
+        assert RegData::isClass(data);
+        let class = (unsafe { RegData::toClassUnchecked(data) });
+        assume (unsafe { RegData::fromClassUnchecked(class) }) == data;
+        class
+    }
+
+    unsafe fn toClassUnchecked(data: RegData) -> Class;
+
+    fn isStackIndex(data: RegData) -> Bool {
+        RegData::typeOf(data) == RegDataType::StackIndex
+    }
+
+    fn fromStackIndex(index: UInt64) -> RegData {
+        let data = (unsafe { RegData::fromStackIndexUnchecked(index) });
+        assume RegData::isStackIndex(data);
+        assume (unsafe { RegData::toStackIndexUnchecked(data) }) == index;
+        data
+    }
+
+    unsafe fn fromStackIndexUnchecked(index: UInt64) -> RegData;
+
+    fn toStackIndex(data: RegData) -> UInt64 {
+        assert RegData::isStackIndex(data);
+        let index = (unsafe { RegData::toStackIndexUnchecked(data) });
+        assume (unsafe { RegData::fromStackIndexUnchecked(index) }) == data;
+        index
+    }
+
+    unsafe fn toStackIndexUnchecked(data: RegData) -> UInt64;
+
+    #[spec]
+    fn readData(data: RegData, offset: Int64) -> RegData {
+        if RegData::isUnboxedValue(data) {
+            let value = RegData::toUnboxedValue(data);
+            return Value::readData(value, offset);
+        } else if RegData::isNativeObjectSlots(data) {
+            let slots = RegData::toNativeObjectSlots(data);
+            return NativeObjectSlots::readData(slots, offset);
+        } else if RegData::isNativeObjectElements(data) {
+            let elements = RegData::toNativeObjectElements(data);
+            return NativeObjectElements::readData(elements, offset);
+        }
+
+        assert false;
+        data // returning to satisfy compiler
+    }
+}
+
+enum MIRType {
+    Undefined,
+    Null,
+    Boolean,
+    Int32,
+    Int64,
+    IntPtr,
+    Double,
+    Float32,
+
+    String,
+    Symbol,
+    BigInt,
+    Simd128,
+
+    Object,
+    MagicOptimizedOut,
+    MagicHole,
+    MagicIsConstructing,
+    MagicUninitializedLexical,
+
+    Value,
+    None,
+    Slots,
+    Elements,
+    Pointer,
+    RefOrNull,
+    StackResults,
+    Shape,
+}
+
+struct Float32;
+struct Float64;
+
+impl Float64 {
+    fn isNegativeZero(float64: Float64) -> Bool;
+    fn isInfinite(float64: Float64) -> Bool;
+    fn isNaN(float64: Float64) -> Bool;
+
+    fn isInt32(float64: Float64) -> Bool {
+       !Float64::isNegativeZero(float64) && Float64::equalsInt32(float64)
+    }
+
+    // Int32-safety under the condition that -0.0 and 0.0 are considered equal.
+    fn equalsInt32(float64: Float64) -> Bool {
+       let result = unsafe { Float64::equalsInt32Unchecked(float64) };
+       if result {
+           assume !Float64::isInfinite(float64);
+           assume !Float64::isNaN(float64);
+       }
+       result
+    }
+
+    unsafe fn equalsInt32Unchecked(float64: Float64) -> Bool;
+
+    fn fromInt32(int32: Int32) -> Float64 {
+       let float64 = (unsafe { Float64::fromInt32Unchecked(int32) });
+       assume (unsafe { Float64::toInt32Unchecked(float64) }) == int32;
+       assume Float64::isInt32(float64);
+
+       float64
+    }
+
+    unsafe fn fromInt32Unchecked(int32: Int32) -> Float64;
+
+    fn toInt32(float64: Float64) -> Int32 {
+        let int32 = (unsafe { Float64::toInt32Unchecked(float64) });
+
+        if Float64::isNegativeZero(float64) {
+            assume int32 == 0_i32;
+        } else if Float64::equalsInt32(float64) {
+            assume (unsafe { Float64::fromInt32Unchecked(int32) }) == float64;
+        }
+
+        int32
+    }
+
+    unsafe fn toInt32Unchecked(float64: Float64) -> Int32;
+
+    fn fromUInt32(uint32: UInt32) -> Float64 {
+        let float64 = (unsafe { Float64::fromUInt32Unchecked(uint32) });
+        float64
+    }
+
+    unsafe fn fromUInt32Unchecked(uint32: UInt32) -> Float64;
+}
+
+struct Simd128;
+
+enum JSValueType {
+  Double,
+  Int32,
+  Bool,
+  Undefined,
+  Null,
+  Magic,
+  String,
+  Symbol,
+  PrivateGCThing,
+  BigInt,
+  Object,
+  Unknown,
+}
+
+impl JSValueType {
+    #[refined]
+    fn fromValueType(valTy: ValueType) -> JSValueType {
+        if valTy == ValueType::Double {
+            return JSValueType::Double;
+        } else if valTy == ValueType::Int32 {
+            return JSValueType::Int32;
+        } else if valTy == ValueType::Bool {
+            return JSValueType::Bool;
+        } else if valTy == ValueType::Undefined {
+            return JSValueType::Undefined;
+        } else if valTy == ValueType::Null {
+            return JSValueType::Null;
+        } else if valTy == ValueType::Magic {
+            return JSValueType::Magic;
+        } else if valTy == ValueType::String {
+            return JSValueType::String;
+        } else if valTy == ValueType::Symbol {
+            return JSValueType::Symbol;
+        } else if valTy == ValueType::PrivateGCThing {
+            return JSValueType::PrivateGCThing;
+        } else if valTy == ValueType::BigInt {
+            return JSValueType::BigInt;
+        }
+
+        assert valTy == ValueType::Object;
+        return JSValueType::Object;
+    }
+
+    fn fromMIRType(type: MIRType) -> JSValueType {
+        if type == MIRType::Undefined {
+            return JSValueType::Undefined;
+        } else if type == MIRType::Null {
+            return JSValueType::Null;
+        } else if type == MIRType::Boolean {
+            return JSValueType::Bool;
+        } else if type == MIRType::Int32 {
+            return JSValueType::Int32;
+        } else if type == MIRType::Float32 || type == MIRType::Double {
+            return JSValueType::Double;
+        } else if type == MIRType::String {
+            return JSValueType::String;
+        } else if type == MIRType::Symbol {
+            return JSValueType::Symbol;
+        } else if type == MIRType::BigInt {
+            return JSValueType::BigInt;
+        } else if type == MIRType::MagicOptimizedOut || type == MIRType::MagicHole || type ==
+        MIRType::MagicIsConstructing || type == MIRType::MagicUninitializedLexical {
+            return JSValueType::Magic;
+        }
+
+        assert type == MIRType::Object;
+        JSValueType::Object
+    }
+}
+
+enum ValueType {
+  Double,
+  Int32,
+  Bool,
+  Undefined,
+  Null,
+  Magic,
+  String,
+  Symbol,
+  PrivateGCThing,
+  BigInt,
+  Object,
+}
+
+struct Value;
+
+impl Value {
+    var sizeOf: UInt64 = 8_u64;
+
+    fn typeOf(value: Value) -> ValueType;
+
+    // ...
+
+    fn isDouble(value: Value) -> Bool {
+        Value::typeOf(value) == ValueType::Double
+    }
+
+    fn fromDouble(double: Float64) -> Value {
+        let value = (unsafe { Value::fromDoubleUnchecked(double) });
+        assume Value::isDouble(value);
+        assume (unsafe { Value::toDoubleUnchecked(value) }) == double;
+        value
+    }
+
+    unsafe fn fromDoubleUnchecked(value: Float64) -> Value;
+
+    fn toDouble(value: Value) -> Float64 {
+        assert Value::isDouble(value);
+        let double = (unsafe { Value::toDoubleUnchecked(value) });
+        assume (unsafe { Value::fromDoubleUnchecked(double) }) == value;
+        double
+    }
+
+    unsafe fn toDoubleUnchecked(value: Value) -> Float64;
+
+    fn isInt32(value: Value) -> Bool {
+        Value::typeOf(value) == ValueType::Int32
+    }
+
+    fn fromInt32(int32: Int32) -> Value {
+        let value = (unsafe { Value::fromInt32Unchecked(int32) });
+        assume Value::isInt32(value);
+        assume (unsafe { Value::toInt32Unchecked(value) }) == int32;
+        value
+    }
+
+    unsafe fn fromInt32Unchecked(value: Int32) -> Value;
+
+    fn toInt32(value: Value) -> Int32 {
+        assert Value::isInt32(value);
+        let int32 = (unsafe { Value::toInt32Unchecked(value) });
+        assume (unsafe { Value::fromInt32Unchecked(int32) }) == value;
+        int32
+    }
+
+    unsafe fn toInt32Unchecked(value: Value) -> Int32;
+
+    fn isNumber(value: Value) -> Bool {
+        Value::isDouble(value) || Value::isInt32(value)
+    }
+
+    fn toNumber(value: Value) -> Float64 {
+        assert Value::isNumber(value);
+        if Value::isInt32(value) {
+            return Float64::fromInt32(Value::toInt32(value));
+        }
+        Value::toDouble(value)
+    }
+
+    fn isBool(value: Value) -> Bool {
+        Value::typeOf(value) == ValueType::Bool
+    }
+
+    fn fromBool(bool: Bool) -> Value {
+        let value = (unsafe { Value::fromBoolUnchecked(bool) });
+        assume Value::isBool(value);
+        assume (unsafe { Value::toBoolUnchecked(value) }) == bool;
+        value
+    }
+
+    unsafe fn fromBoolUnchecked(value: Bool) -> Value;
+
+    fn toBool(value: Value) -> Bool {
+        assert Value::isBool(value);
+        let bool = (unsafe { Value::toBoolUnchecked(value) });
+        assume (unsafe { Value::fromBoolUnchecked(bool) }) == value;
+        bool
+    }
+
+    unsafe fn toBoolUnchecked(value: Value) -> Bool;
+
+    fn isNull(value: Value) -> Bool {
+        Value::typeOf(value) == ValueType::Null
+    }
+
+    fn getUndefined() -> Value {
+        let value = (unsafe { Value::getUndefinedUnchecked() });
+        assume Value::isUndefined(value);
+        value
+    }
+
+    unsafe fn getUndefinedUnchecked() -> Value;
+
+    fn isUndefined(value: Value) -> Bool {
+        Value::typeOf(value) == ValueType::Undefined
+    }
+
+    fn isObject(value: Value) -> Bool {
+        Value::typeOf(value) == ValueType::Object
+    }
+
+    fn fromObject(object: Object) -> Value {
+        let value = (unsafe { Value::fromObjectUnchecked(object) });
+        assume Value::isObject(value);
+        assume (unsafe { Value::toObjectUnchecked(value) }) == object;
+        value
+    }
+
+    unsafe fn fromObjectUnchecked(value: Object) -> Value;
+
+    fn toObject(value: Value) -> Object {
+        assert Value::isObject(value);
+        let object = (unsafe { Value::toObjectUnchecked(value) });
+        assume (unsafe { Value::fromObjectUnchecked(object) }) == value;
+        object
+    }
+
+    unsafe fn toObjectUnchecked(value: Value) -> Object;
+
+    fn isMagic(value: Value) -> Bool {
+        Value::typeOf(value) == ValueType::Magic
+    }
+
+    fn isString(value: Value) -> Bool {
+        Value::typeOf(value) == ValueType::String
+    }
+
+    fn fromString(string: String) -> Value {
+        let value = (unsafe { Value::fromStringUnchecked(string) });
+        assume Value::isString(value);
+        assume (unsafe { Value::toStringUnchecked(value) }) == string;
+        value
+    }
+
+    unsafe fn fromStringUnchecked(string: String) -> Value;
+
+    fn toString(value: Value) -> String {
+        assert Value::isString(value);
+        let string = (unsafe { Value::toStringUnchecked(value) });
+        assume (unsafe { Value::fromStringUnchecked(string) }) == value;
+        string
+    }
+
+    unsafe fn toStringUnchecked(value: Value) -> String;
+
+    fn isSymbol(value: Value) -> Bool {
+        Value::typeOf(value) == ValueType::Symbol
+    }
+
+    fn fromSymbol(symbol: Symbol) -> Value {
+        let value = (unsafe { Value::fromSymbolUnchecked(symbol) });
+        assume Value::isSymbol(value);
+        assume (unsafe { Value::toSymbolUnchecked(value) }) == symbol;
+        value
+    }
+
+    unsafe fn fromSymbolUnchecked(symbol: Symbol) -> Value;
+
+    fn toSymbol(value: Value) -> Symbol {
+        assert Value::isSymbol(value);
+        let symbol = (unsafe { Value::toSymbolUnchecked(value) });
+        assume (unsafe { Value::fromSymbolUnchecked(symbol) }) == value;
+        symbol
+    }
+
+    unsafe fn toSymbolUnchecked(value: Value) -> Symbol;
+
+    fn isBigInt(value: Value) -> Bool {
+        Value::typeOf(value) == ValueType::BigInt
+    }
+
+    fn fromBigInt(bigInt: BigInt) -> Value {
+        let value = (unsafe { Value::fromBigIntUnchecked(bigInt) });
+        assume Value::isBigInt(value);
+        assume (unsafe { Value::toBigIntUnchecked(value) }) == bigInt;
+        value
+    }
+
+    unsafe fn fromBigIntUnchecked(bigInt: BigInt) -> Value;
+
+    fn toBigInt(value: Value) -> BigInt {
+        assert Value::isBigInt(value);
+        let bigInt = (unsafe { Value::toBigIntUnchecked(value) });
+        assume (unsafe { Value::fromBigIntUnchecked(bigInt) }) == value;
+        bigInt
+    }
+
+    unsafe fn toBigIntUnchecked(value: Value) -> BigInt;
+
+    #[spec]
+    fn readData(value: Value, offset: Int64) -> RegData {
+        if Value::isObject(value) {
+            let object = Value::toObject(value);
+            return Object::readData(object, offset);
+        }
+
+        assert false; // Only support Object for now
+        return RegData::fromValue(value);
+    }
+}
+
+struct Object;
+
+impl Object {
+    // #[reads(heap)]
+    // fn shapeOf(object: Object) -> Shape;
+    fn shapeOf(object: Object) -> Shape {
+        (unsafe { Object::shapeOfUnchecked(heap, object) })
+    }
+
+    unsafe fn shapeOfUnchecked(heap: Heap, object: Object) -> Shape;
+
+    fn isNativeObject(object: Object) -> Bool {
+        let shape = Object::shapeOf(object);
+        let class = Shape::classOf(shape);
+        Class::isNativeObject(class)
+    }
+
+    fn toNativeObject(object: Object) -> NativeObject {
+        assert Object::isNativeObject(object);
+        (unsafe { object as NativeObject })
+    }
+
+    fn isArgumentsObject(object: Object) -> Bool {
+        let shape = Object::shapeOf(object);
+        let class = Shape::classOf(shape);
+        Class::isArgumentsObject(class)
+    }
+
+    fn toArgumentsObject(object: Object) -> ArgumentsObject {
+        assert Object::isArgumentsObject(object);
+        (unsafe { object as ArgumentsObject })
+    }
+
+    fn getFixedSlot(object: Object, slot: UInt32) -> Value {
+        let nativeObject = Object::toNativeObject(object);
+        NativeObject::getFixedSlot(nativeObject, slot)
+    }
+
+    fn lookupPropertyPure(
+        object: Object,
+        key: PropertyKey,
+        out holder: MaybeNativeObject,
+        out propInfo: PropertyResult,
+    ) -> Bool {
+        let success = (unsafe {
+            Object::lookupPropertyPureUnchecked(object, key, out holder, out propInfo)
+        });
+
+        if success {
+            assume Object::isNativeObject(object);
+            let nativeObject = Object::toNativeObject(object);
+
+            assume MaybeNativeObject::isNativeObject(holder);
+            let nativeHolder = MaybeNativeObject::toNativeObject(holder);
+
+            assume isCacheableProtoChain(nativeObject, nativeHolder);
+
+            if PropertyResult::isNativeProperty(propInfo) {
+                let prop = PropertyResult::propertyInfo(propInfo);
+                if PropertyInfo::hasSlot(prop) {
+                    assume NativeObject::hasSlot(nativeHolder, PropertyInfo::slot(prop));
+                }
+            }
+        }
+
+        success
+    }
+
+    unsafe fn lookupPropertyPureUnchecked(
+        object: Object,
+        key: PropertyKey,
+        out holder: MaybeNativeObject,
+        out propInfo: PropertyResult,
+    ) -> Bool;
+
+    // read RegData at the specified memory offset of the Object
+    #[spec]
+    fn readData(object: Object, offset: Int64) -> RegData {
+        let shape = Object::shapeOf(object);
+        let class = Shape::classOf(shape);
+
+        if Class::isNativeObject(class) {
+            let nativeObject = (unsafe { object as NativeObject });
+            return NativeObject::readData(nativeObject, offset);
+        }
+
+        assert false; // only support NativeObject for now
+        return RegData::fromValue(Value::fromObject(object)); // satisfy the compiler
+    }
+}
+
+struct MaybeNativeObject;
+
+impl MaybeNativeObject {
+    fn isNativeObject(maybeObject: MaybeNativeObject) -> Bool;
+
+    fn none() -> MaybeNativeObject {
+        let maybeObject = (unsafe { MaybeNativeObject::noneUnchecked() });
+        assume !MaybeNativeObject::isNativeObject(maybeObject);
+        maybeObject
+    }
+
+    unsafe fn noneUnchecked() -> MaybeNativeObject;
+
+    fn fromNativeObject(object: NativeObject) -> MaybeNativeObject {
+        let maybeObject = (unsafe { MaybeNativeObject::fromNativeObjectUnchecked(object) });
+        assume MaybeNativeObject::isNativeObject(maybeObject);
+        assume (unsafe { MaybeNativeObject::toNativeObjectUnchecked(maybeObject) }) == object;
+        maybeObject
+    }
+
+    unsafe fn fromNativeObjectUnchecked(object: NativeObject) -> MaybeNativeObject;
+
+    fn toNativeObject(maybeObject: MaybeNativeObject) -> NativeObject {
+        assert MaybeNativeObject::isNativeObject(maybeObject);
+        let object = (unsafe { MaybeNativeObject::toNativeObjectUnchecked(maybeObject) });
+        assume (unsafe { MaybeNativeObject::fromNativeObjectUnchecked(object) }) == maybeObject;
+        object
+    }
+
+    fn toNativeObjectUnchecked(maybeObject: MaybeNativeObject) -> NativeObject;
+}
+
+struct NativeObject <: Object;
+
+impl NativeObject {
+    var sizeOf: UInt64 = 24_u64;
+    var offsetOfFixedSlots: UInt64 = NativeObject::sizeOf;
+    var offsetOfSlots: UInt64 = 8_u64;
+    var offsetOfElements: UInt64 = 16_u64;
+
+    fn numFixedSlots(nativeObject: NativeObject) -> UInt32 {
+        Shape::numFixedSlots(Object::shapeOf(nativeObject))
+    }
+
+    #[inline]
+    fn numDynamicSlots(nativeObject: NativeObject) -> UInt32 {
+        let shape = Object::shapeOf(nativeObject);
+        if Shape::slotSpan(shape) <= Shape::numFixedSlots(shape) {
+            return 0_u32;
+        }
+        Shape::slotSpan(shape) - Shape::numFixedSlots(shape)
+    }
+
+    fn slotSpan(nativeObject: NativeObject) -> UInt32 {
+        Shape::slotSpan(Object::shapeOf(nativeObject))
+    }
+
+    fn hasSlot(nativeObject: NativeObject, slot: UInt32) -> Bool {
+        Shape::hasSlot(Object::shapeOf(nativeObject), slot)
+    }
+
+    fn hasFixedSlot(nativeObject: NativeObject, slot: UInt32) -> Bool {
+        Shape::hasFixedSlot(Object::shapeOf(nativeObject), slot)
+    }
+
+    fn hasDynamicSlot(nativeObject: NativeObject, slot: UInt32) -> Bool {
+        Shape::hasDynamicSlot(Object::shapeOf(nativeObject), slot)
+    }
+
+    fn offsetOfFixedSlot(slot: UInt32) -> UInt64 {
+        NativeObject::offsetOfFixedSlots + slot * Value::sizeOf
+    }
+
+    fn getFixedSlot(nativeObject: NativeObject, slot: UInt32) -> Value {
+        assert NativeObject::hasFixedSlot(nativeObject, slot);
+        (unsafe { NativeObject::getFixedSlotUnchecked(heap, nativeObject, slot) })
+    }
+
+    // #[reads(heap)]
+    // unsafe fn getFixedSlotUnchecked(nativeObject: NativeObject, slot: UInt32) -> Value;
+    unsafe fn getFixedSlotUnchecked(heap: Heap, nativeObject: NativeObject, slot: UInt32) -> Value;
+
+    fn getSlots(nativeObject: NativeObject) -> NativeObjectSlots {
+        let slots = (unsafe { NativeObject::getSlotsUnchecked(heap, nativeObject) } );
+        assume NativeObjectSlots::length(slots) == NativeObject::numDynamicSlots(nativeObject);
+        slots
+    }
+
+    unsafe fn getSlotsUnchecked(heap: Heap, nativeObject: NativeObject) -> NativeObjectSlots;
+
+    fn getElementsHeader(nativeObject: NativeObject) -> NativeObjectElements {
+        (unsafe { NativeObject::getElementsHeaderUnchecked(heap, nativeObject) } )
+    }
+
+    unsafe fn getElementsHeaderUnchecked(heap: Heap, nativeObject: NativeObject) ->
+    NativeObjectElements;
+
+    #[spec]
+    fn readData(nativeObject: NativeObject, offset: Int64) -> RegData {
+        if offset == NativeObject::offsetOfSlots as Int64 {
+            // dynamic slots array
+            let slots = NativeObject::getSlots(nativeObject);
+            return RegData::fromNativeObjectSlots(slots);
+        } else if offset == NativeObject::offsetOfElements as Int64 {
+            // object elements
+            let elements = NativeObject::getElementsHeader(nativeObject);
+            return RegData::fromNativeObjectElements(elements);
+        } else if offset >= NativeObject::offsetOfFixedSlots as Int64 {
+            // fixed slots
+            let slotOffset = offset as UInt64 - NativeObject::sizeOf;
+            assert slotOffset % Value::sizeOf == 0_u64;
+            assert slotOffset / Value::sizeOf < Shape::maxFixedSlots;
+            let slot = (slotOffset / Value::sizeOf) as UInt32;
+            let value = NativeObject::getFixedSlot(nativeObject, slot);
+            return RegData::fromValue(value);
+        }
+
+        assert false;
+        return RegData::fromValue(Value::fromObject(nativeObject as Object)); // satisfy the compiler
+    }
+}
+
+struct NativeObjectSlots;
+
+impl NativeObjectSlots {
+    fn offsetOfSlot(slot: UInt32) -> UInt64 {
+      slot * Value::sizeOf
+    }
+
+    fn length(slots: NativeObjectSlots) -> UInt32;
+
+    fn getDynamicSlot(slots: NativeObjectSlots, slot: UInt32) -> Value {
+        assert slot < NativeObjectSlots::length(slots);
+        (unsafe { NativeObjectSlots::getDynamicSlotUnchecked(heap, slots, slot) } )
+    }
+
+    unsafe fn getDynamicSlotUnchecked(heap: Heap, slots: NativeObjectSlots, slot: UInt32) ->
+    Value;
+
+    #[spec]
+    fn readData(slots: NativeObjectSlots, offset: Int64) -> RegData {
+        assert offset % Value::sizeOf as Int64 == 0_i64;
+        let slot = (offset / Value::sizeOf as Int64) as UInt32;
+        let value = NativeObjectSlots::getDynamicSlot(slots, slot);
+        RegData::fromValue(value)
+    }
+}
+
+struct NativeObjectElements;
+
+impl NativeObjectElements {
+    var offsetOfLength: Int32 = -4_i32;
+    var offsetOfInitializedLength: Int32 = -12_i32;
+
+    fn getLength(elements: NativeObjectElements) -> UInt32 {
+        ( unsafe { NativeObjectElements::getLengthUnchecked(heap, elements) } )
+    }
+
+    unsafe fn getLengthUnchecked(heap: Heap, elements: NativeObjectElements) -> UInt32;
+
+    fn getInitializedLength(elements: NativeObjectElements) -> UInt32 {
+        ( unsafe { NativeObjectElements::getInitializedLengthUnchecked(heap, elements) } )
+    }
+
+    // TODO: can initializedLength be changed ?
+    unsafe fn getInitializedLengthUnchecked(heap: Heap, elements: NativeObjectElements) -> UInt32;
+
+    fn getElement(elements: NativeObjectElements, index: UInt64) -> Value {
+        assert index < NativeObjectElements::getInitializedLength(elements);
+        ( unsafe { NativeObjectElements::getElementUnchecked(heap, elements, index) })
+    }
+
+    unsafe fn getElementUnchecked(heap: Heap, elements: NativeObjectElements, index: UInt64) -> Value;
+
+    #[spec]
+    fn readData(elements: NativeObjectElements, offset: Int64) -> RegData {
+        if offset == NativeObjectElements::offsetOfLength {
+            let length = NativeObjectElements::getLength(elements);
+            let value = Value::fromInt32(length as Int32);
+            return RegData::fromUnboxedValue(value);
+        } else if offset == NativeObjectElements::offsetOfInitializedLength {
+            let initializedLength = NativeObjectElements::getInitializedLength(elements);
+            let value = Value::fromInt32(initializedLength as Int32);
+            return RegData::fromUnboxedValue(value);
+        } else if offset >= 0_i64 {
+            let offset = offset as UInt64;
+            assert offset % Value::sizeOf == 0_u64;
+
+            let index = offset / Value::sizeOf;
+            let value = NativeObjectElements::getElement(elements, index);
+            return RegData::fromValue(value);
+        }
+
+        assert false;
+        RegData::fromNativeObjectElements(elements)
+    }
+}
+
+struct JSFunction <: NativeObject;
+
+impl JSFunction {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(JSFunction::rawClass);
+        JSFunction::rawClass
+    }
+}
+
+struct ArrayObject <: NativeObject;
+
+impl ArrayObject {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(ArrayObject::rawClass);
+        ArrayObject::rawClass
+    }
+}
+
+struct PlainObject <: NativeObject;
+
+impl PlainObject {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(PlainObject::rawClass);
+        PlainObject::rawClass
+    }
+}
+
+struct ArrayBufferObjectMaybeShared <: NativeObject;
+
+struct ArrayBufferObject <: ArrayBufferObjectMaybeShared;
+
+impl ArrayBufferObject {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(ArrayBufferObject::rawClass);
+        ArrayBufferObject::rawClass
+    }
+}
+
+struct SharedArrayBufferObject <: ArrayBufferObjectMaybeShared;
+
+impl SharedArrayBufferObject {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(SharedArrayBufferObject::rawClass);
+        SharedArrayBufferObject::rawClass
+    }
+}
+
+struct ArrayBufferViewObject <: NativeObject;
+
+struct DataViewObject <: ArrayBufferViewObject;
+
+impl DataViewObject {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(DataViewObject::rawClass);
+        DataViewObject::rawClass
+    }
+}
+
+struct ArgumentsObject <: NativeObject;
+
+impl ArgumentsObject {
+    var lengthOverriddenBit : UInt32 = 1_u32;
+    var elementOverriddenBit : UInt32 = 4_u32;
+    var packedBitsCount: UInt32 = 5_u32;
+
+    var argsLengthMax: UInt32 = 500000_u32;
+
+    fn getInitialLength(obj: ArgumentsObject) -> UInt32 {
+        assert !ArgumentsObject::hasOverriddenLength(obj) || !ArgumentsObject::hasOverriddenElement(obj);
+        let initialLengthSlot = ArgumentsObject::getInitialLengthSlot(obj);
+        initialLengthSlot >> ArgumentsObject::packedBitsCount
+    }
+
+    fn hasOverriddenLength(obj: ArgumentsObject) -> Bool {
+        let initialLengthSlot = ArgumentsObject::getInitialLengthSlot(obj);
+        (initialLengthSlot & ArgumentsObject::lengthOverriddenBit) != 0_u32
+    }
+
+    fn hasOverriddenElement(obj: ArgumentsObject) -> Bool {
+        let initialLengthSlot = ArgumentsObject::getInitialLengthSlot(obj);
+        (initialLengthSlot & ArgumentsObject::elementOverriddenBit) != 0_u32
+    }
+
+    fn getInitialLengthSlot(obj: ArgumentsObject) -> UInt32 {
+        let initialLengthSlot = (unsafe { ArgumentsObject::getInitialLengthSlotUnchecked(heap, obj) });
+        assume (initialLengthSlot >> ArgumentsObject::packedBitsCount) <= ArgumentsObject::argsLengthMax;
+        initialLengthSlot
+    }
+
+    unsafe fn getInitialLengthSlotUnchecked(heap: Heap, obj: ArgumentsObject) -> UInt32;
+
+    fn getArgumentsData(obj: ArgumentsObject) -> ArgumentsData {
+        assert !ArgumentsObject::hasOverriddenElement(obj);
+        let argsData = (unsafe { ArgumentsObject::getArgumentsDataUnchecked(heap, obj) });
+        assume argsData.numArgs == ArgumentsObject::getInitialLength(obj);
+        argsData
+    }
+
+    unsafe fn getArgumentsDataUnchecked(heap: Heap, obj: ArgumentsObject) -> ArgumentsData;
+}
+
+struct ArgumentsData {
+    numArgs: UInt32
+}
+
+impl ArgumentsData {
+    fn getArg(argsData: ArgumentsData, index: UInt32) -> Value {
+        assert index < argsData.numArgs;
+        (unsafe { ArgumentsData::getArgUnchecked(heap, argsData, index) })
+    }
+
+    unsafe fn getArgUnchecked(heap: Heap, argsData: ArgumentsData, index: UInt32) -> Value;
+}
+
+struct UnmappedArgumentsObject <: ArgumentsObject;
+
+impl UnmappedArgumentsObject {
+    var rawClass : Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(UnmappedArgumentsObject::rawClass);
+        UnmappedArgumentsObject::rawClass
+    }
+}
+
+struct MappedArgumentsObject <: ArgumentsObject;
+
+impl MappedArgumentsObject {
+    var rawClass: Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(MappedArgumentsObject::rawClass);
+        MappedArgumentsObject::rawClass
+    }
+}
+
+struct SetObject <: NativeObject;
+
+impl SetObject {
+    var rawClass: Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(SetObject::rawClass);
+        SetObject::rawClass
+    }
+}
+
+struct MapObject <: NativeObject;
+
+impl MapObject {
+    var rawClass: Class;
+
+    fn class() -> Class {
+        assume Class::isNativeObject(MapObject::rawClass);
+        MapObject::rawClass
+    }
+}
+
+struct PropertyKey;
+
+impl PropertyKey {
+    fn isString(key: PropertyKey) -> Bool;
+    fn isSymbol(key: PropertyKey) -> Bool;
+
+    fn nameOrSymbolFromValue(value: Value, out key: PropertyKey, out nameOrSymbol: Bool) -> Bool {
+        let success = (unsafe {
+            PropertyKey::nameOrSymbolFromValueUnchecked(value, out key, out nameOrSymbol)
+        });
+        if success && nameOrSymbol {
+            assume PropertyKey::isString(key) || PropertyKey::isSymbol(key);
+        }
+        success
+    }
+
+    unsafe fn nameOrSymbolFromValueUnchecked(
+        value: Value,
+        out key: PropertyKey,
+        out nameOrSymbol: Bool
+    ) -> Bool;
+}
+
+struct PropertyFlags;
+
+impl PropertyFlags {
+    fn isAccessorProperty(flags: PropertyFlags) -> Bool;
+    fn isCustomDataProperty(flags: PropertyFlags) -> Bool;
+
+    fn isDataProperty(flags: PropertyFlags) -> Bool {
+        !PropertyFlags::isAccessorProperty(flags) && !PropertyFlags::isCustomDataProperty(flags)
+    }
+}
+
+struct PropertyInfo;
+
+impl PropertyInfo {
+    fn flags(info: PropertyInfo) -> PropertyFlags;
+
+    fn isDataProperty(info: PropertyInfo) -> Bool {
+        PropertyFlags::isDataProperty(PropertyInfo::flags(info))
+    }
+
+    fn isCustomDataProperty(info: PropertyInfo) -> Bool {
+        PropertyFlags::isCustomDataProperty(PropertyInfo::flags(info))
+    }
+
+    fn hasSlot(info: PropertyInfo) -> Bool {
+        !PropertyInfo::isCustomDataProperty(info)
+    }
+
+    fn slot(info: PropertyInfo) -> UInt32 {
+        assert PropertyInfo::hasSlot(info);
+        PropertyInfo::maybeSlot(info)
+    }
+
+    fn maybeSlot(info: PropertyInfo) -> UInt32 {
+        let slot = (unsafe { PropertyInfo::maybeSlotUnchecked(info) });
+        if PropertyInfo::hasSlot(info) {
+            assume slot < Shape::maxSlotSpan;
+        }
+        slot
+    }
+
+    unsafe fn maybeSlotUnchecked(info: PropertyInfo) -> UInt32;
+}
+
+struct MaybePropertyInfo;
+
+impl MaybePropertyInfo {
+    fn isPropertyInfo(maybeInfo: MaybePropertyInfo) -> Bool;
+
+    fn none() -> MaybePropertyInfo {
+        let maybeInfo = (unsafe { MaybePropertyInfo::noneUnchecked() });
+        assume !MaybePropertyInfo::isPropertyInfo(maybeInfo);
+        maybeInfo
+    }
+
+    unsafe fn noneUnchecked() -> MaybePropertyInfo;
+
+    fn fromPropertyInfo(info: PropertyInfo) -> MaybePropertyInfo {
+        let maybeInfo = (unsafe { MaybePropertyInfo::fromPropertyInfoUnchecked(info) });
+        assume MaybePropertyInfo::isPropertyInfo(maybeInfo);
+        assume (unsafe { MaybePropertyInfo::toPropertyInfoUnchecked(maybeInfo) }) == info;
+        maybeInfo
+    }
+
+    unsafe fn fromPropertyInfoUnchecked(info: PropertyInfo) -> MaybePropertyInfo;
+
+    fn toPropertyInfo(maybeInfo: MaybePropertyInfo) -> PropertyInfo {
+        assert MaybePropertyInfo::isPropertyInfo(maybeInfo);
+        let info = (unsafe { MaybePropertyInfo::toPropertyInfoUnchecked(maybeInfo) });
+        assume (unsafe { MaybePropertyInfo::fromPropertyInfoUnchecked(info) }) == maybeInfo;
+        info
+    }
+
+    fn toPropertyInfoUnchecked(maybeInfo: MaybePropertyInfo) -> PropertyInfo;
+}
+
+enum PropertyResultKind {
+    NotFound,
+    NativeProperty,
+    NonNativeProperty,
+    DenseElement,
+    TypedArrayElement,
+}
+
+struct PropertyResult {
+    kind: PropertyResultKind,
+}
+
+impl PropertyResult {
+    fn isFound(result: PropertyResult) -> Bool {
+        result.kind != PropertyResultKind::NotFound
+    }
+
+    fn isNativeProperty(result: PropertyResult) -> Bool {
+        result.kind == PropertyResultKind::NativeProperty
+    }
+
+    fn propertyInfo(result: PropertyResult) -> PropertyInfo {
+        assert PropertyResult::isNativeProperty(result);
+        (unsafe { PropertyResult::propertyInfoUnchecked(result) })
+    }
+
+    unsafe fn propertyInfoUnchecked(result: PropertyResult) -> PropertyInfo;
+}
+
+struct BaseShape;
+
+impl BaseShape {
+    fn fromAddr(addr: UInt64) -> BaseShape;
+
+    fn classOf(baseShape: BaseShape) -> Class;
+
+    // #[reads(heap)]
+    // fn protoOf(object: Object) -> TaggedProto;
+    fn protoOf(baseShape: BaseShape) -> TaggedProto {
+        (unsafe { BaseShape::protoOfUnchecked(heap, baseShape) })
+    }
+
+    unsafe fn protoOfUnchecked(heap: Heap, baseShape: BaseShape) -> TaggedProto;
+}
+
+struct Shape;
+
+impl Shape {
+    var maxFixedSlots: UInt64 = 16_u64;
+    var maxSlotSpan: UInt64 = 1024_u64;
+
+    fn fromAddr(addr: UInt64) -> Shape;
+
+    fn baseShapeOf(shape: Shape) -> BaseShape;
+
+    fn classOf(shape: Shape) -> Class {
+        BaseShape::classOf(Shape::baseShapeOf(shape))
+    }
+
+    fn numFixedSlots(shape: Shape) -> UInt32 {
+        let numFixedSlots = unsafe { Shape::numFixedSlotsUnchecked(shape) };
+        assume numFixedSlots < Shape::maxFixedSlots;
+        numFixedSlots
+    }
+
+    unsafe fn numFixedSlotsUnchecked(shape: Shape) -> UInt32;
+
+    #[inline]
+    fn slotSpan(shape: Shape) -> UInt32 {
+        let slotSpan = unsafe { Shape::slotSpanUnchecked(shape) };
+        assume slotSpan < Shape::maxSlotSpan;
+        slotSpan
+    }
+
+    unsafe fn slotSpanUnchecked(shape: Shape) -> UInt32;
+
+    fn hasSlot(shape: Shape, slot: UInt32) -> Bool {
+        slot < Shape::slotSpan(shape)
+    }
+
+    fn hasFixedSlot(shape: Shape, slot: UInt32) -> Bool {
+        slot < Shape::numFixedSlots(shape)
+    }
+
+    fn hasDynamicSlot(shape: Shape, slot: UInt32) -> Bool {
+        Shape::hasSlot(shape, slot) && slot >= Shape::numFixedSlots(shape)
+    }
+}
+
+struct Class;
+
+impl Class {
+    fn fromAddr(addr: UInt64) -> Class;
+
+    fn windowProxyClass() -> Class;
+
+    fn emulatesUndefined(class: Class) -> Bool;
+
+    fn isNativeObject(class: Class) -> Bool;
+    fn isProxyObject(class: Class) -> Bool;
+
+    fn isArgumentsObject(class: Class) -> Bool {
+        class == MappedArgumentsObject::class() ||
+            class == UnmappedArgumentsObject::class()
+    }
+}
+
+struct String;
+
+impl String {
+    fn fromAddr(addr: UInt64) -> String;
+
+    fn isAtom(string: String) -> Bool;
+
+    #[refined]
+    fn asAtom(string: String) -> Atom {
+        assert String::isAtom(string);
+        (unsafe { string as Atom })
+    }
+
+    fn length(string: String) -> UInt64;
+}
+
+fn equalStringsHelperPure(str1: String, str2: String) -> Bool;
+
+struct Atom <: String;
+
+struct Symbol;
+
+struct BigInt;
+
+#[spec]
+enum ProtoTag {
+    Null,
+    Lazy,
+    Object,
+}
+
+struct TaggedProto;
+
+impl TaggedProto {
+    fn fromAddr(addr: UInt64) -> TaggedProto;
+
+    #[spec]
+    fn tag(proto: TaggedProto) -> ProtoTag;
+
+    #[refined]
+    fn isNull(proto: TaggedProto) -> Bool {
+        TaggedProto::tag(proto) == ProtoTag::Null
+    }
+
+    fn null() -> TaggedProto {
+        let proto = (unsafe { TaggedProto::nullUnchecked() });
+        assume TaggedProto::isNull(proto);
+        proto
+    }
+
+    unsafe fn nullUnchecked() -> TaggedProto;
+
+    #[refined]
+    fn isLazy(proto: TaggedProto) -> Bool {
+        TaggedProto::tag(proto) == ProtoTag::Lazy
+    }
+
+    fn lazy() -> TaggedProto {
+        let proto = (unsafe { TaggedProto::lazyUnchecked() });
+        assume TaggedProto::isLazy(proto);
+        proto
+    }
+
+    unsafe fn lazyUnchecked() -> TaggedProto;
+
+    #[refined]
+    fn isObject(proto: TaggedProto) -> Bool {
+        TaggedProto::tag(proto) == ProtoTag::Object
+    }
+
+    fn fromObject(object: Object) -> TaggedProto {
+        let proto = (unsafe { TaggedProto::fromObjectUnchecked(object) });
+        assume TaggedProto::isObject(proto);
+        assume (unsafe { TaggedProto::toObjectUnchecked(proto) }) == object;
+        proto
+    }
+
+    unsafe fn fromObjectUnchecked(object: Object) -> TaggedProto;
+
+    fn toObject(proto: TaggedProto) -> Object {
+        assert TaggedProto::isObject(proto);
+        let object = (unsafe { TaggedProto::toObjectUnchecked(proto) });
+        assume (unsafe { TaggedProto::fromObjectUnchecked(object) }) == proto;
+        object
+    }
+
+    unsafe fn toObjectUnchecked(proto: TaggedProto) -> Object;
+}

@@ -215,24 +215,24 @@ class AssemblerBuffer {
 };
 
 class GenericAssembler {
-#ifdef JS_JITSPEW
+#if defined(JS_CACHET) || defined(JS_JITSPEW)
   Sprinter* printer;
 #endif
  public:
   GenericAssembler()
-#ifdef JS_JITSPEW
+#if defined(JS_CACHET) || defined(JS_JITSPEW)
       : printer(nullptr)
 #endif
   {
   }
 
   void setPrinter(Sprinter* sp) {
-#ifdef JS_JITSPEW
+#if defined(JS_CACHET) || defined(JS_JITSPEW)
     printer = sp;
 #endif
   }
 
-#ifdef JS_JITSPEW
+#if defined(JS_CACHET) || defined(JS_JITSPEW)
   inline void spew(const char* fmt, ...) MOZ_FORMAT_PRINTF(2, 3) {
     if (MOZ_UNLIKELY(printer || JitSpewEnabled(JitSpew_Codegen))) {
       va_list va;
@@ -245,7 +245,7 @@ class GenericAssembler {
   MOZ_ALWAYS_INLINE void spew(const char* fmt, ...) MOZ_FORMAT_PRINTF(2, 3) {}
 #endif
 
-#ifdef JS_JITSPEW
+#if defined(JS_CACHET) || defined(JS_JITSPEW)
   MOZ_COLD void spew(const char* fmt, va_list va) MOZ_FORMAT_PRINTF(2, 0);
 #endif
 };

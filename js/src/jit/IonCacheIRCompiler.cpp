@@ -283,9 +283,10 @@ JitCode* IonCacheIRCompiler::compile(IonICStub* stub) {
   CacheIRReader reader(writer_);
   do {
     switch (reader.readOp()) {
-#define DEFINE_OP(op, ...)                 \
-  case CacheOp::op:                        \
-    if (!emit##op(reader)) return nullptr; \
+#define DEFINE_OP(op, ...)                             \
+  case CacheOp::op:                                    \
+    masm.comment(CacheIROpNames[size_t(CacheOp::op)]); \
+    if (!emit##op(reader)) return nullptr;             \
     break;
       CACHE_IR_OPS(DEFINE_OP)
 #undef DEFINE_OP
@@ -293,6 +294,7 @@ JitCode* IonCacheIRCompiler::compile(IonICStub* stub) {
       default:
         MOZ_CRASH("Invalid op");
     }
+    masm.comment("end");
     allocator.nextOp();
   } while (reader.more());
 
@@ -376,8 +378,10 @@ bool IonCacheIRCompiler::emitGuardShape(ObjOperandId objId,
                                         uint32_t shapeOffset) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardShape(cachet::CachetContext {this, cx_}, objId, shapeOffset);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardShape(cachet::CachetContext {this, cx_}, masm, objId, shapeOffset);
+  } else {
+#endif
   Register obj = allocator.useRegister(masm, objId);
   Shape* shape = shapeStubField(shapeOffset);
 
@@ -399,6 +403,8 @@ bool IonCacheIRCompiler::emitGuardShape(ObjOperandId objId,
   } else {
     masm.branchTestObjShapeNoSpectreMitigations(Assembler::NotEqual, obj, shape,
                                                 failure->label());
+  }
+#ifdef JS_CACHET
   }
 #endif
 
@@ -455,8 +461,10 @@ bool IonCacheIRCompiler::emitGuardAnyClass(ObjOperandId objId,
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardAnyClass(cachet::CachetContext {this, cx_}, objId, claspOffset);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardAnyClass(cachet::CachetContext {this, cx_}, masm, objId, claspOffset);
+  } else {
+#endif
   Register obj = allocator.useRegister(masm, objId);
   AutoScratchRegister scratch(allocator, masm);
 
@@ -473,6 +481,8 @@ bool IonCacheIRCompiler::emitGuardAnyClass(ObjOperandId objId,
   } else {
     masm.branchTestObjClassNoSpectreMitigations(Assembler::NotEqual, obj, clasp,
                                                 scratch, failure->label());
+  }
+#ifdef JS_CACHET
   }
 #endif
   return true;
@@ -520,8 +530,10 @@ bool IonCacheIRCompiler::emitGuardSpecificAtom(StringOperandId strId,
                                                uint32_t expectedOffset) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_GuardSpecificAtom(cachet::CachetContext {this, cx_}, strId, expectedOffset);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_GuardSpecificAtom(cachet::CachetContext {this, cx_}, masm, strId, expectedOffset);
+  } else {
+#endif
   Register str = allocator.useRegister(masm, strId);
   AutoScratchRegister scratch(allocator, masm);
 
@@ -537,6 +549,8 @@ bool IonCacheIRCompiler::emitGuardSpecificAtom(StringOperandId strId,
   volatileRegs.takeUnchecked(scratch);
 
   masm.guardSpecificAtom(str, atom, scratch, volatileRegs, failure->label());
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -565,12 +579,16 @@ bool IonCacheIRCompiler::emitLoadFixedSlotResult(ObjOperandId objId,
                                                  uint32_t offsetOffset) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadFixedSlotResult(cachet::CachetContext {this, cx_}, objId, offsetOffset);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadFixedSlotResult(cachet::CachetContext {this, cx_}, masm, objId, offsetOffset);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register obj = allocator.useRegister(masm, objId);
   int32_t offset = int32StubField(offsetOffset);
   masm.loadTypedOrValue(Address(obj, offset), output);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -585,8 +603,10 @@ bool IonCacheIRCompiler::emitLoadDynamicSlotResult(ObjOperandId objId,
                                                    uint32_t offsetOffset) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
-  cachet::Impl_CacheIR::Op_LoadDynamicSlotResult(cachet::CachetContext {this, cx_}, objId, offsetOffset);
-#else
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_LoadDynamicSlotResult(cachet::CachetContext {this, cx_}, masm, objId, offsetOffset);
+  } else {
+#endif
   AutoOutputRegister output(*this);
   Register obj = allocator.useRegister(masm, objId);
   int32_t offset = int32StubField(offsetOffset);
@@ -594,6 +614,8 @@ bool IonCacheIRCompiler::emitLoadDynamicSlotResult(ObjOperandId objId,
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
   masm.loadPtr(Address(obj, NativeObject::offsetOfSlots()), scratch);
   masm.loadTypedOrValue(Address(scratch, offset), output);
+#ifdef JS_CACHET
+  }
 #endif
   return true;
 }
@@ -1433,6 +1455,13 @@ bool IonCacheIRCompiler::emitMegamorphicSetElement(ObjOperandId objId,
 
 bool IonCacheIRCompiler::emitReturnFromIC() {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+#ifdef JS_CACHET
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_ReturnFromIC(cachet::CachetContext {this, cx_}, masm);
+  }
+#endif
+
   if (!savedLiveRegs_) {
     allocator.restoreInputState(masm);
   }
@@ -1617,8 +1646,42 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
       new (newStubMem) IonICStub(fallbackAddr(ionScript), stubInfo);
   writer.copyStubData(newStub->stubDataStart());
 
+  /*
+#ifdef JS_CACHET
+  Sprinter masmPrinterCachetDisabled(cx);
+  if (!masmPrinterCachetDisabled.init()) {
+    return;
+  }
+
+  {
+    JitContext jctx(cx, nullptr);
+    IonCacheIRCompiler compiler(cx, writer, this, ionScript);
+    compiler.disableCachet();
+    compiler.setMASMPrinter(&masmPrinterCachetDisabled);
+    if (!compiler.init()) {
+      return;
+    }
+
+    Rooted<JitCode*> code(cx, compiler.compile(newStub));
+    if (!code) {
+      return;
+    }
+  }
+#endif
+  */
+
   JitContext jctx(cx, nullptr);
   IonCacheIRCompiler compiler(cx, writer, this, ionScript);
+#ifdef JS_CACHET
+  compiler.disableCachet();
+/*
+  Sprinter masmPrinterCachetEnabled(cx);
+  if (!masmPrinterCachetEnabled.init()) {
+    return;
+  }
+  compiler.setMASMPrinter(&masmPrinterCachetEnabled);
+  */
+#endif
   if (!compiler.init()) {
     return;
   }
@@ -1627,6 +1690,19 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
   if (!code) {
     return;
   }
+
+  /*
+#ifdef JS_CACHET
+  const char* const asmCachetDisabled(masmPrinterCachetDisabled.string());
+  const char* const asmCachetEnabled(masmPrinterCachetEnabled.string());
+  const bool generatedMatchingASM(strcmp(asmCachetDisabled, asmCachetEnabled) == 0);
+  if (!generatedMatchingASM) {
+    fprintf(stderr, "With Cachet DISABLED:\n\n%s\n\nWith Cachet ENABLED:\n\n%s",
+            asmCachetDisabled, asmCachetEnabled);
+  }
+  MOZ_ASSERT(generatedMatchingASM);
+#endif
+  */
 
   attachStub(newStub, code);
   *attached = true;

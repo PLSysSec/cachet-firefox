@@ -243,6 +243,18 @@ class CompileZone;
 class TemplateNativeObject;
 class TemplateObject;
 
+#ifdef DEBUG
+#  ifdef JS_CACHET
+namespace cachet {
+namespace detail {
+
+class CompilerInternals;
+
+}  // namespace detail
+}  // namespace cachet
+#  endif
+#endif
+
 enum class CheckUnsafeCallWithABI {
   // Require the callee to use AutoUnsafeCallWithABI.
   Check,
@@ -553,6 +565,9 @@ class MacroAssembler : public MacroAssemblerSpecific {
 #ifdef DEBUG
   friend AutoRegisterScope;
   friend AutoFloatRegisterScope;
+#  ifdef JS_CACHET
+  friend class cachet::detail::CompilerInternals;
+#  endif
   // Used to track register scopes for debug builds.
   // Manipulated by the AutoGenericRegisterScope class.
   AllocatableRegisterSet debugTrackedRegisters_;

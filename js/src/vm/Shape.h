@@ -443,6 +443,12 @@ class Shape : public gc::CellWithTenuredGCPointer<gc::TenuredCell, BaseShape> {
     return (immutableFlags & FIXED_SLOTS_MASK) >> FIXED_SLOTS_SHIFT;
   }
 
+  uint32_t numDynamicSlots() const {
+    uint32_t numFixedSlots(this->numFixedSlots());
+    uint32_t slotSpan(this->slotSpan());
+    return slotSpan >= numFixedSlots ? slotSpan - numFixedSlots : 0;
+  }
+
   void setNumFixedSlots(uint32_t nfixed) {
     MOZ_ASSERT(nfixed < FIXED_SLOTS_MAX);
     immutableFlags = immutableFlags & ~FIXED_SLOTS_MASK;
