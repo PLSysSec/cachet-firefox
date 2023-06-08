@@ -435,43 +435,6 @@ impl FailurePath {
 }
 
 ir CacheIR emits MASM {
-    // TODO(spinda): Some slightly hacky helper functions for the codegen demo.
-
-    fn initStub() {
-        initRegState();
-    }
-
-    fn defineInputValueId() -> ValueId {
-        let valueId = ValueId::fromId(0_u16);
-        initOperandId(valueId);
-        initInputValueId(valueId);
-        valueId
-    }
-
-    fn newInt32Id() -> Int32Id {
-        let int32Id = Int32Id::fromId(1_u16);
-        initOperandId(int32Id);
-        int32Id
-    }
-
-    fn setValueOutput() {
-        initValueOutput();
-    }
-
-    fn writeInt32Field(int32: Int32) -> Int32Field {
-        let int32Field = Int32Field::fromOffset(8_u32);
-        assume CacheIR::readInt32Field(int32Field) == int32;
-        int32Field
-    }
-
-    fn writeShapeField(shape: Shape) -> ShapeField {
-        let shapeField = ShapeField::fromOffset(8_u32);
-        assume CacheIR::readShapeField(shapeField) == shape;
-        shapeField
-    }
-
-    // (end slightly hacky helper functions)
-
     op ReturnFromIC() {}
 
     op Assert(cond: Bool) {
@@ -479,7 +442,12 @@ ir CacheIR emits MASM {
     }
 
     op AssertEqValueOutput(value: Value) {
-        emit MASM::AssertEqValue(TypedOrValueReg::toValueReg(CacheIR::outputReg), value);
+        let scratchValueReg = CacheIR::allocateValueReg();
+
+        emit MASM::AssertEqValue(
+            TypedOrValueReg::toValueReg(CacheIR::outputReg), value, scratchValueReg);
+
+        CacheIR::releaseValueReg(scratchValueReg);
     }
 
     op GuardIsNumber(inputId: ValueId) {
@@ -1168,7 +1136,7 @@ ir CacheIR emits MASM {
         label loopHead: MASM;
         bind loopHead;
 
-        emit MASM::BranchObject(Condition::Equal, scratchReg, protoReg, returnTrue);
+        emit MASM::BranchTaggedProto(Condition::Equal, scratchReg, protoReg, returnTrue);
         emit MASM::BranchTestNullProto(scratchReg, returnFalse);
         emit MASM::BranchTestLazyProto(scratchReg, failure.label_);
 
@@ -1656,21 +1624,24 @@ ir CacheIR emits MASM {
         }
     }
 
+    // #ifdef DEBUG
     var mut addedFailurePath: Bool;
-    fn setAddedFailurePath() {
-        assert !CacheIR::addedFailurePath;
-        CacheIR::addedFailurePath = true;
-    }
+    // #endif
 
     fn addFailurePath() -> FailurePath {
-        CacheIR::setAddedFailurePath();
+        // #ifdef DEBUG
+        assert !CacheIR::addedFailurePath;
+        CacheIR::addedFailurePath = true;
+        // #endif
         unsafe { CacheIR::addFailurePathUnchecked() }
     }
     unsafe fn addFailurePathUnchecked() -> FailurePath;
 
     fn releaseFailurePath() {
+        // #ifdef DEBUG
         assert CacheIR::addedFailurePath;
         CacheIR::addedFailurePath = false;
+        // #endif
     }
 
     fn hasAvailableReg() -> Bool;
@@ -1853,7 +1824,9 @@ ir CacheIR emits MASM {
 
     #[refined]
     fn useValueId(valueId: ValueId) emits MASM -> ValueReg {
+        // #ifdef DEBUG
         assert !CacheIR::addedFailurePath;
+        // #endif
         assert !CacheIR::hasAutoScratchFloatRegisterSpill;
 
         let operandId = valueId as OperandId;
@@ -1879,7 +1852,9 @@ ir CacheIR emits MASM {
 
     #[refined]
     fn useTypedId(id: TypedId) emits MASM -> Reg {
+        // #ifdef DEBUG
         assert !CacheIR::addedFailurePath;
+        // #endif
         assert !CacheIR::hasAutoScratchFloatRegisterSpill;
 
         let operandId = id as OperandId;

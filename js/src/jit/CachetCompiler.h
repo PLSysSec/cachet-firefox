@@ -74,6 +74,16 @@ class CompilerInternals {
     return cx.compiler->addFailurePath(failure);
   }
 
+#ifdef DEBUG
+  static bool& addedFailurePath(Cachet_ContextRef cx) {
+    return allocator(cx).addedFailurePath_;
+  }
+#endif
+
+  static bool& hasAutoScratchFloatRegisterSpill(Cachet_ContextRef cx) {
+    return allocator(cx).hasAutoScratchFloatRegisterSpill_;
+  }
+
   static bool objectGuardNeedsSpectreMitigations(Cachet_ContextRef cx, ObjOperandId objId) {
     return cx.compiler->objectGuardNeedsSpectreMitigations(objId);
   }
@@ -231,7 +241,7 @@ using Type_Class = PrimitiveType<const JSClass*>;
 using Type_TaggedProto = GCType<js::TaggedProto>;
 using Type_JSOp = PrimitiveType<JSOp>;
 
-using Cast_Object_NativeObject = GCCast<Type_Object, Type_NativeObject>;
+//using Cast_Object_NativeObject = GCCast<Type_Object, Type_NativeObject>;
 
 using Type_ValueReg = StructType<ValueOperand>;
 using Type_Reg = PrimitiveType<Register>;
@@ -347,6 +357,16 @@ inline Type_Heap::MutRef Var_heap(Cachet_ContextRef cx) {
 }
 
 namespace Impl_CacheIR {
+
+#ifdef DEBUG
+inline Type_Bool::MutRef Var_addedFailurePath(Cachet_ContextRef cx) {
+  return detail::CompilerInternals::addedFailurePath(cx);
+}
+#endif
+
+inline Type_Bool::MutRef Var_hasAutoScratchFloatRegisterSpill(Cachet_ContextRef cx) {
+  return detail::CompilerInternals::hasAutoScratchFloatRegisterSpill(cx);
+}
 
 inline Type_TypedOrValueReg::Ref Var_outputReg(Cachet_ContextRef cx) {
   return detail::CompilerInternals::outputUnchecked(cx).value();

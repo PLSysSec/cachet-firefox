@@ -305,6 +305,10 @@ using SpilledRegisterVector = Vector<SpilledRegister, 2, SystemAllocPolicy>;
 
 // Class to track and allocate registers while emitting IC code.
 class MOZ_RAII CacheRegisterAllocator {
+#ifdef JS_CACHET
+  friend class cachet::detail::CompilerInternals;
+#endif
+
   // The original location of the inputs to the cache.
   Vector<OperandLocation, 4, SystemAllocPolicy> origInputLocations_;
 

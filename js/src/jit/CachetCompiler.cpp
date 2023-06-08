@@ -844,12 +844,40 @@ IR_MASM::LabelRef Field_label_(Cachet_ContextRef cx, Type_FailurePath::Ref in) {
   return in->label();
 }
 
+void Fn_setHasAutoScratchFloatRegister(Cachet_ContextRef cx, Type_FailurePath::Ref param_failure) {
+  param_failure->setHasAutoScratchFloatRegister();
+}
+
+void Fn_clearHasAutoScratchFloatRegister(Cachet_ContextRef cx, Type_FailurePath::Ref param_failure) {
+  param_failure->clearHasAutoScratchFloatRegister();
+}
+
 };  // namespace Impl_FailurePath
 
 namespace Impl_MASM {
 
 void EmitOp_AssumeUnreachable(Cachet_ContextRef cx, IR_MASM::OpsRef ops) {
-  ops.assumeUnreachable("Cachet unreachable");
+  ops.assumeUnreachable("Cachet MASM::AssumeUnreachable");
+}
+
+void EmitOp_Assert(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Bool::Ref param_cond) {
+  if (!param_cond) {
+    ops.assumeUnreachable("Cachet MASM::Assert(false)");
+  }
+}
+
+void EmitOp_AssertEqValue(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                          Type_ValueReg::Ref param_valueReg,
+                          Type_Value::Ref param_value,
+                          Type_ValueReg::Ref param_scratchValueReg) {
+#ifdef DEBUG
+  Label ok;
+  ops.moveValue(param_value, param_scratchValueReg);
+  ops.branch64(Assembler::Equal, param_valueReg.toRegister64(),
+               param_scratchValueReg.toRegister64(), &ok);
+  ops.assumeUnreachable("Cachet MASM::AssertEqValue not equal");
+  ops.bind(&ok);
+#endif
 }
 
 void EmitOp_Mov(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
@@ -870,8 +898,9 @@ void EmitOp_Move32Imm32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
 }
 
 void EmitOp_MoveValue(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
-                        Type_ValueReg::Ref param_srcReg, Type_ValueReg::Ref param_dstReg) {
-  ops.moveValue(param_srcReg, param_dstReg);
+                      Type_ValueReg::Ref param_srcValueReg,
+                      Type_ValueReg::Ref param_dstValueReg) {
+  ops.moveValue(param_srcValueReg, param_dstValueReg);
 }
 
 void EmitOp_MovePtrBoolImmWord(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
@@ -1452,7 +1481,7 @@ void EmitOp_SplitTagForTest(Cachet_ContextRef cx,
 
 namespace Impl_CacheIR {
 
-Type_FailurePath::Val Fn_addFailurePath(Cachet_ContextRef cx) {
+Type_FailurePath::Val Fn_addFailurePathUnchecked(Cachet_ContextRef cx) {
   FailurePath* failurePath;
   // FIXME: use this result in some way
   (void)detail::CompilerInternals::addFailurePath(cx, &failurePath);
