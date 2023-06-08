@@ -77,9 +77,7 @@ struct WrPipelineInfo;
 struct WrPipelineIdAndEpoch;
 using WrPipelineIdEpochs = nsTArray<WrPipelineIdAndEpoch>;
 
-// XXX(abhishekc-sharma): Known issue due to changes in cbindgen
-// https://bugzilla.mozilla.org/show_bug.cgi?id=1773259
-// const uint64_t ROOT_CLIP_CHAIN = ~0;
+const uint64_t ROOT_CLIP_CHAIN = ~0;
 
 }  // namespace wr
 }  // namespace mozilla
