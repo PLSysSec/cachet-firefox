@@ -880,20 +880,25 @@ void EmitOp_AssertEqValue(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
 #endif
 }
 
-void EmitOp_Mov(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
-                      Type_Reg::Ref param_srcReg, Type_Reg::Ref param_dstReg) {
+void EmitOp_Move(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                 Type_Reg::Ref param_srcReg, Type_Reg::Ref param_dstReg) {
   ops.mov(param_srcReg, param_dstReg);
 }
 
-void EmitOp_MovData(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
-                    Type_Reg::Ref param_srcReg,
-                    Type_Reg::Ref param_dstReg) {
-  ops.mov(param_srcReg, param_dstReg);
+void EmitOp_Move32Bool(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                       Type_Reg::Ref param_srcReg, Type_Reg::Ref param_dstReg) {
+  ops.move32(param_srcReg, param_dstReg);
 }
 
-void EmitOp_Move32Imm32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
-                        Type_Int32::Ref param_srcInt32,
-                        Type_Reg::Ref param_dstReg) {
+void EmitOp_Move32Int32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                        Type_Reg::Ref param_srcReg, Type_Reg::Ref param_dstReg)
+{
+  ops.move32(param_srcReg, param_dstReg);
+}
+
+void EmitOp_Move32Int32Imm(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                           Type_Int32::Ref param_srcInt32,
+                           Type_Reg::Ref param_dstReg) {
   ops.move32(Imm32(param_srcInt32), param_dstReg);
 }
 
@@ -959,6 +964,16 @@ void EmitOp_LoadPtrAddress(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   ops.loadPtr(param_address, param_dstReg);
 }
 
+void EmitOp_PushFloatReg(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                         Type_FloatReg::Ref param_floatReg) {
+  ops.push(param_floatReg);
+}
+
+void EmitOp_PopFloatReg(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                        Type_FloatReg::Ref param_floatReg) {
+  ops.pop(param_floatReg);
+}
+
 void EmitOp_GuardSpecificAtom(Cachet_ContextRef cx,
                               IR_MASM::OpsRef ops,
                               Type_Reg::Ref param_strReg,
@@ -993,13 +1008,6 @@ void EmitOp_UnboxObject(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   ops.unboxObject(param_valueReg, param_objectReg);
 }
 
-void EmitOp_UnboxObjectProto(Cachet_ContextRef cx,
-                             IR_MASM::OpsRef ops,
-                             Type_Reg::Ref param_srcReg,
-                             Type_Reg::Ref param_destReg) {
-  // Phantom op
-}
-
 void EmitOp_FallibleUnboxObject(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                 Type_ValueReg::Ref param_valueReg,
                                 Type_Reg::Ref param_objectReg,
@@ -1014,6 +1022,12 @@ void EmitOp_FallibleUnboxBoolean(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   ops.fallibleUnboxBoolean(param_valueReg, param_boolReg, param_failure);
 }
 
+void EmitOp_UnboxDouble(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                        Type_ValueReg::Ref param_valueReg,
+                        Type_FloatReg::Ref param_floatReg) {
+  ops.unboxDouble(param_valueReg, param_floatReg);
+}
+
 void EmitOp_CastBoolToInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Reg::Ref param_int32Reg) {
   // Phantom op
 }
@@ -1021,6 +1035,15 @@ void EmitOp_CastBoolToInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_Reg:
 void EmitOp_ConvertInt32ValueToDouble(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                         Type_ValueReg::Ref param_valueReg) {
   ops.convertInt32ValueToDouble(param_valueReg);
+}
+
+void EmitOp_ConvertDoubleToInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                 Type_FloatReg::Ref param_srcReg,
+                                 Type_Reg::Ref param_destReg,
+                                 IR_MASM::LabelRef param_failure,
+                                 Type_Bool::Ref param_negativeZeroCheck) {
+  ops.convertDoubleToInt32(param_srcReg, param_destReg, param_failure,
+                           param_negativeZeroCheck);
 }
 
 void EmitOp_ConvertUInt32ToDouble(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
@@ -1059,12 +1082,27 @@ void EmitOp_BranchTestDouble(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   ops.branchTestDouble(param_condition, param_valueReg, param_branch);
 }
 
+void EmitOp_BranchTestDoubleTag(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                                Type_Condition::Ref param_condition,
+                                Type_Reg::Ref param_tagReg,
+                                IR_MASM::LabelRef param_branch) {
+  ops.branchTestDouble(param_condition, param_tagReg, param_branch);
+}
+
 void EmitOp_BranchObject(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                          Type_Condition::Ref param_condition,
                          Type_Reg::Ref param_lhsReg,
                          Type_Reg::Ref param_rhsReg,
                          IR_MASM::LabelRef param_branch) {
   ops.branchPtr(param_condition, param_lhsReg, param_rhsReg, param_branch);
+}
+
+void EmitOp_BranchObjectProto(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                              Type_Condition::Ref param_condition,
+                              Type_Reg::Ref param_protoReg,
+                              Type_Reg::Ref param_objectReg,
+                              IR_MASM::LabelRef param_branch) {
+  ops.branchPtr(param_condition, param_protoReg, param_objectReg, param_branch);
 }
 
 void EmitOp_ConvertInt32ToDouble(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
@@ -1078,6 +1116,14 @@ void EmitOp_BranchTestInt32(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                                     Type_ValueReg::Ref param_valueReg,
                                     IR_MASM::LabelRef param_branch) {
   ops.branchTestInt32(param_condition, param_valueReg, param_branch);
+}
+
+void EmitOp_BranchTestInt32Tag(Cachet_ContextRef cx,
+                               IR_MASM::OpsRef ops,
+                               Type_Condition::Ref param_condition,
+                               Type_Reg::Ref param_tagReg,
+                               IR_MASM::LabelRef param_branch) {
+  ops.branchTestInt32(param_condition, param_tagReg, param_branch);
 }
 
 void EmitOp_BranchTestInt32Truthy(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
@@ -1467,6 +1513,12 @@ void EmitOp_LoadObjectProto(Cachet_ContextRef cx,
                             Type_Reg::Ref param_objectReg,
                             Type_Reg::Ref param_protoReg) {
   ops.loadObjProto(param_objectReg, param_protoReg);
+}
+
+void EmitOp_UnboxObjectProto(Cachet_ContextRef cx,
+                             IR_MASM::OpsRef ops,
+                             Type_Reg::Ref param_protoReg) {
+  // Phantom op
 }
 
 void EmitOp_SplitTagForTest(Cachet_ContextRef cx,
