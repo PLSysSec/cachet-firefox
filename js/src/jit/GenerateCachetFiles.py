@@ -21,8 +21,12 @@ def generate_cachet_impl(c_out, cachet_src):
         h_tmp = os.path.join(dir, "CachetGenerated.h")
         inc_tmp = os.path.join(dir, "CachetGenerated.inc")
 
-        p = subprocess.Popen(["/home/spinda/workbench/cachet/cachet/target/debug/cachet-compiler", cachet_src, "--cpp-decls", h_tmp, "--cpp-defs",
-            inc_tmp], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        script_file_path = os.path.abspath(__file__)
+        jit_dir_path = os.path.dirname(script_file_path)
+        cachet_compiler_exe_path = os.path.abspath(os.path.join(jit_dir_path,
+            "..", "..", "..", "..", "cachet", "target", "debug", "cachet-compiler"))
+        p = subprocess.Popen([cachet_compiler_exe_path, cachet_src, "--cpp-decls", h_tmp,
+            "--cpp-defs", inc_tmp], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         stdout, stderr = p.communicate()
         stdout = six.ensure_text(stdout)
