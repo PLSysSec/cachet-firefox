@@ -76,7 +76,7 @@ class CompilerInternals {
 
 #ifdef DEBUG
   static bool& addedFailurePath(Cachet_ContextRef cx) {
-    return allocator(cx).addedFailurePath_;
+    return allocator(cx).cachetAddedFailurePath_;
   }
 #endif
 
@@ -358,11 +358,9 @@ inline Type_Heap::MutRef Var_heap(Cachet_ContextRef cx) {
 
 namespace Impl_CacheIR {
 
-#ifdef DEBUG
 inline Type_Bool::MutRef Var_addedFailurePath(Cachet_ContextRef cx) {
   return detail::CompilerInternals::addedFailurePath(cx);
 }
-#endif
 
 inline Type_Bool::MutRef Var_hasAutoScratchFloatRegisterSpill(Cachet_ContextRef cx) {
   return detail::CompilerInternals::hasAutoScratchFloatRegisterSpill(cx);

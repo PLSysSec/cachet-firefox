@@ -1656,7 +1656,6 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
   {
     JitContext jctx(cx, nullptr);
     IonCacheIRCompiler compiler(cx, writer, this, ionScript);
-    compiler.disableCachet();
     compiler.setMASMPrinter(&masmPrinterCachetDisabled);
     if (!compiler.init()) {
       return;
@@ -1673,7 +1672,7 @@ void IonIC::attachCacheIRStub(JSContext* cx, const CacheIRWriter& writer,
   JitContext jctx(cx, nullptr);
   IonCacheIRCompiler compiler(cx, writer, this, ionScript);
 #ifdef JS_CACHET
-  compiler.disableCachet();
+  compiler.enableCachet();
 /*
   Sprinter masmPrinterCachetEnabled(cx);
   if (!masmPrinterCachetEnabled.init()) {

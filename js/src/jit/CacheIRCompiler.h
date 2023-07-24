@@ -345,6 +345,10 @@ class MOZ_RAII CacheRegisterAllocator {
   bool addedFailurePath_;
 #endif
 
+#ifdef JS_CACHET
+  bool cachetAddedFailurePath_;
+#endif
+
   // The index of the CacheIR instruction we're currently emitting.
   uint32_t currentInstruction_;
 
@@ -381,6 +385,9 @@ class MOZ_RAII CacheRegisterAllocator {
         stackPushed_(0),
 #ifdef DEBUG
         addedFailurePath_(false),
+#endif
+#ifdef JS_CACHET
+        cachetAddedFailurePath_(false),
 #endif
         currentInstruction_(0),
         writer_(writer) {
@@ -448,6 +455,9 @@ class MOZ_RAII CacheRegisterAllocator {
 #ifdef DEBUG
     assertValidState();
     addedFailurePath_ = false;
+#endif
+#ifdef JS_CACHET
+    cachetAddedFailurePath_ = false;
 #endif
     currentOpRegs_.clear();
     currentInstruction_++;
@@ -768,9 +778,9 @@ class MOZ_RAII CacheIRCompiler {
   bool isCachetEnabled_;
 
  public:
-  void disableCachet() {
+  void enableCachet() {
     MOZ_ASSERT(isIon());
-    isCachetEnabled_ = false;
+    isCachetEnabled_ = true;
   }
 
   void setMASMPrinter(Sprinter* sp) {
@@ -802,7 +812,7 @@ class MOZ_RAII CacheIRCompiler {
         cx_(cx),
         writer_(writer),
 #ifdef JS_CACHET
-        isCachetEnabled_(true),
+        isCachetEnabled_(false),
 #endif
         allocator(writer_),
         liveFloatRegs_(FloatRegisterSet::All()),
