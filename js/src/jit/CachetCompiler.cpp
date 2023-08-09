@@ -1608,6 +1608,11 @@ Type_ValueReg::Val Fn_useValueId(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
   return detail::CompilerInternals::allocator(cx).useValueRegister(ops, param_valueId);
 }
 
+Type_Reg::Val Fn_useTypedId(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
+                            Type_TypedId::Ref param_typedId) {
+  return detail::CompilerInternals::allocator(cx).useRegister(ops, param_typedId);
+}
+
 Type_Reg::Val Fn_useObjectId(Cachet_ContextRef cx, IR_MASM::OpsRef ops,
                              Type_ObjectId::Ref param_objectId) {
   return detail::CompilerInternals::allocator(cx).useRegister(ops, param_objectId);
