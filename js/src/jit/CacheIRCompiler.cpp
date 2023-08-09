@@ -6600,6 +6600,11 @@ bool CacheIRCompiler::emitComparePointerResultShared(JSOp op,
                                                      TypedOperandId lhsId,
                                                      TypedOperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+#ifdef JS_CACHET
+  if (isCachetEnabled_) {
+    cachet::Impl_CacheIR::Op_ComparePointerResult(cachet::CachetContext {this, cx_}, masm, op, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
 
   Register left = allocator.useRegister(masm, lhsId);
@@ -6617,6 +6622,9 @@ bool CacheIRCompiler::emitComparePointerResultShared(JSOp op,
   masm.bind(&ifTrue);
   EmitStoreBoolean(masm, true, output);
   masm.bind(&done);
+#ifdef JS_CACHET
+  }
+#endif
   return true;
 }
 

@@ -1239,6 +1239,22 @@ ir CacheIR emits MASM {
         bind done;
     }
 
+    op ComparePointerResult(jsop: JSOp, lhsId: TypedId, rhsId: TypedId) {
+        let lhsReg = CacheIR::useTypedId(lhsId);
+        let rhsReg = CacheIR::useTypedId(rhsId);
+
+        label ifTrue: MASM;
+        label done: MASM;
+
+        emit MASM::Branch32(Condition::fromJSOp(jsop, true), lhsReg, rhsReg, ifTrue);
+        CacheIR::emitStoreBool(false, CacheIR::outputReg);
+        emit MASM::Jump(done);
+
+        bind ifTrue;
+        CacheIR::emitStoreBool(true, CacheIR::outputReg);
+        bind done;
+    }
+
     op CompareNullUndefinedResult(jsop: JSOp, isUndefined: Bool, inputId: ValueId) {
         let inputReg = CacheIR::useValueId(inputId);
         let scratchReg = CacheIR::allocateReg();
