@@ -11,6 +11,7 @@
 #include "mozilla/MaybeOneOf.h"
 #include "mozilla/ScopeExit.h"
 
+#include <cassert>
 #include <type_traits>
 #include <utility>
 
@@ -52,6 +53,7 @@
 #include "jit/MacroAssembler-inl.h"
 #include "jit/SharedICHelpers-inl.h"
 #include "jit/VMFunctionList-inl.h"
+
 
 using namespace js;
 using namespace js::jit;
@@ -6670,6 +6672,12 @@ bool CacheIRCompiler::emitCompareInt32Result(JSOp op, Int32OperandId lhsId,
 bool CacheIRCompiler::emitCompareDoubleResult(JSOp op, NumberOperandId lhsId,
                                               NumberOperandId rhsId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+#ifdef JS_CACHET
+  if (isCachetEnabled_) {
+    assert(false);
+    cachet::Impl_CacheIR::Op_CompareDoubleResult(cachet::CachetContext {this, cx_}, masm, op, lhsId, rhsId);
+  } else {
+#endif
   AutoOutputRegister output(*this);
 
   // Float register must be preserved. The Compare ICs use the fact that
@@ -6694,6 +6702,9 @@ bool CacheIRCompiler::emitCompareDoubleResult(JSOp op, NumberOperandId lhsId,
   masm.bind(&ifTrue);
   EmitStoreBoolean(masm, true, output);
   masm.bind(&done);
+#ifdef JS_CACHET
+  }
+#endif
   return true;
 }
 

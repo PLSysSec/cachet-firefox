@@ -1334,6 +1334,31 @@ ir CacheIR emits MASM {
 
     }
 
+    op CompareDoubleResult(jsop: JSOp, lhsId: NumberId, rhsId: NumberId) {
+        // TODO(jlwoodwa): elided AutoAvailableFloatRegister; check that this is safe
+        let floatScratch0 = FloatReg::floatReg0();
+        let floatScratch1 = FloatReg::floatReg1();
+
+        // let failure = CacheIR::addFailurePath();
+        // TODO(jlwoodwa): is this as pointless as it looks?
+
+        CacheIR::ensureDoubleRegister(lhsId, floatScratch0);
+        CacheIR::ensureDoubleRegister(rhsId, floatScratch1);
+
+        label ifTrue: MASM;
+        label done: MASM;
+
+        emit MASM::BranchDouble(DoubleCondition::fromJSOp(jsop), floatScratch0, floatScratch1, ifTrue);
+        CacheIR::emitStoreBool(false, CacheIR::outputReg);
+        emit MASM::Jump(done);
+
+        bind ifTrue;
+        CacheIR::emitStoreBool(true, CacheIR::outputReg);
+        bind done;
+
+        CacheIR::releaseFailurePath();
+    }
+
     op Int32AddResult(lhsId: Int32Id, rhsId: Int32Id) {
         let lhsReg = CacheIR::useInt32Id(lhsId);
         let rhsReg = CacheIR::useInt32Id(rhsId);

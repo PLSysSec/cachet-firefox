@@ -118,6 +118,10 @@ impl FloatReg {
         FloatReg::newDouble(PhyFloatReg::Xmm0)
     }
 
+    fn floatReg1() -> FloatReg {
+        FloatReg::newDouble(PhyFloatReg::Xmm1)
+    }
+
     fn doubleScratchReg() -> FloatReg {
         FloatReg::newDouble(PhyFloatReg::Xmm15)
     }
@@ -620,6 +624,43 @@ impl Condition {
             assert jsop == JSOp::Ge;
             return Condition::AboveOrEqual;
         }
+    }
+}
+
+enum DoubleCondition {
+    Ordered,
+    Equal,
+    NotEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+    Unordered,
+    EqualOrUnordered,
+    NotEqualOrUnordered,
+    GreaterThanOrUnordered,
+    GreaterThanOrEqualOrUnordered,
+    LessThanOrUnordered,
+    LessThanOrEqualOrUnordered,
+}
+
+impl DoubleCondition {
+    fn fromJSOp(jsop: JSOp) -> DoubleCondition {
+        if jsop == JSOp::Eq || jsop == JSOp::StrictEq {
+            return DoubleCondition::Equal;
+        } else if jsop == JSOp::Ne || jsop == JSOp::StrictNe {
+            return DoubleCondition::NotEqualOrUnordered;
+        } else if jsop == JSOp::Lt {
+            return DoubleCondition::LessThan;
+        } else if jsop == JSOp::Le {
+            return DoubleCondition::LessThanOrEqual;
+        } else if jsop == JSOp::Gt {
+            return DoubleCondition::GreaterThan;
+        } else if jsop == JSOp::Ge {
+            return DoubleCondition::GreaterThanOrEqual;
+        }
+        assert false;
+        return DoubleCondition::Ordered; // TODO(jlwoodwa): this workaround should not be necessary
     }
 }
 
@@ -1747,6 +1788,71 @@ ir MASM {
             goto branch;
         } else if condition == Condition::NotSigned && result > 0_i32 {
             goto branch;
+        }
+    }
+
+    op BranchDouble(condition: DoubleCondition, lhs: FloatReg, rhs: FloatReg, label branch: MASM) {
+        let lhsDouble = MASM::getDouble(lhs);
+        let rhsDouble = MASM::getDouble(rhs);
+
+        if condition == DoubleCondition::Ordered {
+            if Float64::ordered(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::Equal {
+            if Float64::equal(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::NotEqual {
+            if Float64::notEqual(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::GreaterThan {
+            if Float64::greaterThan(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::GreaterThanOrEqual {
+            if Float64::greaterThanOrEqual(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::LessThan {
+            if Float64::lessThan(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::LessThanOrEqual {
+            if Float64::lessThanOrEqual(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::Unordered {
+            if Float64::unordered(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::EqualOrUnordered {
+            if Float64::equalOrUnordered(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::NotEqualOrUnordered {
+            if Float64::notEqualOrUnordered(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::GreaterThanOrUnordered {
+            if Float64::greaterThanOrUnordered(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::GreaterThanOrEqualOrUnordered {
+            if Float64::greaterThanOrEqualOrUnordered(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::LessThanOrUnordered {
+            if Float64::lessThanOrUnordered(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else if condition == DoubleCondition::LessThanOrEqualOrUnordered {
+            if Float64::lessThanOrEqualOrUnordered(lhsDouble, rhsDouble) {
+                goto branch;
+            }
+        } else {
+            assert false;
         }
     }
 
