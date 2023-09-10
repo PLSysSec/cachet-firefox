@@ -254,6 +254,7 @@ using Type_GeneralRegSet = PrimitiveType<GeneralRegisterSet>;
 using Type_FloatRegSet = PrimitiveType<FloatRegisterSet>;
 using Type_LiveRegSet = PrimitiveType<LiveRegisterSet>;
 using Type_Condition = PrimitiveType<Assembler::Condition>;
+using Type_DoubleCondition = PrimitiveType<Assembler::DoubleCondition>;
 using Type_Address = StructType<js::jit::Address>;
 using Type_Scale = PrimitiveType<js::jit::Scale>;
 using Type_BaseIndex = StructType<js::jit::BaseIndex>;
@@ -674,6 +675,10 @@ inline Type_PhyFloatReg::Ref Variant_Xmm0(Cachet_ContextRef cx) {
   return X86Encoding::xmm0;
 }
 
+inline Type_PhyFloatReg::Ref Variant_Xmm1(Cachet_ContextRef cx) {
+  return X86Encoding::xmm1;
+}
+
 inline Type_PhyFloatReg::Ref Variant_Xmm15(Cachet_ContextRef cx) {
   return X86Encoding::xmm15;
 }
@@ -759,6 +764,66 @@ inline Type_Condition::Ref Variant_BelowOrEqual(Cachet_ContextRef cx) {
 }
 
 };  // namespace Impl_Condition
+
+namespace Impl_DoubleCondition {
+
+inline Type_DoubleCondition::Ref Variant_Ordered(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleOrdered;
+}
+
+inline Type_DoubleCondition::Ref Variant_Equal(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleEqual;
+}
+
+inline Type_DoubleCondition::Ref Variant_NotEqual(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleNotEqual;
+}
+
+inline Type_DoubleCondition::Ref Variant_GreaterThan(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleGreaterThan;
+}
+
+inline Type_DoubleCondition::Ref Variant_GreaterThanOrEqual(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleGreaterThanOrEqual;
+}
+
+inline Type_DoubleCondition::Ref Variant_LessThan(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleLessThan;
+}
+
+inline Type_DoubleCondition::Ref Variant_LessThanOrEqual(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleLessThanOrEqual;
+}
+
+inline Type_DoubleCondition::Ref Variant_Unordered(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleUnordered;
+}
+
+inline Type_DoubleCondition::Ref Variant_EqualOrUnordered(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleEqualOrUnordered;
+}
+
+inline Type_DoubleCondition::Ref Variant_NotEqualOrUnordered(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleNotEqualOrUnordered;
+}
+
+inline Type_DoubleCondition::Ref Variant_GreaterThanOrUnordered(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleGreaterThanOrUnordered;
+}
+
+inline Type_DoubleCondition::Ref Variant_GreaterThanOrEqualOrUnordered(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleGreaterThanOrEqualOrUnordered;
+}
+
+inline Type_DoubleCondition::Ref Variant_LessThanOrUnordered(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleLessThanOrUnordered;
+}
+
+inline Type_DoubleCondition::Ref Variant_LessThanOrEqualOrUnordered(Cachet_ContextRef cx) {
+  return Assembler::DoubleCondition::DoubleLessThanOrEqualOrUnordered;
+}
+
+}; // namespace Impl_DoubleCondition
 
 namespace Impl_Scale {
 

@@ -1365,6 +1365,15 @@ void EmitOp_BranchTest32Imm(Cachet_ContextRef cx,
   ops.branchTest32(param_condition, param_lhsReg, Imm32(param_rhsInt32), param_branch);
 }
 
+void EmitOp_BranchDouble(Cachet_ContextRef cx,
+                         IR_MASM::OpsRef ops,
+                         Type_DoubleCondition::Ref param_condition,
+                         Type_FloatReg::Ref param_lhsReg,
+                         Type_FloatReg::Ref param_rhsReg,
+                         IR_MASM::LabelRef param_branch) {
+  ops.branchDouble(param_condition, param_lhsReg, param_rhsReg, param_branch);
+}
+
 void EmitOp_BranchAdd32(Cachet_ContextRef cx,
                                          IR_MASM::OpsRef ops,
                                          Type_Condition::Ref param_condition,
@@ -1710,6 +1719,10 @@ Type_Bool::Val Fn_objectGuardNeedsSpectreMitigations(
     Cachet_ContextRef cx,
     Type_ObjectId::Ref param_objectId) {
   return detail::CompilerInternals::objectGuardNeedsSpectreMitigations(cx, param_objectId);
+}
+
+void Fn_ensureDoubleRegister(Cachet_ContextRef cx, IR_MASM::OpsRef ops, Type_NumberId::Ref op, Type_FloatReg::Ref dest) {
+  detail::CompilerInternals::allocator(cx).ensureDoubleRegister(detail::CompilerInternals::masm(cx), op, dest);
 }
 
 };  // namespace Impl_CacheIR

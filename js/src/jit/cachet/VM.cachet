@@ -327,6 +327,21 @@ impl Float64 {
     }
 
     unsafe fn fromUInt32Unchecked(uint32: UInt32) -> Float64;
+
+    fn ordered(lhs: Float64, rhs: Float64) -> Bool;
+    fn equal(lhs: Float64, rhs: Float64) -> Bool;
+    fn notEqual(lhs: Float64, rhs: Float64) -> Bool;
+    fn greaterThan(lhs: Float64, rhs: Float64) -> Bool;
+    fn greaterThanOrEqual(lhs: Float64, rhs: Float64) -> Bool;
+    fn lessThan(lhs: Float64, rhs: Float64) -> Bool;
+    fn lessThanOrEqual(lhs: Float64, rhs: Float64) -> Bool;
+    fn unordered(lhs: Float64, rhs: Float64) -> Bool;
+    fn equalOrUnordered(lhs: Float64, rhs: Float64) -> Bool;
+    fn notEqualOrUnordered(lhs: Float64, rhs: Float64) -> Bool;
+    fn greaterThanOrUnordered(lhs: Float64, rhs: Float64) -> Bool;
+    fn greaterThanOrEqualOrUnordered(lhs: Float64, rhs: Float64) -> Bool;
+    fn lessThanOrUnordered(lhs: Float64, rhs: Float64) -> Bool;
+    fn lessThanOrEqualOrUnordered(lhs: Float64, rhs: Float64) -> Bool;
 }
 
 struct Simd128;
