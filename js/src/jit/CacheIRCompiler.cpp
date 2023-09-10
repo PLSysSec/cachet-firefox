@@ -11,7 +11,6 @@
 #include "mozilla/MaybeOneOf.h"
 #include "mozilla/ScopeExit.h"
 
-#include <cassert>
 #include <type_traits>
 #include <utility>
 
@@ -6674,7 +6673,6 @@ bool CacheIRCompiler::emitCompareDoubleResult(JSOp op, NumberOperandId lhsId,
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 #ifdef JS_CACHET
   if (isCachetEnabled_) {
-    assert(false);
     cachet::Impl_CacheIR::Op_CompareDoubleResult(cachet::CachetContext {this, cx_}, masm, op, lhsId, rhsId);
   } else {
 #endif

@@ -1356,7 +1356,7 @@ ir CacheIR emits MASM {
         CacheIR::emitStoreBool(true, CacheIR::outputReg);
         bind done;
 
-        CacheIR::releaseFailurePath();
+        // CacheIR::releaseFailurePath();
     }
 
     op Int32AddResult(lhsId: Int32Id, rhsId: Int32Id) {
